@@ -1,0 +1,29 @@
+{
+  // #52 产品后台一期 —— 独立 worker（与 Pages 站点同仓：运行时 regen 要 import ../functions/_lib/render.js，
+  // 同仓=单真源不漂[W1b 教训]；与 getke worker 隔离=爆炸半径小+独立发版）。
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wanew-admin",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // UI 壳（批3 电商风列表+编辑页）。run_worker_first：auth 中间件先跑，静态页也在 Access+M4 门后。
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
+
+  // R2 图床直传（桶名 tejoy-images 不改名——总工拍板；对外 URL 用 img.wanew.com 前缀）
+  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "tejoy-images" }],
+
+  "vars": {
+    // 图床对外前缀（新内容新域）；GITHUB_REPO 改名后的新仓
+    "IMG_BASE": "https://img.wanew.com/",
+    "GITHUB_REPO": "zq8345/Wanew",
+    "GITHUB_BRANCH": "main"
+    // 机密（wrangler secret put，printf 管道防 CRLF——10003 教训）：
+    //   GITHUB_TOKEN   fine-grained PAT，Repository access 仅 zq8345/Wanew，Contents Read+write（Joe 生成中）
+  },
+
+  // custom_domain：部署时自动建 DNS+证书；Access 应用 wanew-admin 已预挂 → 上线即有 edge 门。
+  "routes": [{ "pattern": "admin.wanew.com", "custom_domain": true }],
+  // workers.dev 关闭：本后台无公开端点需求（回调/退订都不在这），少一个裸口。
+  "workers_dev": false
+}

@@ -1,0 +1,15 @@
+{
+  "name": "wanew-admin",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev --port 8790",
+    "typecheck": "tsc --noEmit",
+    "_comment_deploy": "deploy=总工。三道闸惯例后续随批2补齐（本 worker 无 cadence 文案，闸=typecheck+boot）。"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260717.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.110.0"
+  },
+  "dependencies": { "hono": "^4.6.14" }
+}
