@@ -87,7 +87,7 @@ app.post("/api/admin/products", async (c) => {
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
   let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
   const ctx = await loadCtx(c.env, cfg);
-  if (!ctx) return c.json({ error: "repo ctx missing (template/config/pages-list)" }, 500);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
   const newId = ctx.manifest.reduce((m: number, e: any) => Math.max(m, e.id), 0) + 1;
   const v = validateProduct(body, newId, ctx.categories, null);
   if (v.error) return c.json({ error: v.error }, 400);
@@ -106,7 +106,7 @@ app.put("/api/admin/products/:id", async (c) => {
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
   let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
   const ctx = await loadCtx(c.env, cfg);
-  if (!ctx) return c.json({ error: "repo ctx missing" }, 500);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
   const oldRaw = await readFile(c.env, cfg, `data/products/${id}.json`);
   const existing = oldRaw ? JSON.parse(oldRaw) : null;
   if (!existing) return c.json({ error: "not found" }, 404);
@@ -126,7 +126,7 @@ app.delete("/api/admin/products/:id", async (c) => {
   const cfg = ghConfig(c.env);
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
   const ctx = await loadCtx(c.env, cfg);
-  if (!ctx) return c.json({ error: "repo ctx missing" }, 500);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
   try {
     const r = await unpublishProduct(c.env, cfg, ctx, id, { email: operator(c) });
     if ((r as any).notFound) return c.json({ error: "not found" }, 404);
@@ -142,7 +142,7 @@ app.post("/api/admin/preview/:id", async (c) => {
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
   let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
   const ctx = await loadCtx(c.env, cfg);
-  if (!ctx) return c.json({ error: "repo ctx missing" }, 500);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
   const oldRaw = await readFile(c.env, cfg, `data/products/${id}.json`);
   const existing = oldRaw ? JSON.parse(oldRaw) : null;
   const v = validateProduct(body, id, ctx.categories, existing);

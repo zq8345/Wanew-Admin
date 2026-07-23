@@ -37,7 +37,14 @@ export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
     readFile(env, cfg, "data/templates/_chrome.html"),
     readFile(env, cfg, "data/pages-list.json"),
   ]);
-  if (!template || !siteRaw || !locRaw || !catRaw || !categoriesRaw || !partial || !pagesRaw) return null;
+  // 精确报缺哪个（㉔ 批错误透传教训：别让"果"盖住"因"）。categories/pages-list 随本链发布——
+  // 链未 push 前 GitHub 上没有它们，preview 会在此如实报缺（依赖顺序，非缺陷）。
+  const missing = [
+    !template && "data/templates/product.html", !siteRaw && "data/site.json", !locRaw && "data/locales.json",
+    !catRaw && "data/chrome.json", !categoriesRaw && "data/categories.json", !partial && "data/templates/_chrome.html",
+    !pagesRaw && "data/pages-list.json",
+  ].filter(Boolean);
+  if (missing.length) { (globalThis as any).__ctxMissing = missing; return null; }
   const site = JSON.parse(siteRaw), locales = JSON.parse(locRaw), catalog = JSON.parse(catRaw);
   const categories = JSON.parse(categoriesRaw);
   const manifest = manRaw ? JSON.parse(manRaw) : [];
