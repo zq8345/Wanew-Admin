@@ -211,22 +211,11 @@ app.post("/api/admin/preview/:id", async (c) => {
   const existing = oldRaw ? JSON.parse(oldRaw) : null;
   const v = validateProduct(body, id, ctx.categories, existing);
   if (v.error) return c.json({ error: v.error }, 400);
-  // 复用 publishProduct 的管线但拦截 commit：临时替换（简单起见此处内联双步只出摘要）
-  const { locales, locDir } = ctx;
-  const out: any[] = [];
-  for (const locale of locales.enabled) {
-    const dir = locDir[locale];
-    const rel = dir ? `${dir}/${v.prod.category}/${id}.html` : `${v.prod.category}/${id}.html`;
-    if (locale !== locales.default && !ctx.pagesList.has(rel)) { out.push({ rel, skipped: "页面不存在（渲染不决定 site map）" }); continue; }
-    // @ts-ignore
-    const { render, genRelated, resolveImg, excerptOf } = await import("../../functions/_lib/render.js");
-    const entry = { id, category: v.prod.category, form: v.prod.form, title: v.prod.i18n.en.title, thumb: "", excerpt: excerptOf(v.prod) };
-    const urlOf = (p: string, loc: string) => ctx.chrome.localizeUrl(p, loc);
-    const raw = render(v.prod, { template: ctx.template, imgBase: ctx.site.img_base, related: genRelated(entry, ctx.manifest, locale, ctx.catalog, urlOf), locale, modelDisplay: locales.model_display, catalog: ctx.catalog, urlOf, enabled: locales.enabled, catmap: ctx.catmap });
-    const { html, errors } = ctx.chrome.applyChrome(raw.replace(/\r/g, ""), rel);
-    out.push({ rel, bytes: html.length, chromeErrors: errors, hasHeader: html.includes('main-header'), hasSwitcher: html.includes('lang-switch'), hasFooter: html.includes('site-footer') });
-  }
-  return c.json({ dry: true, wouldWrite: out, merged_i18n_locales: Object.keys(v.prod.i18n) });
+  // 批3：单真源化——直接调 publishProduct(dryRun) 走同一条管线到 commit 前一步
+  // （原内联第二实现已删：thumb 简化造成与真发布路径 361~590B/页 字节差，违单真源铁律）。
+  const r: any = await publishProduct(c.env, cfg, ctx, v.prod, { isNew: !existing, oldCategory: existing?.category, email: operator(c), dryRun: true });
+  if (r.error) return c.json(r, 502);
+  return c.json({ ...r, merged_i18n_locales: Object.keys(v.prod.i18n) });
 });
 
 // run_worker_first=true 时 Worker 先跑：未匹配的路由必须**显式**回落静态资源

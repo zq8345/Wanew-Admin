@@ -90,7 +90,7 @@ export function validateProduct(body: any, id: number, categories: any, existing
 
 // 发布：manifest upsert + 每个 enabled locale 的详情页（存在性规则）双步渲染 + 受影响列表页 regen
 // → 一个原子 commit（= 一次 Pages 部署）。
-export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, opts: { isNew: boolean; oldCategory?: string; email: string }) {
+export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, opts: { isNew: boolean; oldCategory?: string; email: string; dryRun?: boolean }) {
   const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome } = ctx;
   const thumb = prod.images[0] ? resolveImg(prod.images[0], site.img_base) : "";
   const entry = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, thumb, excerpt: excerptOf(prod) };
@@ -129,6 +129,12 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
     }
   }
   if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
+  // 批3：dryRun=preview 单真源化——同一条管线跑到 commit 前一步返回摘要（消内联第二实现，字节必同源）
+  if (opts.dryRun) return {
+    dry: true,
+    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? f.content.length : 0,
+      ...(f.path.endsWith(".html") ? { hasHeader: f.content.includes("main-header"), hasSwitcher: f.content.includes("lang-switch"), hasFooter: f.content.includes("site-footer") } : {}) })),
+  };
   const r = await commitFiles(env, cfg, files, `admin: ${opts.isNew ? "create" : "update"} product ${prod.id} (${opts.email})`);
   return { ...r, files: files.map((f) => f.path) };
 }
