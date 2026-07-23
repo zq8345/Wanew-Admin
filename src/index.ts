@@ -44,7 +44,7 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // ================= 批2-2：产品 CRUD（双步三语，继承 [[path]].js 骨架） =================
 // 写路径全部走 loadCtx（GitHub 读真源）→ validate(merge) → publish/unpublish（原子 commit）。
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
-import { loadCtx, validateProduct, publishProduct, unpublishProduct } from "./publish";
+import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../../functions/_lib/github.js";
 
@@ -132,6 +132,70 @@ app.delete("/api/admin/products/:id", async (c) => {
     if ((r as any).notFound) return c.json({ error: "not found" }, 404);
     return c.json({ ok: true, ...r, note: "deleted; Pages deploys in ~1 min" });
   } catch (e: any) { return c.json({ error: "delete failed", detail: String(e).slice(0, 300) }, 502); }
+});
+
+// ================= 批2-3：类目/机型管理（一期：slug 集合不可变，display/顺序可改） =================
+app.get("/api/admin/categories", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const raw = await readFile(c.env, cfg, "data/categories.json");
+  if (!raw) return c.json({ error: "categories.json missing（本链 push 后可用）" }, 404);
+  return c.json(JSON.parse(raw));
+});
+
+app.put("/api/admin/categories", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const ctx = await loadCtx(c.env, cfg);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
+  const v = validateCategories(body, ctx.categories);
+  if (v.error) return c.json({ error: v.error }, 400);
+  // display 变更的类目 → 重烘焙；纯顺序变更只落 json（首页瓦片顺序随下次本地管线——诚实边界）
+  const oldMap: Record<string,string> = {}; for (const cc of ctx.categories.categories) oldMap[cc.slug] = cc.display;
+  const changed = v.cats.categories.filter((cc: any) => oldMap[cc.slug] !== cc.display).map((cc: any) => cc.slug);
+  const files: any[] = [{ path: "data/categories.json", content: JSON.stringify(v.cats, null, 2) + "\n" }];
+  try {
+    const ctx2 = { ...ctx, categories: v.cats, catmap: Object.fromEntries(v.cats.categories.map((cc: any) => [cc.slug, cc.display])) };
+    for (const slug of changed) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug));
+    const r = await (await import("../../functions/_lib/github.js") as any).commitFiles(c.env, cfg, files, `admin: categories update (${operator(c)})`);
+    return c.json({ ok: true, rebaked: changed, filesWritten: files.length, note: changed.length ? "display 变更类目已重烘焙" : "仅顺序/无实质变更——首页瓦片顺序随下次本地管线", ...r });
+  } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
+});
+
+app.get("/api/admin/models", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const raw = await readFile(c.env, cfg, "data/locales.json");
+  if (!raw) return c.json({ error: "locales.json missing" }, 404);
+  return c.json({ model_display: JSON.parse(raw).model_display || {} });
+});
+
+app.put("/api/admin/models", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const md = body?.model_display;
+  if (!md || typeof md !== "object" || Array.isArray(md)) return c.json({ error: "model_display must be an object" }, 400);
+  if (Object.values(md).some((x) => typeof x !== "string" || !(x as string).trim())) return c.json({ error: "model names must be non-empty strings" }, 400);
+  const ctx = await loadCtx(c.env, cfg);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
+  // ⭐ merge 式写：只动 model_display 字段，locales.json 其余（enabled/default/dir…i18n 命脉）原样
+  const rawLoc = await readFile(c.env, cfg, "data/locales.json");
+  const loc = JSON.parse(rawLoc!);
+  const oldMd = loc.model_display || {};
+  // 键集不可变（键=类目 slug 契约；增删=二期）
+  const kOld = Object.keys(oldMd).sort().join(","), kNew = Object.keys(md).sort().join(",");
+  if (kOld !== kNew) return c.json({ error: `一期 model_display 键集不可变。旧=[${kOld}] 新=[${kNew}]` }, 400);
+  const changed = Object.keys(md).filter((k) => oldMd[k] !== md[k]);
+  loc.model_display = md;
+  const files: any[] = [{ path: "data/locales.json", content: JSON.stringify(loc, null, 2) + "\n" }];
+  try {
+    const ctx2 = { ...ctx, locales: loc };
+    for (const slug of changed) if (ctx.catmap[slug] !== undefined) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug));
+    const r = await (await import("../../functions/_lib/github.js") as any).commitFiles(c.env, cfg, files, `admin: model_display update (${operator(c)})`);
+    return c.json({ ok: true, rebaked: changed, filesWritten: files.length, ...r });
+  } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
 // 🧪 dry 预览（批4 接线前的联调闸）：跑完整 validate+双步渲染，**不 commit**，

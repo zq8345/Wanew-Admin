@@ -162,3 +162,56 @@ export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number,
   const r = await commitFiles(env, cfg, files, `admin: delete product ${id} (${opts.email})`);
   return { ...r, files: files.map((f) => f.path) };
 }
+
+
+// ================= 批2-3：类目/机型管理 =================
+// 一期边界：**slug 集合不可变**（增删类目牵动目录结构/列表页存在性=二期）；可改 display 与顺序。
+// display/model 变更 → 重烘焙受影响页（该类目全部详情页三语存在性规则 + 该类目列表 + 总列表）。
+// 顺序变更只落 json（首页瓦片顺序吃它——随下次本地管线；诚实边界，注明在响应里）。
+export function validateCategories(body: any, existing: any): { cats?: any; error?: string } {
+  const list = body?.categories;
+  if (!Array.isArray(list) || !list.length) return { error: "categories must be a non-empty array" };
+  const slugs = list.map((c: any) => c?.slug);
+  if (slugs.some((x: any) => typeof x !== "string" || !/^[a-z0-9-]+$/.test(x))) return { error: "bad slug" };
+  if (new Set(slugs).size !== slugs.length) return { error: "duplicate slug" };
+  if (list.some((c: any) => typeof c?.display !== "string" || !c.display.trim())) return { error: "display required" };
+  const oldSlugs = new Set((existing?.categories || []).map((c: any) => c.slug));
+  const newSlugs = new Set(slugs);
+  const added = slugs.filter((x: string) => !oldSlugs.has(x));
+  const removed = [...oldSlugs].filter((x) => !newSlugs.has(x as string));
+  if (added.length || removed.length) return { error: `一期 slug 集合不可变（增删类目=二期）。added=${added} removed=${removed}` };
+  return { cats: { ...(existing || {}), categories: list.map((c: any) => ({ slug: c.slug, display: String(c.display) })) } };
+}
+
+// 重烘焙一个类目：详情页（三语存在性）双步 + 该类目列表 + 总列表（各语种存在的）。返回 files 数组。
+export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string): Promise<any[]> {
+  const { template, site, locales, catalog, manifest, locDir, catmap, chrome } = ctx;
+  const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
+  const files: any[] = [];
+  for (const e of manifest.filter((m: any) => m.category === slug)) {
+    const raw = await readFile(env, cfg, `data/products/${e.id}.json`);
+    if (!raw) continue;
+    const prod = JSON.parse(raw);
+    for (const locale of locales.enabled) {
+      const dir = locDir[locale];
+      const rel = dir ? `${dir}/${slug}/${e.id}.html` : `${slug}/${e.id}.html`;
+      if (!ctx.pagesList.has(rel)) continue;
+      const related = genRelated(e, manifest, locale, catalog, urlOf);
+      const html0 = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap });
+      const { html, errors } = chrome.applyChrome(html0.replace(/\r/g, ""), rel);
+      if (errors.length) throw new Error(`chrome 注入失败 ${rel}: ${errors[0]}`);
+      files.push({ path: rel, content: html });
+    }
+  }
+  for (const cat of [slug, null]) {
+    for (const locale of locales.enabled) {
+      const dir = locDir[locale];
+      const base = cat ? `${cat}/index.html` : "products/index.html";
+      const rel = dir ? `${dir}/${base}` : base;
+      if (!ctx.pagesList.has(rel)) continue;
+      const h = await readFile(env, cfg, rel);
+      if (h) files.push({ path: rel, content: regenListPage(h, manifest, cat, { locale, catalog, urlOf } as any) });
+    }
+  }
+  return files;
+}
