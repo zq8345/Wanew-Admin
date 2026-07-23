@@ -1,0 +1,157 @@
+// #52 批2-2：发布核心 —— 继承 functions/api/admin/[[path]].js 的骨架，补齐 6 个缺口：
+//   ①render 现代签名（catalog/urlOf/modelDisplay/catmap/enabled——旧调用是单语化石，会产出缺
+//     hreflang/切换器的页）②⭐applyChrome 双步（render 出的是模板 chrome 态，直接 commit=把页面
+//     打回原始态上生产——zero-diff 护栏抓的就是它）③三语：es/pt 详情/列表**已存在才**重渲染
+//     （regen 规则：渲染内容，不决定 site map——新品只建 en）④类目从 data/categories.json（批1a
+//     真源，不再硬编码）⑤⭐编辑 merge 模式：保留旧 json 的非 en locale 翻译（旧 validate 白名单
+//     只留 en，编辑保存=擦掉 es/pt 翻译——静默数据丢失雷）⑥regenListPage 带 opts（旧调用缺
+//     locale/urlOf → 列表卡片 URL 不本地化）。
+// 单真源铁律：render/chrome/github 全部跨目录 import，零复制。
+// @ts-ignore js 模块
+import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf } from "../../functions/_lib/render.js";
+// @ts-ignore js 模块
+import { makeChrome } from "../../functions/_lib/chrome.js";
+// @ts-ignore js 模块
+import { ghConfig, commitFiles, readFile } from "../../functions/_lib/github.js";
+// ⭐ locale→目录规则直接 import 真源（纯 ESM 零 Node 依赖）。第一版我凭注释复刻、漏了 locales.dir
+//   覆盖字段——读真源当场抓包（批㉔ 列名教训：复刻必对真源；能 import 就绝不复刻）。
+// @ts-ignore js 模块
+import { localeDirs } from "../../scripts/locale-dirs.mjs";
+import type { Env } from "./index";
+
+export interface Ctx {
+  template: string; site: any; locales: any; catalog: any; categories: any;
+  manifest: any[]; partial: string; pagesList: Set<string>;
+  locDir: Record<string, string>; catmap: Record<string, string>;
+  chrome: { applyChrome: (html: string, path: string) => { html: string; errors: string[] } ; localizeUrl: (p: string, loc: string) => string };
+}
+
+export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
+  const [template, siteRaw, locRaw, catRaw, categoriesRaw, manRaw, partial, pagesRaw] = await Promise.all([
+    readFile(env, cfg, "data/templates/product.html"),
+    readFile(env, cfg, "data/site.json"),
+    readFile(env, cfg, "data/locales.json"),
+    readFile(env, cfg, "data/chrome.json"),
+    readFile(env, cfg, "data/categories.json"),
+    readFile(env, cfg, "data/products-index.json"),
+    readFile(env, cfg, "data/templates/_chrome.html"),
+    readFile(env, cfg, "data/pages-list.json"),
+  ]);
+  if (!template || !siteRaw || !locRaw || !catRaw || !categoriesRaw || !partial || !pagesRaw) return null;
+  const site = JSON.parse(siteRaw), locales = JSON.parse(locRaw), catalog = JSON.parse(catRaw);
+  const categories = JSON.parse(categoriesRaw);
+  const manifest = manRaw ? JSON.parse(manRaw) : [];
+  const pagesList = new Set<string>(JSON.parse(pagesRaw));
+  const locDir = localeDirs(locales);
+  const chrome = makeChrome({
+    catalog, locales, partial, manifest,
+    pageExists: (rel: string) => pagesList.has(rel),
+    locDir,
+  });
+  return { template, site, locales, catalog, categories, manifest, partial, pagesList, locDir, catmap: catmapOf(categories), chrome };
+}
+
+// 校验 + 白名单 + ⭐merge：编辑时以旧 json 为底，en 从表单、其它 locale 原样保留（防翻译擦除）。
+export function validateProduct(body: any, id: number, categories: any, existing: any | null): { prod?: any; error?: string } {
+  const CATEGORIES: string[] = (categories?.categories || []).map((c: any) => c.slug);
+  const FORMS = ["Cables", "Mounts & Brackets", "Power & Charging", "Networking", "Cases & Protection"];
+  if (!body || typeof body !== "object") return { error: "body must be an object" };
+  if (!CATEGORIES.includes(body.category)) return { error: "invalid category" };
+  const form = body.form ? String(body.form) : null;
+  if (form !== null && !FORMS.includes(form)) return { error: "invalid form" };
+  const en = body.i18n && body.i18n.en;
+  if (!en || typeof en.title !== "string" || !en.title.trim()) return { error: "title required" };
+  if (typeof en.description_html !== "string") return { error: "description_html required" };
+  if (!Array.isArray(body.images)) return { error: "images must be an array" };
+  for (const im of body.images) {
+    if (!im || (typeof im.key !== "string" && typeof im.src !== "string")) return { error: "each image needs key or src" };
+  }
+  const i18n: any = { ...(existing?.i18n || {}) };   // ⭐ 旧翻译打底（es/pt 等原样保留）
+  i18n.en = {
+    title: en.title, summary_html: en.summary_html || "", description_html: en.description_html,
+    meta_title: en.meta_title || en.title, meta_description: en.meta_description || "",
+  };
+  const prod = {
+    id, category: body.category, form, robots: body.robots ?? (existing?.robots ?? null),
+    i18n,
+    images: body.images.map((im: any) => (im.key !== undefined ? { key: im.key, alt: im.alt || "" } : { src: im.src, alt: im.alt || "" })),
+    jsonld_product: body.jsonld_product ?? (existing?.jsonld_product ?? null),
+    jsonld_breadcrumb: body.jsonld_breadcrumb ?? (existing?.jsonld_breadcrumb ?? null),
+  };
+  return { prod };
+}
+
+// 发布：manifest upsert + 每个 enabled locale 的详情页（存在性规则）双步渲染 + 受影响列表页 regen
+// → 一个原子 commit（= 一次 Pages 部署）。
+export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, opts: { isNew: boolean; oldCategory?: string; email: string }) {
+  const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome } = ctx;
+  const thumb = prod.images[0] ? resolveImg(prod.images[0], site.img_base) : "";
+  const entry = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, thumb, excerpt: excerptOf(prod) };
+  const manifest = man0.filter((e: any) => e.id !== prod.id).concat(entry)
+    .sort((a: any, b: any) => a.category.localeCompare(b.category) || a.id - b.id);
+  const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
+  const files: any[] = [
+    { path: `data/products/${prod.id}.json`, content: JSON.stringify(prod, null, 2) },
+    { path: `data/products-index.json`, content: JSON.stringify(manifest, null, 2) },
+  ];
+  const chromeErrors: string[] = [];
+
+  // 详情页 × enabled locales（默认 locale 恒建；其它 locale：已存在才重渲染——渲染内容不决定 site map）
+  for (const locale of locales.enabled) {
+    const dir = locDir[locale];
+    const rel = dir ? `${dir}/${prod.category}/${prod.id}.html` : `${prod.category}/${prod.id}.html`;
+    if (locale !== locales.default && !ctx.pagesList.has(rel) ) continue;
+    const related = genRelated(entry, manifest, locale, catalog, urlOf);
+    const raw = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap });
+    const { html, errors } = chrome.applyChrome(raw.replace(/\r/g, ""), rel);   // ⭐ 双步第二段
+    chromeErrors.push(...errors);
+    files.push({ path: rel, content: html });
+  }
+
+  // 受影响列表页 × locales（已存在才 regen；regenListPage 带 opts——修旧调用缺 locale/urlOf 的化石）
+  const cats = new Set<string | null>([null, prod.category]);
+  if (opts.oldCategory && opts.oldCategory !== prod.category) cats.add(opts.oldCategory);
+  for (const cat of cats) {
+    for (const locale of locales.enabled) {
+      const dir = locDir[locale];
+      const base = cat ? `${cat}/index.html` : "products/index.html";
+      const rel = dir ? `${dir}/${base}` : base;
+      if (!ctx.pagesList.has(rel)) continue;
+      const h = await readFile(env, cfg, rel);
+      if (h) files.push({ path: rel, content: regenListPage(h, manifest, cat, { locale, catalog, urlOf } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */) });
+    }
+  }
+  if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
+  const r = await commitFiles(env, cfg, files, `admin: ${opts.isNew ? "create" : "update"} product ${prod.id} (${opts.email})`);
+  return { ...r, files: files.map((f) => f.path) };
+}
+
+export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number, opts: { email: string }) {
+  const existing = ctx.manifest.find((e: any) => e.id === id);
+  if (!existing) return { notFound: true };
+  const { locales, locDir, catalog, chrome } = ctx;
+  const category = existing.category;
+  const manifest = ctx.manifest.filter((e: any) => e.id !== id);
+  const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
+  const files: any[] = [
+    { path: `data/products/${id}.json`, delete: true },
+    { path: `data/products-index.json`, content: JSON.stringify(manifest, null, 2) },
+  ];
+  for (const locale of locales.enabled) {
+    const dir = locDir[locale];
+    const rel = dir ? `${dir}/${category}/${id}.html` : `${category}/${id}.html`;
+    if (ctx.pagesList.has(rel)) files.push({ path: rel, delete: true });   // 三语详情一并删（存在的）
+  }
+  for (const cat of new Set<string | null>([null, category])) {
+    for (const locale of locales.enabled) {
+      const dir = locDir[locale];
+      const base = cat ? `${cat}/index.html` : "products/index.html";
+      const rel = dir ? `${dir}/${base}` : base;
+      if (!ctx.pagesList.has(rel)) continue;
+      const h = await readFile(env, cfg, rel);
+      if (h) files.push({ path: rel, content: regenListPage(h, manifest, cat, { locale, catalog, urlOf } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */) });
+    }
+  }
+  const r = await commitFiles(env, cfg, files, `admin: delete product ${id} (${opts.email})`);
+  return { ...r, files: files.map((f) => f.path) };
+}
