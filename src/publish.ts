@@ -88,12 +88,26 @@ export function validateProduct(body: any, id: number, categories: any, existing
   return { prod };
 }
 
+// 行尾保留（chrome-sync 同款策略）：编辑已有文件时保留其原行尾——否则 Joe 首次保存
+// git diff 整页变更（吓人+污染 blame）。新文件=LF。
+function matchEol(existingRaw: string | null | undefined, html: string): string {
+  return existingRaw && existingRaw.includes("\r\n") ? html.replace(/\n/g, "\r\n") : html;
+}
+
 // 发布：manifest upsert + 每个 enabled locale 的详情页（存在性规则）双步渲染 + 受影响列表页 regen
 // → 一个原子 commit（= 一次 Pages 部署）。
 export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, opts: { isNew: boolean; oldCategory?: string; email: string; dryRun?: boolean }) {
   const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome } = ctx;
   const thumb = prod.images[0] ? resolveImg(prod.images[0], site.img_base) : "";
-  const entry = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, thumb, excerpt: excerptOf(prod) };
+  const entry: any = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, thumb, excerpt: excerptOf(prod) };
+  // ⭐ manifest entry 的 i18n（pt/es 卡片标题/摘要）——抄 regen.mjs:47-53 同源逻辑。
+  //   漏它的代价（字节对照抓出的真雷）：每次保存，该品在 pt/es 列表卡片退化英文（Δ59/44B 实测）。
+  for (const loc of locales.enabled) {
+    if (loc === locales.default) continue;
+    const t = prod.i18n[loc] && prod.i18n[loc].title;
+    const x = excerptOf(prod, loc);
+    if (t || x !== entry.excerpt) (entry.i18n ??= {})[loc] = { ...(t ? { title: t } : {}), ...(x ? { excerpt: x } : {}) };
+  }
   const manifest = man0.filter((e: any) => e.id !== prod.id).concat(entry)
     .sort((a: any, b: any) => a.category.localeCompare(b.category) || a.id - b.id);
   const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
@@ -112,7 +126,9 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
     const raw = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap });
     const { html, errors } = chrome.applyChrome(raw.replace(/\r/g, ""), rel);   // ⭐ 双步第二段
     chromeErrors.push(...errors);
-    files.push({ path: rel, content: html });
+    // 行尾保留：编辑已有页读原文判行尾（多一次 read，编辑场景可接受）；新页=LF
+    const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;
+    files.push({ path: rel, content: matchEol(prevRaw, html) });
   }
 
   // 受影响列表页 × locales（已存在才 regen；regenListPage 带 opts——修旧调用缺 locale/urlOf 的化石）
@@ -125,15 +141,18 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
       const rel = dir ? `${dir}/${base}` : base;
       if (!ctx.pagesList.has(rel)) continue;
       const h = await readFile(env, cfg, rel);
-      if (h) files.push({ path: rel, content: regenListPage(h, manifest, cat, { locale, catalog, urlOf } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */) });
+      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
     }
   }
   if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
   // 批3：dryRun=preview 单真源化——同一条管线跑到 commit 前一步返回摘要（消内联第二实现，字节必同源）
   if (opts.dryRun) return {
     dry: true,
-    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? f.content.length : 0,
-      ...(f.path.endsWith(".html") ? { hasHeader: f.content.includes("main-header"), hasSwitcher: f.content.includes("lang-switch"), hasFooter: f.content.includes("site-footer") } : {}) })),
+    // bytes=真字节数（TextEncoder）——.length 是 UTF-16 码元数，与磁盘字节对照会差出多字节字符数
+    // （批3-1 的"361B 行尾差"定性就是这么错的：字符数 vs 字节数、单位不一致的对照）。
+    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0,
+      ...(f.path.endsWith(".html") ? { eol: f.content.includes("\r\n") ? "CRLF" : "LF",
+        hasHeader: f.content.includes("main-header"), hasSwitcher: f.content.includes("lang-switch"), hasFooter: f.content.includes("site-footer") } : {}) })),
   };
   const r = await commitFiles(env, cfg, files, `admin: ${opts.isNew ? "create" : "update"} product ${prod.id} (${opts.email})`);
   return { ...r, files: files.map((f) => f.path) };
@@ -162,7 +181,7 @@ export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number,
       const rel = dir ? `${dir}/${base}` : base;
       if (!ctx.pagesList.has(rel)) continue;
       const h = await readFile(env, cfg, rel);
-      if (h) files.push({ path: rel, content: regenListPage(h, manifest, cat, { locale, catalog, urlOf } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */) });
+      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
     }
   }
   const r = await commitFiles(env, cfg, files, `admin: delete product ${id} (${opts.email})`);
@@ -206,7 +225,8 @@ export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string)
       const html0 = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap });
       const { html, errors } = chrome.applyChrome(html0.replace(/\r/g, ""), rel);
       if (errors.length) throw new Error(`chrome 注入失败 ${rel}: ${errors[0]}`);
-      files.push({ path: rel, content: html });
+      const prevRaw = await readFile(env, cfg, rel);   // rebake 恒为已有页——保留其行尾
+      files.push({ path: rel, content: matchEol(prevRaw, html) });
     }
   }
   for (const cat of [slug, null]) {
