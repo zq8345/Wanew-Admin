@@ -1,6 +1,373 @@
 <!doctype html>
-<html lang="zh"><head><meta charset="utf-8"><title>WANEW 产品后台</title></head>
-<body style="font:14px system-ui;background:#0d1117;color:#e6edf3;display:grid;place-items:center;height:100vh;margin:0">
-<div style="text-align:center"><h1 style="font-size:18px">WANEW 产品后台</h1>
-<p style="color:#8b949e">骨架已就位（#52 批1b）。电商风列表/编辑页在批3。</p></div>
-</body></html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WANEW 产品后台</title>
+<link rel="icon" href="data:,">
+<style>
+/* #52 批3：电商风产品后台（照 Joe 过目 mockup：列表筛选批量 + 编辑页左内容右发布） */
+:root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--blue:#2f81f7;--green:#3fb950;--amber:#d29922;--red:#f85149;--surface:#1c2129}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 -apple-system,"Segoe UI",Roboto,"Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+header{display:flex;align-items:center;gap:14px;padding:10px 18px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:50}
+header h1{font-size:15px;margin:0;font-weight:600}
+header .who{margin-left:auto;color:var(--muted);font-size:12px}
+button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:6px 12px}
+button:hover{border-color:#4a5261}
+button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+button.green{background:var(--green);border-color:var(--green);color:#04160a}
+button.danger{background:transparent;border-color:var(--red);color:var(--red)}
+button:disabled{opacity:.45;cursor:not-allowed}
+input,select,textarea{font:inherit;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 9px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue)}
+.wrap{max-width:1280px;margin:0 auto;padding:16px 18px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input[type=search]{width:260px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+th{color:var(--muted);font-weight:600;background:var(--surface);white-space:nowrap}
+tr:hover td{background:#1a2029}
+.thumb{width:44px;height:44px;object-fit:contain;background:#fff;border-radius:6px;display:block}
+.pill{display:inline-block;padding:1px 8px;border-radius:9px;background:#2b3240;font-size:12px;white-space:nowrap}
+.muted{color:var(--muted)}
+.bulkbar{display:none;gap:10px;align-items:center;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:10px}
+.bulkbar.on{display:flex}
+/* 编辑页 */
+.edit-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:14px}
+.card h3{margin:0 0 10px;font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+.field input,.field select,.field textarea{width:100%}
+textarea{min-height:90px;resize:vertical}
+textarea.desc{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+/* 图库 */
+.gallery{display:flex;flex-wrap:wrap;gap:10px}
+.gitem{width:110px;border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:6px;cursor:grab;position:relative}
+.gitem.dragging{opacity:.4}
+.gitem img{width:100%;height:78px;object-fit:contain;background:#fff;border-radius:5px;display:block}
+.gitem input{width:100%;margin-top:5px;font-size:11px;padding:3px 5px}
+.gitem .gx{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.65);border:none;color:#fff;border-radius:4px;font-size:11px;padding:1px 6px}
+.gitem .cover{position:absolute;top:2px;left:2px;background:var(--blue);color:#fff;font-size:10px;border-radius:4px;padding:1px 5px}
+.gadd{width:110px;height:132px;border:1px dashed var(--border);border-radius:8px;display:grid;place-items:center;color:var(--muted);cursor:pointer;font-size:12px;text-align:center}
+.gadd.drag{border-color:var(--blue);color:var(--blue)}
+details.seo summary{cursor:pointer;color:var(--muted);font-size:13px;user-select:none;margin-bottom:8px}
+.banner{padding:9px 13px;border-radius:8px;border:1px solid var(--amber);background:#2a2114;margin-bottom:12px;font-size:13px;display:none}
+.banner.on{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.msg{position:fixed;bottom:18px;right:18px;background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:8px;padding:10px 14px;font-size:13px;display:none;max-width:420px;z-index:99}
+.msg.err{border-left-color:var(--red)}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--muted);border-top-color:transparent;border-radius:50%;animation:sp 1s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+a{color:var(--blue)}
+</style>
+</head>
+<body>
+<header>
+  <h1>WANEW 产品后台</h1>
+  <span class="muted" id="crumb"></span>
+  <span class="who" id="who"></span>
+</header>
+<div class="wrap">
+
+  <!-- ============ 列表视图 ============ -->
+  <div id="v-list">
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="搜索标题 / ID…">
+      <select id="f-cat"><option value="">全部机型</option></select>
+      <select id="f-form"><option value="">全部形态</option></select>
+      <span class="muted" id="count"></span>
+      <span style="flex:1"></span>
+      <button class="primary" onclick="openEdit(null)">＋ 新建产品</button>
+    </div>
+    <div class="bulkbar" id="bulkbar">
+      <span>已选 <b id="selN">0</b> 项</span>
+      <button class="danger" onclick="bulkDelete()">删除选中</button>
+      <button onclick="clearSel()">取消选择</button>
+      <span class="muted">删除=从官网下架（三语详情+列表联动，走原子 commit）</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th style="width:30px"><input type="checkbox" id="selAll" onchange="toggleAll(this.checked)"></th>
+        <th style="width:54px">图</th><th>标题</th><th>ID</th><th>机型</th><th>形态</th><th style="width:170px">操作</th>
+      </tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- ============ 编辑视图 ============ -->
+  <div id="v-edit" style="display:none">
+    <div class="toolbar">
+      <button onclick="backToList()">← 返回列表</button>
+      <span class="muted" id="edit-title-crumb"></span>
+    </div>
+    <!-- 草稿恢复横幅（诚实方案B：列表不显示草稿态，只在打开编辑页时提示恢复） -->
+    <div class="banner" id="draft-banner">
+      <span>💾 本机有此产品的未发布暂存（<span id="draft-time"></span>）——仅存于此浏览器。</span>
+      <button class="primary" onclick="restoreDraft()">恢复暂存</button>
+      <button onclick="dropDraft()">丢弃</button>
+    </div>
+    <div class="edit-grid">
+      <!-- 左：内容 -->
+      <div>
+        <div class="card">
+          <h3>内容（英文主稿）</h3>
+          <div class="field"><label>标题 *</label><input id="e-title"></div>
+          <div class="field"><label>摘要 summary_html（列表卡/详情顶部）</label><textarea id="e-summary"></textarea></div>
+          <div class="field"><label>描述 description_html *</label><textarea id="e-desc" class="desc"></textarea></div>
+          <p class="muted" style="margin:4px 0 0;font-size:12px">⚠️ 葡/西翻译由本地翻译流程维护——此处保存只更新英文，<b>不会覆盖已有 pt/es 翻译</b>（merge 保护）。</p>
+        </div>
+        <div class="card">
+          <h3>图库（第一张=封面；拖拽排序）</h3>
+          <div class="gallery" id="gallery"></div>
+          <p class="muted" style="margin:8px 0 0;font-size:12px">支持拖拽图片文件到 ➕ 上传（≤8MB，jpg/png/webp/gif）；新图 URL 走 img.wanew.com。</p>
+        </div>
+        <details class="seo card" id="seo">
+          <summary>SEO（meta，可选——留空自动派生）</summary>
+          <div class="field"><label>meta_title（留空=标题派生）</label><input id="e-mtitle"></div>
+          <div class="field"><label>meta_description</label><textarea id="e-mdesc"></textarea></div>
+        </details>
+      </div>
+      <!-- 右：发布 -->
+      <div>
+        <div class="card">
+          <h3>发布</h3>
+          <div class="field"><label>机型（类目）*</label><select id="e-cat"></select></div>
+          <div class="field"><label>形态</label><select id="e-form"><option value="">（未设）</option></select></div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+            <button class="green" id="btn-publish" onclick="saveAndPublish()">🚀 保存并发布</button>
+            <button id="btn-draft" onclick="saveDraft()" title="草稿仅保存在此浏览器（localStorage），换设备/清缓存不可见；不会写入官网仓库">💾 暂存本机</button>
+            <button id="btn-preview" onclick="runPreview()" title="跑完整发布管线但不提交——看将写哪些文件">🧪 发布预演（不上线）</button>
+            <a id="btn-site" href="#" target="_blank" style="display:none;text-align:center;padding:6px 12px;border:1px solid var(--border);border-radius:6px;text-decoration:none">🌐 官网查看</a>
+          </div>
+          <p class="muted" style="font-size:12px;margin:10px 0 0" id="pub-note"></p>
+        </div>
+        <div class="card" id="preview-out" style="display:none">
+          <h3>预演结果</h3>
+          <div id="preview-body" style="font-size:12.5px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="msg" id="msg"></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const api = (p, opt) => fetch("/api/admin" + p, opt).then(async (r) => {
+  const j = await r.json().catch(() => ({ error: "bad response" }));
+  if (!r.ok || j.error) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+});
+const FORMS = ["Cables", "Mounts & Brackets", "Power & Charging", "Networking", "Cases & Protection"];
+const SITE = "https://wanew.com";
+let products = [], cats = [], sel = new Set(), cur = null; // cur = 正在编辑的产品(含 i18n 全量)
+
+function msg(t, err) { const m = $("#msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ""); m.style.display = "block"; clearTimeout(msg._t); msg._t = setTimeout(() => m.style.display = "none", err ? 7000 : 3500); }
+
+// ---------- 启动 ----------
+(async function init() {
+  try {
+    const w = await fetch("/api/_whoami").then((r) => r.json());
+    $("#who").textContent = (w.operator || "dev") + " · " + w.repo;
+    window._imgBase = w.imgBase || "";
+  } catch {}
+  await Promise.all([loadCats(), loadList()]);
+  const fs = $("#f-form"); FORMS.forEach((f) => fs.append(new Option(f, f)));
+  ["#q", "#f-cat", "#f-form"].forEach((s) => $(s).addEventListener("input", renderRows));
+})();
+
+async function loadCats() {
+  try { cats = (await api("/categories")).categories || []; } catch (e) { msg("类目加载失败：" + e.message, 1); cats = []; }
+  const fc = $("#f-cat"), ec = $("#e-cat");
+  fc.length = 1; ec.length = 0;
+  for (const c of cats) { fc.append(new Option(c.display, c.slug)); ec.append(new Option(c.display, c.slug)); }
+}
+async function loadList() {
+  try { products = (await api("/products")).products || []; } catch (e) { $("#rows").innerHTML = `<tr><td colspan="7" class="muted">加载失败：${esc(e.message)} <button onclick="loadList()">重试</button></td></tr>`; return; }
+  renderRows();
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function filtered() {
+  const q = $("#q").value.trim().toLowerCase(), fc = $("#f-cat").value, ff = $("#f-form").value;
+  return products.filter((p) =>
+    (!q || String(p.id) === q || (p.title || "").toLowerCase().includes(q)) &&
+    (!fc || p.category === fc) && (!ff || p.form === ff));
+}
+function renderRows() {
+  const list = filtered();
+  $("#count").textContent = `${list.length} / ${products.length} 个产品`;
+  $("#rows").innerHTML = list.map((p) => `
+    <tr>
+      <td><input type="checkbox" ${sel.has(p.id) ? "checked" : ""} onchange="toggleSel(${p.id},this.checked)"></td>
+      <td>${p.thumb ? `<img class="thumb" src="${esc(p.thumb)}" loading="lazy">` : ""}</td>
+      <td>${esc(p.title)}</td>
+      <td class="muted">${p.id}</td>
+      <td><span class="pill">${esc(catName(p.category))}</span></td>
+      <td class="muted">${esc(p.form || "—")}</td>
+      <td>
+        <button onclick="openEdit(${p.id})">编辑</button>
+        <a href="${SITE}/${esc(p.category)}/${p.id}" target="_blank" style="margin-left:6px">官网 ↗</a>
+      </td>
+    </tr>`).join("") || `<tr><td colspan="7" class="muted">没有匹配的产品</td></tr>`;
+  syncBulk();
+}
+const catName = (slug) => (cats.find((c) => c.slug === slug) || {}).display || slug;
+function toggleSel(id, on) { on ? sel.add(id) : sel.delete(id); syncBulk(); }
+function toggleAll(on) { filtered().forEach((p) => on ? sel.add(p.id) : sel.delete(p.id)); renderRows(); }
+function clearSel() { sel.clear(); $("#selAll").checked = false; renderRows(); }
+function syncBulk() { $("#selN").textContent = sel.size; $("#bulkbar").classList.toggle("on", sel.size > 0); }
+
+async function bulkDelete() {
+  const ids = [...sel];
+  if (!ids.length) return;
+  if (!confirm(`将从官网删除 ${ids.length} 个产品（三语详情页+列表联动）。此操作直接修改官网仓库。\n确定？`)) return;
+  const typed = prompt(`二次确认：输入要删除的数量（${ids.length}）以继续`);
+  if (typed !== String(ids.length)) { msg("已取消（数量不符）"); return; }
+  for (const id of ids) {
+    try { await api("/products/" + id, { method: "DELETE" }); msg(`已删除 #${id}`); }
+    catch (e) { msg(`#${id} 删除失败：` + e.message, 1); break; }
+  }
+  sel.clear(); await loadList();
+}
+
+// ---------- 编辑 ----------
+const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : ""; }
+function backToList() { showView("list"); loadList(); }
+
+async function openEdit(id) {
+  showView("edit"); $("#preview-out").style.display = "none"; $("#draft-banner").classList.remove("on");
+  if (id == null) {
+    cur = { id: null, category: cats[0]?.slug || "", form: null, i18n: { en: { title: "", summary_html: "", description_html: "", meta_title: "", meta_description: "" } }, images: [] };
+    fillForm(cur); $("#edit-title-crumb").textContent = "新建产品"; $("#btn-site").style.display = "none";
+  } else {
+    $("#edit-title-crumb").textContent = "加载 #" + id + "…";
+    try { cur = await api("/products/" + id); } catch (e) { msg("加载失败：" + e.message, 1); return backToList(); }
+    fillForm(cur); $("#edit-title-crumb").textContent = `#${id} · ${cur.i18n.en.title}`;
+    const a = $("#btn-site"); a.href = `${SITE}/${cur.category}/${id}`; a.style.display = "";
+  }
+  // 草稿提示（诚实方案B：仅编辑页提示，不在列表造状态）
+  const d = localStorage.getItem(DKEY(id));
+  if (d) { try { const j = JSON.parse(d); $("#draft-time").textContent = new Date(j._t).toLocaleString(); $("#draft-banner").classList.add("on"); } catch {} }
+  $("#pub-note").textContent = id == null
+    ? "新建只生成英文页（葡/西页面由本地翻译流程决定何时开通）。发布≈1分钟后上线。"
+    : "保存将重渲染三语详情+受影响列表（已存在的），一次原子 commit，≈1分钟后上线。";
+}
+
+function fillForm(p) {
+  const en = p.i18n.en;
+  $("#e-title").value = en.title || ""; $("#e-summary").value = en.summary_html || "";
+  $("#e-desc").value = en.description_html || ""; $("#e-mtitle").value = en.meta_title === en.title ? "" : (en.meta_title || "");
+  $("#e-mdesc").value = en.meta_description || "";
+  $("#e-cat").value = p.category || ""; $("#e-form").value = p.form || "";
+  renderGallery(p.images || []);
+}
+function collectForm() {
+  return {
+    category: $("#e-cat").value, form: $("#e-form").value || null,
+    i18n: { en: {
+      title: $("#e-title").value.trim(), summary_html: $("#e-summary").value,
+      description_html: $("#e-desc").value, meta_title: $("#e-mtitle").value.trim(), meta_description: $("#e-mdesc").value.trim(),
+    } },
+    images: galleryData(),
+    robots: cur?.robots ?? null, jsonld_product: cur?.jsonld_product ?? null, jsonld_breadcrumb: cur?.jsonld_breadcrumb ?? null,
+  };
+}
+
+// ---------- 图库 ----------
+let gitems = [];
+function renderGallery(images) {
+  gitems = images.map((im) => ({ ...im }));
+  paintGallery();
+}
+function paintGallery() {
+  const g = $("#gallery");
+  g.innerHTML = gitems.map((im, i) => `
+    <div class="gitem" draggable="true" data-i="${i}">
+      ${i === 0 ? '<span class="cover">封面</span>' : ""}
+      <button class="gx" onclick="gDel(${i})">✕</button>
+      <img src="${esc(im.key !== undefined ? (window._imgBase || "") + im.key : im.src)}" loading="lazy">
+      <input placeholder="alt 描述" value="${esc(im.alt || "")}" onchange="gitems[${i}].alt=this.value">
+    </div>`).join("") + `<div class="gadd" id="gadd">➕<br>点击或拖入图片</div>`;
+  const add = $("#gadd");
+  add.onclick = () => { const f = document.createElement("input"); f.type = "file"; f.accept = "image/*"; f.multiple = true; f.onchange = () => uploadFiles([...f.files]); f.click(); };
+  add.ondragover = (e) => { e.preventDefault(); add.classList.add("drag"); };
+  add.ondragleave = () => add.classList.remove("drag");
+  add.ondrop = (e) => { e.preventDefault(); add.classList.remove("drag"); uploadFiles([...e.dataTransfer.files].filter((f) => f.type.startsWith("image/"))); };
+  g.querySelectorAll(".gitem").forEach((el) => {
+    el.addEventListener("dragstart", () => el.classList.add("dragging"));
+    el.addEventListener("dragend", () => el.classList.remove("dragging"));
+    el.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      const from = +g.querySelector(".dragging")?.dataset.i, to = +el.dataset.i;
+      if (Number.isFinite(from) && from !== to) { const [m] = gitems.splice(from, 1); gitems.splice(to, 0, m); paintGallery(); }
+    });
+  });
+}
+function gDel(i) { gitems.splice(i, 1); paintGallery(); }
+function galleryData() { return gitems.map((im) => (im.key !== undefined ? { key: im.key, alt: im.alt || "" } : { src: im.src, alt: im.alt || "" })); }
+async function uploadFiles(files) {
+  for (const f of files) {
+    msg("上传 " + f.name + "…");
+    try {
+      const r = await fetch("/api/admin/upload?name=" + encodeURIComponent(f.name), { method: "POST", headers: { "content-type": f.type }, body: f });
+      const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status);
+      gitems.push({ key: j.key, alt: "" }); paintGallery(); msg("已上传 " + f.name);
+    } catch (e) { msg(f.name + " 上传失败：" + e.message, 1); }
+  }
+}
+
+// ---------- 草稿（诚实语义：仅本机 localStorage，绝不写仓库） ----------
+function saveDraft() {
+  const d = { ...collectForm(), _t: Date.now() };
+  localStorage.setItem(DKEY(cur?.id), JSON.stringify(d));
+  msg("已暂存本机（仅此浏览器可见，未发布到官网）");
+}
+function restoreDraft() {
+  try { const d = JSON.parse(localStorage.getItem(DKEY(cur?.id))); fillForm({ ...cur, ...d, i18n: { ...cur.i18n, en: d.i18n.en } }); msg("已恢复本机暂存（尚未发布）"); }
+  catch { msg("暂存数据损坏", 1); }
+  $("#draft-banner").classList.remove("on");
+}
+function dropDraft() { localStorage.removeItem(DKEY(cur?.id)); $("#draft-banner").classList.remove("on"); msg("已丢弃本机暂存"); }
+
+// ---------- 发布 / 预演 ----------
+function validateLocal(b) {
+  if (!b.i18n.en.title) return "标题必填";
+  if (!b.i18n.en.description_html) return "描述必填";
+  if (!b.category) return "机型必选";
+  return null;
+}
+async function saveAndPublish() {
+  const b = collectForm(); const err = validateLocal(b);
+  if (err) return msg(err, 1);
+  const btn = $("#btn-publish"); btn.disabled = true; btn.textContent = "发布中…";
+  try {
+    const r = cur?.id
+      ? await api("/products/" + cur.id, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(b) })
+      : await api("/products", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
+    localStorage.removeItem(DKEY(cur?.id));
+    msg(`✅ 已发布（commit ${(r.commit || "").slice(0, 8)}）· 写入 ${(r.files || []).length} 个文件 · ≈1分钟后官网可见`);
+    if (!cur?.id && r.id) { cur = { ...b, id: r.id }; $("#edit-title-crumb").textContent = `#${r.id} · ${b.i18n.en.title}`; const a = $("#btn-site"); a.href = `${SITE}/${b.category}/${r.id}`; a.style.display = ""; }
+  } catch (e) { msg("发布失败：" + e.message, 1); }
+  btn.disabled = false; btn.textContent = "🚀 保存并发布";
+}
+async function runPreview() {
+  if (!cur?.id) return msg("新建产品请先发布一次后再预演", 1);
+  const b = collectForm(); const err = validateLocal(b);
+  if (err) return msg(err, 1);
+  const btn = $("#btn-preview"); btn.disabled = true;
+  try {
+    const r = await api("/preview/" + cur.id, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
+    $("#preview-out").style.display = "";
+    $("#preview-body").innerHTML = `<p class="muted">将写入 ${(r.files || []).length} 个文件（未提交）：</p>` +
+      (r.files || []).map((f) => `<div style="padding:3px 0;border-bottom:1px solid var(--border)">${esc(f.path)} <span class="muted">${f.bytes}B${f.eol ? " · " + f.eol : ""}${f.hasHeader !== undefined ? (f.hasHeader && f.hasFooter ? " · chrome✓" : " · ⚠️chrome缺") : ""}</span></div>`).join("") +
+      `<p class="muted" style="margin:6px 0 0">多语言：${(r.merged_i18n_locales || []).join(" / ")}（merge 保护）</p>`;
+  } catch (e) { msg("预演失败：" + e.message, 1); }
+  btn.disabled = false;
+}
+</script>
+</body>
+</html>
