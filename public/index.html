@@ -172,6 +172,18 @@ function msg(t, err) { const m = $("#msg"); m.textContent = t; m.className = "ms
     const w = await fetch("/api/_whoami").then((r) => r.json());
     $("#who").textContent = (w.operator || "dev") + " · " + w.repo;
     window._imgBase = w.imgBase || "";
+    // 批㉚：图片 URL 统一解析（总工定罪:#650 等老品 images[].src 是官网相对路径,实体只在
+    // wanew.com 域,admin 域直用必 404）。key→图床 IMG_BASE;"/"开头→挂官网域;http(s) 绝对原样。
+    // 纯显示层,产品 JSON 零改动。列表缩略图+编辑页图库两处共用本函数。
+    window.imgUrl = function (x) {
+      if (x && typeof x === "object") {
+        if (x.key !== undefined) return (window._imgBase || "") + x.key;
+        x = x.src;
+      }
+      const s = String(x || "");
+      if (!s || /^https?:\/\//i.test(s)) return s;
+      return s.startsWith("/") ? "https://wanew.com" + s : s;
+    };
   } catch {}
   await Promise.all([loadCats(), loadList()]);
   // 🔴终审修复：#e-form 之前从未填充（只填了列表的 #f-form）→ 编辑页回填必空 → 保存抹 form 字段
@@ -204,7 +216,7 @@ function renderRows() {
   $("#rows").innerHTML = list.map((p) => `
     <tr>
       <td><input type="checkbox" ${sel.has(p.id) ? "checked" : ""} onchange="toggleSel(${p.id},this.checked)"></td>
-      <td>${p.thumb ? `<img class="thumb" src="${esc(p.thumb)}" loading="lazy">` : ""}</td>
+      <td>${p.thumb ? `<img class="thumb" src="${esc(imgUrl(p.thumb))}" loading="lazy">` : ""}</td>
       <td>${esc(p.title)}</td>
       <td class="muted">${p.id}</td>
       <td><span class="pill">${esc(catName(p.category))}</span></td>
@@ -299,7 +311,7 @@ function paintGallery() {
     <div class="gitem" draggable="true" data-i="${i}">
       ${i === 0 ? '<span class="cover">封面</span>' : ""}
       <button class="gx" onclick="gDel(${i})">✕</button>
-      <img src="${esc(im.key !== undefined ? (window._imgBase || "") + im.key : im.src)}" loading="lazy">
+      <img src="${esc(imgUrl(im))}" loading="lazy">
       <input placeholder="alt 描述" value="${esc(im.alt || "")}" onchange="gitems[${i}].alt=this.value">
     </div>`).join("") + `<div class="gadd" id="gadd">➕<br>点击或拖入图片</div>`;
   const add = $("#gadd");
