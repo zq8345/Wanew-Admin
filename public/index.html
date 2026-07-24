@@ -174,7 +174,9 @@ function msg(t, err) { const m = $("#msg"); m.textContent = t; m.className = "ms
     window._imgBase = w.imgBase || "";
   } catch {}
   await Promise.all([loadCats(), loadList()]);
-  const fs = $("#f-form"); FORMS.forEach((f) => fs.append(new Option(f, f)));
+  // 🔴终审修复：#e-form 之前从未填充（只填了列表的 #f-form）→ 编辑页回填必空 → 保存抹 form 字段
+  const fs = $("#f-form"), ef = $("#e-form");
+  FORMS.forEach((f) => { fs.append(new Option(f, f)); ef.append(new Option(f, f)); });
   ["#q", "#f-cat", "#f-form"].forEach((s) => $(s).addEventListener("input", renderRows));
 })();
 
@@ -264,6 +266,14 @@ function fillForm(p) {
   $("#e-mdesc").value = en.meta_description || "";
   $("#e-cat").value = p.category || ""; $("#e-form").value = p.form || "";
   renderGallery(p.images || []);
+  // 🔴终审要求②：编辑页回填自检——「数据有值 → 控件必须回填成功」，断链当场吼（防 e-form 类回归）。
+  //   select.value 赋不存在的 option 会静默变空——正是这次 form 被抹的机制，自检直击它。
+  for (const [field, want, got] of [["category", p.category, $("#e-cat").value], ["form", p.form, $("#e-form").value]]) {
+    if (want && got !== want) {
+      console.error(`回填断链: ${field} 数据=«${want}» 控件=«${got}»——选项未填充或值不在清单，保存会抹掉该字段！`);
+      msg(`⚠️ ${field} 回填失败（数据=${want}）——请勿保存，先报修`, 1);
+    }
+  }
 }
 function collectForm() {
   return {

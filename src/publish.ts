@@ -21,7 +21,7 @@ import type { Env } from "./index";
 
 export interface Ctx {
   template: string; site: any; locales: any; catalog: any; categories: any;
-  manifest: any[]; partial: string; pagesList: Set<string>;
+  manifest: any[]; manifestRaw: string | null; partial: string; pagesList: Set<string>;
   locDir: Record<string, string>; catmap: Record<string, string>;
   chrome: { applyChrome: (html: string, path: string) => { html: string; errors: string[] } ; localizeUrl: (p: string, loc: string) => string };
 }
@@ -55,7 +55,7 @@ export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
     pageExists: (rel: string) => pagesList.has(rel),
     locDir,
   });
-  return { template, site, locales, catalog, categories, manifest, partial, pagesList, locDir, catmap: catmapOf(categories), chrome };
+  return { template, site, locales, catalog, categories, manifest, manifestRaw: manRaw ?? null, partial, pagesList, locDir, catmap: catmapOf(categories), chrome };
 }
 
 // 校验 + 白名单 + ⭐merge：编辑时以旧 json 为底，en 从表单、其它 locale 原样保留（防翻译擦除）。
@@ -76,7 +76,10 @@ export function validateProduct(body: any, id: number, categories: any, existing
   const i18n: any = { ...(existing?.i18n || {}) };   // ⭐ 旧翻译打底（es/pt 等原样保留）
   i18n.en = {
     title: en.title, summary_html: en.summary_html || "", description_html: en.description_html,
-    meta_title: en.meta_title || en.title, meta_description: en.meta_description || "",
+    // meta_title 是派生字段（render.js:20 "deliberately NOT read from data — DERIVED"）——
+    // 只在用户显式自定义(≠title)时落盘；否则不存（🟡终审 diff 抓出旧白名单把派生值显式化 +166B）
+    ...(en.meta_title && en.meta_title !== en.title ? { meta_title: en.meta_title } : {}),
+    meta_description: en.meta_description || "",
   };
   const prod = {
     id, category: body.category, form, robots: body.robots ?? (existing?.robots ?? null),
@@ -92,6 +95,14 @@ export function validateProduct(body: any, id: number, categories: any, existing
 // git diff 整页变更（吓人+污染 blame）。新文件=LF。
 function matchEol(existingRaw: string | null | undefined, html: string): string {
   return existingRaw && existingRaw.includes("\r\n") ? html.replace(/\n/g, "\r\n") : html;
+}
+
+// json 落盘对齐仓库原文件（🟡终审 +108B 定性收口）：行尾+尾换行都跟随原文件——仓库 json 现状
+// 本就不齐（products/*=CRLF+尾NL、products-index=LF+无尾NL），只有"跟随"能让未改数据的保存
+// 字节归零，不污染 diff/blame。新文件=LF+尾NL。
+function matchJson(existingRaw: string | null | undefined, obj: any): string {
+  const tail = existingRaw ? (/\n$/.test(existingRaw) ? "\n" : "") : "\n";
+  return matchEol(existingRaw, JSON.stringify(obj, null, 2) + tail);
 }
 
 // 发布：manifest upsert + 每个 enabled locale 的详情页（存在性规则）双步渲染 + 受影响列表页 regen
@@ -111,9 +122,11 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
   const manifest = man0.filter((e: any) => e.id !== prod.id).concat(entry)
     .sort((a: any, b: any) => a.category.localeCompare(b.category) || a.id - b.id);
   const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
+  // 编辑时多读一次旧 json 对齐其行尾/尾换行（同 133 行页面读原文的既定代价）；新品无原文=标准 LF
+  const prodRaw = opts.isNew ? null : await readFile(env, cfg, `data/products/${prod.id}.json`);
   const files: any[] = [
-    { path: `data/products/${prod.id}.json`, content: JSON.stringify(prod, null, 2) },
-    { path: `data/products-index.json`, content: JSON.stringify(manifest, null, 2) },
+    { path: `data/products/${prod.id}.json`, content: matchJson(prodRaw, prod) },
+    { path: `data/products-index.json`, content: matchJson(ctx.manifestRaw, manifest) },
   ];
   const chromeErrors: string[] = [];
 
@@ -152,7 +165,9 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
     // （批3-1 的"361B 行尾差"定性就是这么错的：字符数 vs 字节数、单位不一致的对照）。
     files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0,
       ...(f.path.endsWith(".html") ? { eol: f.content.includes("\r\n") ? "CRLF" : "LF",
-        hasHeader: f.content.includes("main-header"), hasSwitcher: f.content.includes("lang-switch"), hasFooter: f.content.includes("site-footer") } : {}) })),
+        hasHeader: f.content.includes("main-header"), hasSwitcher: f.content.includes("lang-switch"), hasFooter: f.content.includes("site-footer") } : {}),
+      // json 产物在 dry 时回传内容（产品+index 共两个，≤70KB）——供 diff 定性 json 序列化差异（🟡终审项），联调长期有用
+      ...(f.path.endsWith(".json") ? { content: f.content } : {}) })),
   };
   const r = await commitFiles(env, cfg, files, `admin: ${opts.isNew ? "create" : "update"} product ${prod.id} (${opts.email})`);
   return { ...r, files: files.map((f) => f.path) };
@@ -167,7 +182,7 @@ export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number,
   const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
   const files: any[] = [
     { path: `data/products/${id}.json`, delete: true },
-    { path: `data/products-index.json`, content: JSON.stringify(manifest, null, 2) },
+    { path: `data/products-index.json`, content: matchJson(ctx.manifestRaw, manifest) },
   ];
   for (const locale of locales.enabled) {
     const dir = locDir[locale];
