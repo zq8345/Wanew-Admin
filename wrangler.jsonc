@@ -3,6 +3,9 @@
   // 同仓=单真源不漂[W1b 教训]；与 getke worker 隔离=爆炸半径小+独立发版）。
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "wanew-admin",
+  // 账号显式钉死（批4 复盘：账号级令牌无 memberships 读权时 wrangler 会静默退出——写死后不再查账号列表。
+  //   值=wrangler whoami 实测。域已由 Joe 控制台挂好 zone，后续 deploy 账号级令牌即可，详见 README）。
+  "account_id": "7421acfcf984fd557bca79796dbb2cdb",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],

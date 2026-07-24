@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "wrangler dev --port 8790",
     "typecheck": "tsc --noEmit && node test/pipeline-zero-diff.mjs",
-    "_comment_deploy": "deploy=\u603b\u5de5\u3002\u4e09\u9053\u95f8\u60ef\u4f8b\u540e\u7eed\u968f\u62792\u8865\u9f50\uff08\u672c worker \u65e0 cadence \u6587\u6848\uff0c\u95f8=typecheck+boot\uff09\u3002",
+    "_comment_deploy": "deploy=\u603b\u5de5\u3002\u95f8=typecheck(\u542bzero-diff)\u5148\u7eff\u3002account_id\u5df2\u9489\u6b7bwrangler.jsonc\u3001\u57df\u5df2\u6302zone,\u8d26\u53f7\u7ea7\u4ee4\u724c\u5373\u53ef,\u8be6\u89c1README.md\u3002",
+    "deploy": "wrangler deploy",
     "guard:zerodiff": "node test/pipeline-zero-diff.mjs"
   },
   "devDependencies": {
