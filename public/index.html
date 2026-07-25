@@ -157,7 +157,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="dz-nav-item" data-view="home" onclick="showHome()"><span class="ic">⌂</span> 首页</div>
     <div class="dz-nav-item" data-view="contact" onclick="showContact()"><span class="ic">✆</span> 联系方式</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">▭</span> 页面 <span class="soon-tag">SOON</span></div>
-    <div class="dz-nav-item soon" title="即将上线"><span class="ic">≣</span> 攻略 <span class="soon-tag">SOON</span></div>
+    <div class="dz-nav-item" data-view="guides" onclick="showGuides()"><span class="ic">≣</span> 攻略</div>
     <div class="dz-eyebrow">增长 Growth</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">◔</span> SEO <span class="soon-tag">SOON</span></div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">⇄</span> 翻译 <span class="soon-tag">SOON</span></div>
@@ -309,6 +309,20 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div id="contact-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
+  <!-- ============ 攻略(Guides A)·/service/ 落地页文案编辑器（硬白名单）============ -->
+  <div id="v-guides" style="display:none">
+    <div class="edit-bar">
+      <button onclick="backToList()">← 返回列表</button>
+      <span class="idtag muted">攻略 · /service/ 落地页文案</span>
+      <div class="spacer"></div>
+      <a class="editbar-link" href="https://wanew.com/service/" target="_blank">🌐 官网攻略页</a>
+      <button id="btn-guides-preview" onclick="previewGuides()" title="渲染攻略页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
+      <button class="primary" id="btn-guides-save" onclick="saveGuides()">🚀 保存攻略页</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">编辑 /service/ 攻略落地页的<b>页头文案 + 10 张攻略卡片的标题/摘要</b>（四语）。⚠️ 本编辑器<b>只能改这些文案</b>——攻略文章正文、卡片增删属二期（需数据模型）。保存=重烘焙 /service/（四语）提交官网仓，≈1分钟上线；保存前可「预览」。</p>
+    <div id="guides-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
+  </div>
+
   <!-- ============ 媒体库（W5 P4·R2 浏览/标签/删除）============ -->
   <div id="v-media" style="display:none">
     <div class="edit-bar">
@@ -445,7 +459,7 @@ async function bulkDelete() {
 
 // ---------- 编辑 ----------
 const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
-function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-contact").style.display = v === "contact" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "contact" ? "› 联系方式" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : ""))))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-contact").style.display = v === "contact" ? "" : "none"; $("#v-guides").style.display = v === "guides" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "contact" ? "› 联系方式" : (v === "guides" ? "› 攻略" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : "")))))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
 function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
@@ -694,6 +708,71 @@ async function saveContact() {
     await loadContact();
   } catch (e) { msg("保存失败：" + e.message, 1); }
   btn.disabled = false; btn.textContent = "🚀 保存联系方式";
+}
+
+// ---------- 攻略(Guides A)·/service/ 落地页文案编辑器 ----------
+const GUIDES_META_LABEL = { "service.page-header-subtitle.1": "页头副标题", "service.meta.title": "页面 SEO 标题 (meta title)" };
+let guidesMeta = {}, guidesCards = [], guidesLocales = [], guidesOrig = {};
+async function showGuides() { showView("guides"); await loadGuides(); }
+async function loadGuides() {
+  const box = $("#guides-fields");
+  box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
+  try { const r = await api("/guides"); guidesMeta = r.meta || {}; guidesCards = r.cards || []; guidesLocales = r.locales || []; }
+  catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadGuides()">重试</button></div>`; return; }
+  guidesOrig = {};
+  Object.entries(guidesMeta).forEach(([k, v]) => { guidesOrig[k] = { ...v }; });
+  guidesCards.forEach((c) => { guidesOrig[c.titleKey] = { ...c.title }; guidesOrig[c.excerptKey] = { ...c.excerpt }; });
+  paintGuides();
+}
+function guidesFieldBlock(key, vals) {
+  return guidesLocales.map((loc) => `<div class="field"><label>${esc(loc)}</label><textarea data-gk="${esc(key)}" data-gl="${esc(loc)}" style="min-height:48px">${esc(vals[loc] || "")}</textarea></div>`).join("");
+}
+function paintGuides() {
+  let h = `<div class="card"><h3>页头 / SEO <span class="muted" style="font-weight:400;font-size:11px">data/pages/service.json</span></h3>`;
+  for (const k of Object.keys(guidesMeta)) h += `<div style="margin-bottom:8px"><div class="muted" style="font-size:12px;margin-bottom:3px">${esc(GUIDES_META_LABEL[k] || k)} <span style="font-size:11px">${esc(k)}</span></div>${guidesFieldBlock(k, guidesMeta[k])}</div>`;
+  h += `</div>`;
+  h += `<div class="card"><h3>攻略卡片文案 <span class="muted" style="font-weight:400;font-size:11px">${guidesCards.length} 张 · shared.json（仅这些键可写）</span></h3>`;
+  guidesCards.forEach((c, i) => {
+    const en = c.title.en || c.titleKey;
+    h += `<details${i === 0 ? " open" : ""} style="border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);margin-bottom:8px;padding:8px 10px">
+      <summary style="cursor:pointer;font-size:13px">卡片 ${i + 1}：${esc(en.slice(0, 60))}</summary>
+      <div style="margin-top:8px"><div class="muted" style="font-size:12px;margin-bottom:3px">标题 <span style="font-size:11px">${esc(c.titleKey)}</span></div>${guidesFieldBlock(c.titleKey, c.title)}</div>
+      <div><div class="muted" style="font-size:12px;margin-bottom:3px">摘要 <span style="font-size:11px">${esc(c.excerptKey)}</span></div>${guidesFieldBlock(c.excerptKey, c.excerpt)}</div>
+    </details>`;
+  });
+  h += `</div>`;
+  $("#guides-fields").innerHTML = h;
+}
+function collectGuidesEdits() {
+  const edits = [];
+  document.querySelectorAll("#guides-fields textarea[data-gk]").forEach((t) => {
+    const key = t.dataset.gk, loc = t.dataset.gl, v = t.value;
+    const orig = (guidesOrig[key] || {})[loc] || "";
+    if (v !== orig) edits.push({ key, locale: loc, value: v });
+  });
+  return edits;
+}
+async function previewGuides() {
+  const edits = collectGuidesEdits();
+  const w = window.open("", "_blank");
+  if (w) w.document.write('<!doctype html><meta charset="utf-8"><title>攻略页预览渲染中…</title><body style="font:14px sans-serif;padding:24px;color:#333">渲染攻略页预览中…</body>');
+  try {
+    const r = await api("/guides", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits, dryRun: true }) });
+    if (r.previewHtml && w) { const html = r.previewHtml.replace(/<head([^>]*)>/i, '<head$1><base href="https://wanew.com/">'); w.document.open(); w.document.write(html); w.document.close(); msg("已在新标签打开攻略页渲染预览（未提交、未上线）"); }
+    else { if (w) w.close(); msg((r.error || "预览无渲染 HTML"), 1); }
+  } catch (e) { if (w) w.close(); msg("预览失败：" + e.message, 1); }
+}
+async function saveGuides() {
+  const edits = collectGuidesEdits();
+  if (!edits.length) return msg("没有改动");
+  if (!confirm(`将保存 ${edits.length} 处攻略页文案到官网仓（重烘焙 /service/ 四语、≈1分钟上线）。\n此操作直接修改生产官网仓。确定？`)) return;
+  const btn = $("#btn-guides-save"); btn.disabled = true; btn.textContent = "保存中…";
+  try {
+    const r = await api("/guides", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits }) });
+    msg(`✅ 攻略页已保存（commit ${(r.commit || "").slice(0, 7)}）· 写 ${(r.files || []).length} 文件 · ≈1分钟官网可见`);
+    await loadGuides();
+  } catch (e) { msg("保存失败：" + e.message, 1); }
+  btn.disabled = false; btn.textContent = "🚀 保存攻略页";
 }
 
 // ---------- 媒体库（W5 P4·R2 浏览/标签/删除 + P5+ 文件夹归类）----------

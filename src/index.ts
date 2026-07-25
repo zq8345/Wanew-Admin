@@ -44,8 +44,8 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // ================= 批2-2：产品 CRUD（双步三语，继承 [[path]].js 骨架） =================
 // 写路径全部走 loadCtx（GitHub 读真源）→ validate(merge) → publish/unpublish（原子 commit）。
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
-import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS } from "./publish";
-import type { HomeEdit, ContactEdit } from "./publish";
+import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishService, SERVICE_META_KEYS, SERVICE_CARDS } from "./publish";
+import type { HomeEdit, ContactEdit, ServiceEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
 // @ts-ignore js 模块 —— FORM_KEY = 形态/品类轴 slug 真源（render.js，守卫盯字节；本仓只读镜像）
@@ -276,6 +276,41 @@ app.put("/api/admin/contact", async (c) => {
     const r: any = await publishContact(c.env, cfg, ctx, body.edits as ContactEdit[], { email: operator(c), dryRun: !!body.dryRun });
     if (r.error) return c.json(r, 502);
     return c.json({ ok: true, ...r, note: r.dry ? "dry preview" : "contact updated; Pages deploys in ~1 min" });
+  } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
+});
+
+// ================= Guides A：/service/ 落地页文案编辑器（硬白名单）=================
+// GET 回填页头/meta + 10 卡片(标题/摘要)四语；PUT publishService(白名单 merge→renderPage /service/→commit)。
+// 安全红线:只写 service.json 页头/meta + shared.json 那 20 卡片键,非白名单一律拒(publish.ts mergeService)。
+app.get("/api/admin/guides", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const [svcRaw, sharedRaw] = await Promise.all([
+    readFile(c.env, cfg, "data/pages/service.json"),
+    readFile(c.env, cfg, "data/pages/shared.json"),
+  ]);
+  if (!svcRaw || !sharedRaw) return c.json({ error: "service.json / shared.json missing" }, 404);
+  const svc = JSON.parse(svcRaw), shared = JSON.parse(sharedRaw);
+  const meta: Record<string, any> = {};
+  for (const k of SERVICE_META_KEYS) meta[k] = svc[k] || {};
+  const cards = SERVICE_CARDS.map(([tk, ek]: [string, string]) => ({ titleKey: tk, title: shared[tk] || {}, excerptKey: ek, excerpt: shared[ek] || {} }));
+  // locale 集从页头键取（与实际存储一致）
+  const first = meta[SERVICE_META_KEYS[0]];
+  const locales = first && typeof first === "object" ? Object.keys(first).filter((l) => !l.startsWith("reason")) : [];
+  return c.json({ meta, cards, locales });
+});
+
+app.put("/api/admin/guides", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  if (!Array.isArray(body?.edits)) return c.json({ error: "edits must be an array" }, 400);
+  const ctx = await loadCtx(c.env, cfg);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
+  try {
+    const r: any = await publishService(c.env, cfg, ctx, body.edits as ServiceEdit[], { email: operator(c), dryRun: !!body.dryRun });
+    if (r.error) return c.json(r, 502);
+    return c.json({ ok: true, ...r, note: r.dry ? "dry preview" : "guides updated; Pages deploys in ~1 min" });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
