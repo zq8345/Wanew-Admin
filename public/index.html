@@ -33,6 +33,10 @@ tr:hover td{background:var(--w3-panel2)}
 .thumb{width:38px;height:38px;object-fit:contain;background:var(--w3-tile);border-radius:8px;padding:3px;display:block}
 .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;white-space:nowrap;border:1px solid rgba(125,177,255,.28);background:rgba(125,177,255,.1);color:#a9ccff}
 .pill.pf{border-color:var(--w3-line);background:var(--w3-bg2);color:var(--w3-text2)}
+/* 列表标题=官网详情页链接（"看官网"走标题、"编辑"走按钮，两动作分开防误点）*/
+.ttl-link{color:var(--w3-text);text-decoration:none}
+.ttl-link:hover{color:var(--w3-accent);text-decoration:underline}
+.ttl-link .ext{color:var(--w3-text3);font-size:11px;vertical-align:1px}
 .bulkbar{display:none;gap:10px;align-items:center;padding:8px 12px;background:rgba(125,177,255,.08);border:1px solid rgba(125,177,255,.28);border-radius:var(--dz-radius-s);margin-bottom:10px}
 .bulkbar.on{display:flex;flex-wrap:wrap}
 .bulkbar b{color:var(--w3-accent)}
@@ -59,6 +63,7 @@ textarea.desc{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-
 .gitem img{width:100%;height:78px;object-fit:contain;background:var(--w3-tile);border-radius:5px;display:block}
 .gitem input{width:100%;margin-top:5px;font-size:11px;padding:3px 5px;height:auto}
 .gitem .gx{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.65);border:none;color:#fff;border-radius:4px;font-size:11px;padding:1px 6px;height:auto;min-width:0}
+.gitem .gx:hover{background:#e5484d;color:#fff}   /* 危险动作反馈：hover 变红=点击即删这张图 */
 .gitem .cover{position:absolute;top:2px;left:2px;background:var(--w3-accent);color:#08111f;font-size:10px;border-radius:4px;padding:1px 5px;font-weight:600}
 .gadd{width:110px;height:132px;border:1px dashed var(--w3-line2);border-radius:var(--dz-radius-s);display:grid;place-items:center;color:var(--w3-text3);cursor:pointer;font-size:12px;text-align:center}
 .gadd.drag{border-color:var(--w3-accent);color:var(--w3-accent)}
@@ -260,13 +265,12 @@ function renderRows() {
     <tr>
       <td><input type="checkbox" ${sel.has(p.id) ? "checked" : ""} onchange="toggleSel(${p.id},this.checked)"></td>
       <td>${p.thumb ? `<img class="thumb" src="${esc(imgUrl(p.thumb))}" loading="lazy">` : ""}</td>
-      <td>${esc(p.title)}</td>
+      <td><a href="${SITE}/${esc(p.category)}/${p.id}" target="_blank" class="ttl-link" title="在官网打开详情页">${esc(p.title)} <span class="ext">↗</span></a></td>
       <td class="muted">${p.id}</td>
       <td><span class="pill">${esc(catName(p.category))}</span></td>
       <td>${p.form ? `<span class="pill pf">${esc(p.form)}</span>` : `<span class="muted">—</span>`}</td>
       <td>
         <button onclick="openEdit(${p.id})">编辑</button>
-        <a href="${SITE}/${esc(p.category)}/${p.id}" target="_blank" style="margin-left:6px">官网 ↗</a>
       </td>
     </tr>`).join("") || `<tr><td colspan="7" class="muted">没有匹配的产品</td></tr>`;
   syncBulk();
@@ -340,11 +344,11 @@ async function openEdit(id) {
   showView("edit"); $("#preview-out").style.display = "none"; $("#draft-banner").classList.remove("on");
   if (id == null) {
     cur = { id: null, category: cats[0]?.slug || "", form: null, i18n: { en: { title: "", summary_html: "", description_html: "", meta_title: "", meta_description: "" } }, images: [] };
-    fillForm(cur); $("#edit-title-crumb").textContent = "新建"; $("#btn-site").style.display = "none";
+    fillForm(cur); $("#edit-title-crumb").textContent = "添加产品"; $("#btn-site").style.display = "none";
   } else {
     $("#edit-title-crumb").textContent = "加载 #" + id + "…";
     try { cur = await api("/products/" + id); } catch (e) { msg("加载失败：" + e.message, 1); return backToList(); }
-    fillForm(cur); $("#edit-title-crumb").textContent = `#${id}`;
+    fillForm(cur); $("#edit-title-crumb").textContent = `编辑产品 #${id}`;
     const a = $("#btn-site"); a.href = `${SITE}/${cur.category}/${id}`; a.style.display = "";
   }
   // 草稿提示（诚实方案B：仅编辑页提示，不在列表造状态）
@@ -456,7 +460,7 @@ async function saveAndPublish() {
       : await api("/products", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
     localStorage.removeItem(DKEY(cur?.id));
     msg(`✅ 已发布（commit ${(r.commit || "").slice(0, 8)}）· 写入 ${(r.files || []).length} 个文件 · ≈1分钟后官网可见`);
-    if (!cur?.id && r.id) { cur = { ...b, id: r.id }; $("#edit-title-crumb").textContent = `#${r.id}`; const a = $("#btn-site"); a.href = `${SITE}/${b.category}/${r.id}`; a.style.display = ""; }
+    if (!cur?.id && r.id) { cur = { ...b, id: r.id }; $("#edit-title-crumb").textContent = `编辑产品 #${r.id}`; const a = $("#btn-site"); a.href = `${SITE}/${b.category}/${r.id}`; a.style.display = ""; }
   } catch (e) { msg("发布失败：" + e.message, 1); }
   btn.disabled = false; btn.textContent = "🚀 发布";
 }
