@@ -1,0 +1,145 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   shell.css — Wanew dense app 壳（DESIGN.md §8 的编译产物）
+   继承 DESIGN.md v1 品牌地基 + 密度层 --dz-*。三平台(admin/CRM)共享。
+   ⚠️ D-shell-location(总工拍板)：权威版归官网仓(同 DESIGN.md)，admin/CRM vendored + 漂移守卫。
+      本文件是 admin 首实现草稿；稳定后提升为官网 canonical，两平台再 vendor。勿手改 vendored 副本。
+   规范：wanew-internal-docs/dense-app-mode-spec-draft.md
+   ═══════════════════════════════════════════════════════════════════════ */
+:root{
+  /* v1 品牌地基（继承 DESIGN.md v1，不重定义语义） */
+  --w3-bg:#0a0c0f; --w3-bg2:#0e1114; --w3-panel:#14181d; --w3-panel2:#191e24;
+  --w3-line:rgba(255,255,255,.08); --w3-line2:rgba(255,255,255,.16);
+  --w3-text:#eef1f4; --w3-text2:#a9b2bb; --w3-text3:#75808a;
+  --w3-accent:#7db1ff; --w3-tile:#f4f5f7; --w3-ink:#14181d;
+  --w3-ok:#7fd8a2; --w3-err:#ff9d9d; --w3-glass:rgba(10,12,15,.82);
+  /* 密度层 --dz-*（D-token：CRM 实测紧凑值对齐 8px 网格，总工拍板照收） */
+  --dz-control-h:32px; --dz-row-py:8px; --dz-cell-px:10px; --dz-panel-pad:16px;
+  --dz-gap:12px; --dz-gap-sm:8px; --dz-nav-w:184px; --dz-nav-item-py:7px;
+  --dz-header-h:52px; --dz-radius:12px; --dz-radius-s:6px;
+  --dz-ease:cubic-bezier(.22,.61,.24,1);
+}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  background:var(--w3-bg);color:var(--w3-text);-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--w3-accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.tnum{font-variant-numeric:tabular-nums}
+.muted{color:var(--w3-text3)}
+
+/* ── 顶栏 ── */
+.dz-header{height:var(--dz-header-h);display:flex;align-items:center;gap:16px;padding:0 16px;
+  background:var(--w3-glass);backdrop-filter:blur(14px);border-bottom:1px solid var(--w3-line);
+  position:sticky;top:0;z-index:50}
+.dz-logo{display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:700;letter-spacing:.02em;font-size:15px;color:var(--w3-text)}
+.dz-logo .mark{width:22px;height:22px;border-radius:5px;background:linear-gradient(135deg,var(--w3-accent),#4d84e6);
+  display:grid;place-items:center;color:#0a0c0f;font-size:13px;font-weight:800}
+.dz-logo .sub{color:var(--w3-text3);font-weight:500;font-size:12px}
+.dz-search{flex:1;max-width:420px;position:relative}
+.dz-search input{width:100%;height:var(--dz-control-h);background:var(--w3-bg2);border:1px solid var(--w3-line);
+  border-radius:var(--dz-radius-s);padding:0 10px 0 30px;color:var(--w3-text);font-size:13px}
+.dz-search input::placeholder{color:var(--w3-text3)}
+.dz-search input:focus{outline:none;border-color:var(--w3-accent)}
+.dz-search .ic{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--w3-text3);font-size:13px;pointer-events:none}
+.dz-header .spacer{flex:1}
+.dz-user{display:flex;align-items:center;gap:7px;color:var(--w3-text2);font-size:13px;
+  padding:5px 9px;border-radius:var(--dz-radius-s);border:1px solid transparent;white-space:nowrap}
+.dz-user .av{width:22px;height:22px;border-radius:50%;background:var(--w3-panel2);border:1px solid var(--w3-line2);
+  display:grid;place-items:center;font-size:11px;color:var(--w3-text)}
+
+/* ── 布局 ── */
+.dz-wrap{display:flex;gap:var(--dz-gap);padding:var(--dz-gap);height:calc(100vh - var(--dz-header-h))}
+
+/* ── 左栏 ── */
+.dz-side{width:var(--dz-nav-w);flex-shrink:0;background:var(--w3-panel);border:1px solid var(--w3-line);
+  border-radius:var(--dz-radius);padding:10px;display:flex;flex-direction:column;overflow:auto}
+.dz-eyebrow{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--w3-text3);
+  padding:0 8px;margin:12px 0 5px}
+.dz-eyebrow:first-child{margin-top:2px}
+.dz-nav-item{display:flex;align-items:center;gap:9px;padding:var(--dz-nav-item-py) 10px;border-radius:var(--dz-radius-s);
+  color:var(--w3-text3);cursor:pointer;font-size:13.5px;position:relative;
+  transition:background .15s var(--dz-ease),color .15s var(--dz-ease)}
+.dz-nav-item .ic{width:16px;text-align:center;opacity:.9;font-size:14px;flex-shrink:0}
+.dz-nav-item:hover{background:var(--w3-panel2);color:var(--w3-text2)}
+.dz-nav-item.active{background:var(--w3-panel2);color:var(--w3-text);font-weight:600}
+.dz-nav-item.active::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:2px;background:var(--w3-accent)}
+.dz-nav-item .cnt{margin-left:auto;font-size:11px;color:var(--w3-text3);font-variant-numeric:tabular-nums}
+.dz-nav-item.active .cnt{color:var(--w3-accent)}
+/* Phase 1 未建的分区：明示 soon，不装成可用（灰按钮必写原因） */
+.dz-nav-item.soon{opacity:.5;cursor:default}
+.dz-nav-item.soon:hover{background:transparent;color:var(--w3-text3)}
+.dz-nav-item .soon-tag{margin-left:auto;font-size:10px;letter-spacing:.06em;color:var(--w3-text3);
+  border:1px solid var(--w3-line);border-radius:4px;padding:0 4px}
+.dz-side-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--w3-line);display:flex;flex-direction:column;gap:1px}
+.dz-deploy{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12px;color:var(--w3-text3)}
+.dz-deploy .dot{width:7px;height:7px;border-radius:50%;background:var(--w3-ok);box-shadow:0 0 6px var(--w3-ok);flex-shrink:0}
+
+/* ── 主面板 ── */
+.dz-main{flex:1;overflow:auto;background:var(--w3-panel);border:1px solid var(--w3-line);
+  border-radius:var(--dz-radius);padding:var(--dz-panel-pad)}
+.dz-pagehead{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.dz-pagehead h1{font-size:18px;margin:0;font-weight:700;letter-spacing:-.01em}
+.dz-pagehead .meta{color:var(--w3-text3);font-size:12.5px}
+
+/* ── 工具栏 / 表单控件 ── */
+.dz-toolbar{display:flex;align-items:center;gap:var(--dz-gap-sm);margin-bottom:12px;flex-wrap:wrap}
+.dz-toolbar .spacer{flex:1}
+.dz-field{height:var(--dz-control-h);background:var(--w3-bg2);border:1px solid var(--w3-line);
+  border-radius:var(--dz-radius-s);padding:0 9px;color:var(--w3-text);font-size:13px}
+.dz-field:focus{outline:none;border-color:var(--w3-accent)}
+select.dz-field{cursor:pointer}
+textarea.dz-field{height:auto;padding:8px 9px;resize:vertical;line-height:1.5}
+
+/* ── 按钮（D-btn：accent 主 / 幽灵次 / 克制 danger，总工拍板）── */
+.dz-btn{height:var(--dz-control-h);padding:0 13px;border-radius:var(--dz-radius-s);border:1px solid var(--w3-line2);
+  background:transparent;color:var(--w3-text);font-size:13px;cursor:pointer;display:inline-flex;align-items:center;
+  gap:6px;white-space:nowrap;transition:.15s var(--dz-ease)}
+.dz-btn:hover{background:var(--w3-panel2);border-color:rgba(255,255,255,.28)}
+.dz-btn:disabled{opacity:.45;cursor:not-allowed}
+.dz-btn--primary{background:var(--w3-accent);border-color:var(--w3-accent);color:#08111f;font-weight:600}
+.dz-btn--primary:hover{background:#9cc4ff;border-color:#9cc4ff}
+.dz-btn--danger{border-color:rgba(255,157,157,.5);color:var(--w3-err);background:transparent}
+.dz-btn--danger:hover{background:rgba(255,157,157,.08);border-color:var(--w3-err)}
+.dz-btn.sm{height:26px;padding:0 9px;font-size:12.5px}
+
+/* ── dense 表 ── */
+.dz-table{width:100%;border-collapse:collapse}
+.dz-table th,.dz-table td{text-align:left;padding:var(--dz-row-py) var(--dz-cell-px);
+  border-bottom:1px solid var(--w3-line);vertical-align:middle}
+.dz-table th{color:var(--w3-text3);font-weight:600;font-size:12px;letter-spacing:.02em;
+  position:sticky;top:0;background:var(--w3-panel);z-index:1;white-space:nowrap}
+.dz-table tbody tr{transition:background .12s var(--dz-ease)}
+.dz-table tbody tr:hover{background:var(--w3-panel2)}
+.dz-thumb{width:38px;height:38px;border-radius:8px;background:var(--w3-tile);object-fit:contain;padding:3px;display:block}
+.dz-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;white-space:nowrap;
+  border:1px solid var(--w3-line);background:var(--w3-bg2);color:var(--w3-text2)}
+.dz-badge--accent{border-color:rgba(125,177,255,.28);background:rgba(125,177,255,.1);color:#a9ccff}
+.dz-check{width:15px;height:15px;accent-color:var(--w3-accent);cursor:pointer}
+
+/* ── 批量条 ── */
+.dz-bulk{display:none;align-items:center;gap:10px;padding:8px 12px;margin-bottom:10px;
+  background:rgba(125,177,255,.08);border:1px solid rgba(125,177,255,.28);
+  border-radius:var(--dz-radius-s);font-size:13px}
+.dz-bulk.on{display:flex;flex-wrap:wrap}
+.dz-bulk b{color:var(--w3-accent)}
+
+/* ── toast ── */
+.dz-toast{position:fixed;bottom:18px;right:18px;background:var(--w3-panel);border:1px solid var(--w3-line);
+  border-left:3px solid var(--w3-ok);border-radius:var(--dz-radius-s);padding:10px 14px;font-size:13px;
+  display:none;max-width:420px;z-index:200;box-shadow:0 24px 60px -24px rgba(0,0,0,.55)}
+.dz-toast.err{border-left-color:var(--w3-err)}
+.dz-spin{display:inline-block;width:12px;height:12px;border:2px solid var(--w3-text3);border-top-color:transparent;
+  border-radius:50%;animation:dz-sp 1s linear infinite;vertical-align:-2px}
+@keyframes dz-sp{to{transform:rotate(360deg)}}
+
+/* focus-visible（承 v1 §4，禁 outline:none 不给替代）*/
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,
+.dz-nav-item:focus-visible{outline:2px solid var(--w3-accent);outline-offset:3px}
+
+/* ── 移动端：左栏收窄（抽屉留后续）── */
+@media (max-width:900px){
+  .dz-wrap{flex-direction:column;height:auto}
+  .dz-side{width:auto;flex-direction:row;flex-wrap:wrap;gap:4px}
+  .dz-side .dz-eyebrow{width:100%}
+  .dz-side-foot{margin-top:8px;width:100%;flex-direction:row;flex-wrap:wrap}
+}
