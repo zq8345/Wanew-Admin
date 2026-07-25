@@ -281,7 +281,7 @@ export function pickHomeProducts(entries, cap = 8, featured = null) {
 
 // R3 的通用页渲染:模板 + 散文目录 -> 页面。首页只是它多一个 {{TILES}} 的特例。
 // (a) 是为首页定制的;(b) 有 11 个页、(c)(d)(e) 还有 71 个 —— 同一套机器,参数化一次用四桶。
-export function renderPage(tpl, { locale, catalog, urlOf, path = "/", dirOf, enabled, internal_noindex = [] }) {
+export function renderPage(tpl, { locale, catalog, urlOf, path = "/", dirOf, enabled, internal_noindex = [], config = {} }) {
   let out = tpl;
   // internal locale(如 zh):no-SEO —— 强制 noindex 且【零 hreflang】。zh 不在 enabled 里,所以
   // en/pt/es 的 hreflang 簇本就不会指向它(一个方向);这里堵另一个方向:zh 页自己不发 hreflang
@@ -364,6 +364,14 @@ export function renderPage(tpl, { locale, catalog, urlOf, path = "/", dirOf, ena
     if (!e) throw new Error(`renderPage: 模板引用了不存在的 key: ${key}`);
     const v = e[locale] ?? e.en;
     if (v === undefined || v === null || v === "") throw new Error(`renderPage: catalog ${key} 在 ${locale} 下没有值`);
+    return v;
+  });
+  // {{cfg.KEY}} = language-agnostic standalone config (data/contact-info.json), resolved
+  // OUTSIDE the i18n catalog so real values (email/phone/…) never trip catalog-dupe.
+  // Missing key throws (same discipline as {{t.}}). Pages without cfg tokens pass config={}.
+  out = out.replace(/\{\{cfg\.([a-z0-9_]+)\}\}/g, (m, key) => {
+    const v = config[key];
+    if (v === undefined || v === null || v === "") throw new Error(`renderPage: config 缺 cfg.${key}(data/contact-info.json)`);
     return v;
   });
   // L3(审计):FAQPage 结构化数据 —— 从【已渲染】的 .faq-item Q&A 派生(token 已解析),
