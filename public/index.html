@@ -49,6 +49,14 @@ tr:hover td{background:var(--w3-panel2)}
 .edit-bar .idtag{font-size:12px;font-variant-numeric:tabular-nums}
 .editbar-link{padding:0 10px;height:var(--dz-control-h);display:inline-flex;align-items:center;border:1px solid var(--w3-line2);border-radius:var(--dz-radius-s);color:var(--w3-text)!important;text-decoration:none;font-size:13px}
 .editbar-link:hover{background:var(--w3-panel2);text-decoration:none}
+/* 媒体库网格（W5 P4）*/
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.mtile{border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);background:var(--w3-panel2);padding:8px;font-size:11px}
+.mtile img{width:100%;height:110px;object-fit:contain;background:var(--w3-tile);border-radius:5px;display:block}
+.mtile-key{color:var(--w3-text3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mtile-tag{margin:4px 0}
+.mtile-act{display:flex;gap:3px;flex-wrap:wrap}
+.mtile-act button{height:24px;padding:0 7px;font-size:11px}
 .card{background:var(--w3-bg2);border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);padding:14px 16px;margin-bottom:14px}
 .card h3{margin:0 0 10px;font-size:12px;color:var(--w3-text3);font-weight:600;text-transform:uppercase;letter-spacing:.08em}
 .field{margin-bottom:12px}
@@ -92,7 +100,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="dz-nav-item active" onclick="backToList()"><span class="ic">▤</span> 产品</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">◧</span> 仪表盘 <span class="soon-tag">SOON</span></div>
     <div class="dz-nav-item" onclick="showCats()"><span class="ic">⊞</span> 分类</div>
-    <div class="dz-nav-item soon" title="即将上线"><span class="ic">▦</span> 媒体 <span class="soon-tag">SOON</span></div>
+    <div class="dz-nav-item" onclick="showMedia()"><span class="ic">▦</span> 媒体</div>
     <div class="dz-eyebrow">内容 Content</div>
     <div class="dz-nav-item" onclick="showHome()"><span class="ic">⌂</span> 首页</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">▭</span> 页面 <span class="soon-tag">SOON</span></div>
@@ -211,6 +219,20 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div id="home-featured-box"></div>
   </div>
 
+  <!-- ============ 媒体库（W5 P4·R2 浏览/标签/删除）============ -->
+  <div id="v-media" style="display:none">
+    <div class="edit-bar">
+      <button onclick="backToList()">← 返回列表</button>
+      <span class="idtag muted" id="media-count">媒体库</span>
+      <div class="spacer"></div>
+      <select class="dz-field" onchange="mediaSetFilter(this.value)"><option value="">全部</option><option value="clean">干净产品图</option><option value="marketing">营销拼图</option><option value="untagged">未标</option></select>
+      <button class="primary" onclick="document.getElementById('media-upload').click()">⬆ 上传</button>
+      <input type="file" id="media-upload" accept="image/*" multiple style="display:none" onchange="mediaUpload([...this.files]);this.value=''">
+    </div>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">R2 图床（对外 img.wanew.com）。标签仅内部管理用（干净产品图 vs 营销拼图），不影响官网。⚠️ 删除=直接删 R2、不可撤销——被产品引用的图删了会裂详情页，删前想清楚。</p>
+    <div id="media-grid" class="mgrid"><div class="card muted">加载中… <span class="spin"></span></div></div>
+  </div>
+
   </main>
 </div>
 <div class="msg" id="msg"></div>
@@ -311,7 +333,7 @@ async function bulkDelete() {
 
 // ---------- 编辑 ----------
 const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
-function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : "")); }
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "media" ? "› 媒体库" : ""))); }
 function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
@@ -444,6 +466,54 @@ async function saveHome() {
     await loadHomeView();   // 重载=新值成为基线
   } catch (e) { msg("保存失败：" + e.message, 1); }
   btn.disabled = false; btn.textContent = "🚀 保存首页";
+}
+
+// ---------- 媒体库（W5 P4·R2 浏览/标签/删除）----------
+let mediaItems = [], mediaFilter = "";
+async function showMedia() { showView("media"); await loadMedia(); }
+async function loadMedia() {
+  const box = $("#media-grid");
+  box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
+  try { const r = await api("/media"); mediaItems = r.media || []; }
+  catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadMedia()">重试</button></div>`; return; }
+  paintMedia();
+}
+function mediaSetFilter(f) { mediaFilter = f; paintMedia(); }
+function paintMedia() {
+  const f = mediaFilter;
+  const list = mediaItems.filter((m) => !f || (f === "untagged" ? !m.tag : m.tag === f));
+  $("#media-count").textContent = `${list.length} / ${mediaItems.length} 张`;
+  $("#media-grid").innerHTML = list.map((m) => `
+    <div class="mtile">
+      <img src="${esc(m.url)}" loading="lazy" title="${esc(m.key)}">
+      <div class="mtile-key" title="${esc(m.key)}">${esc(m.key.split("/").pop())}</div>
+      <div class="mtile-tag">${m.tag === "clean" ? `<span class="pill">干净产品图</span>` : m.tag === "marketing" ? `<span class="pill pf">营销拼图</span>` : `<span class="muted">未标</span>`}</div>
+      <div class="mtile-act">
+        <button onclick="mediaTag('${esc(m.key)}','clean')">干净</button>
+        <button onclick="mediaTag('${esc(m.key)}','marketing')">营销</button>
+        <button onclick="mediaTag('${esc(m.key)}','')">清标</button>
+        <button class="danger" onclick="mediaDelete('${esc(m.key)}')">删</button>
+      </div>
+    </div>`).join("") || `<div class="card muted">无媒体${f ? "（此筛选下）" : ""}</div>`;
+}
+async function mediaTag(key, tag) {
+  try { await api("/media/tag", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, tag }) }); const m = mediaItems.find((x) => x.key === key); if (m) m.tag = tag; paintMedia(); msg(tag ? "已标记" : "已清标签"); }
+  catch (e) { msg("标记失败：" + e.message, 1); }
+}
+async function mediaDelete(key) {
+  if (!confirm(`删除这张图？\n${key}\n\n⚠️ 直接删 R2、不可撤销。若有产品详情页引用它，页面会裂图。`)) return;
+  const typed = prompt(`危险操作二次确认：输入「删除」继续`);
+  if (typed !== "删除") return msg("已取消");
+  try { await api("/media?key=" + encodeURIComponent(key), { method: "DELETE" }); mediaItems = mediaItems.filter((x) => x.key !== key); paintMedia(); msg("已删除 " + key.split("/").pop()); }
+  catch (e) { msg("删除失败：" + e.message, 1); }
+}
+async function mediaUpload(files) {
+  for (const f of files) {
+    msg("上传 " + f.name + "…");
+    try { const r = await fetch("/api/admin/upload?name=" + encodeURIComponent(f.name), { method: "POST", headers: { "content-type": f.type }, body: f }); const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status); msg("已上传 " + f.name); }
+    catch (e) { msg(f.name + " 上传失败：" + e.message, 1); }
+  }
+  await loadMedia();
 }
 
 async function openEdit(id) {

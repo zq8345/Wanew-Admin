@@ -249,6 +249,57 @@ app.put("/api/admin/homepage", async (c) => {
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
+// ================= W5 P4：媒体库（R2 浏览/标签/删除；走 R2 域、不碰 data/pages/=与官网信息页迁移零撞车）=================
+// 标签(clean 干净产品图 / marketing 营销拼图)存 R2 内 _meta/media-index.json(键→tag)——不加 D1、不写官网仓。
+const MEDIA_META = "_meta/media-index.json";
+async function loadMediaTags(env: Env): Promise<Record<string, string>> {
+  const obj = await env.IMAGES.get(MEDIA_META);
+  if (!obj) return {};
+  try { return JSON.parse(await obj.text()); } catch { return {}; }
+}
+async function saveMediaTags(env: Env, tags: Record<string, string>) {
+  await env.IMAGES.put(MEDIA_META, JSON.stringify(tags), { httpMetadata: { contentType: "application/json" } });
+}
+
+// 列 R2 对象(分页抽干、上限保护) + 合并标签 + 对外 URL(img.wanew.com)
+app.get("/api/admin/media", async (c) => {
+  const tags = await loadMediaTags(c.env);
+  const items: any[] = [];
+  let cursor: string | undefined;
+  do {
+    const res: any = await c.env.IMAGES.list({ limit: 1000, cursor });
+    for (const o of res.objects) {
+      if (o.key === MEDIA_META) continue;
+      items.push({ key: o.key, size: o.size, uploaded: o.uploaded, url: c.env.IMG_BASE + o.key, tag: tags[o.key] || "" });
+    }
+    cursor = res.truncated ? res.cursor : undefined;
+  } while (cursor && items.length < 5000);
+  items.sort((a, b) => ((b.uploaded && b.uploaded.getTime ? b.uploaded.getTime() : 0) - (a.uploaded && a.uploaded.getTime ? a.uploaded.getTime() : 0)));
+  return c.json({ media: items, count: items.length });
+});
+
+// 打标签(clean|marketing|空=清标签)——写 _meta/media-index.json
+app.put("/api/admin/media/tag", async (c) => {
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const key = String(body?.key || ""), tag = String(body?.tag || "");
+  if (!key || key === MEDIA_META) return c.json({ error: "bad key" }, 400);
+  if (tag && !["clean", "marketing"].includes(tag)) return c.json({ error: "tag must be clean|marketing|empty" }, 400);
+  const tags = await loadMediaTags(c.env);
+  if (tag) tags[key] = tag; else delete tags[key];
+  await saveMediaTags(c.env, tags);
+  return c.json({ ok: true, key, tag });
+});
+
+// 删除 R2 对象(前端强 confirm；⚠️ 删被产品引用的图会裂详情页——前端提示，Joe 定)
+app.delete("/api/admin/media", async (c) => {
+  const key = c.req.query("key") || "";
+  if (!key || key === MEDIA_META) return c.json({ error: "bad key" }, 400);
+  await c.env.IMAGES.delete(key);
+  const tags = await loadMediaTags(c.env);
+  if (tags[key] !== undefined) { delete tags[key]; await saveMediaTags(c.env, tags); }
+  return c.json({ ok: true, deleted: key });
+});
+
 // run_worker_first=true 时 Worker 先跑：未匹配的路由必须**显式**回落静态资源
 // （骨架首 boot 实测 / 404 抓出来的——Hono 不会自动帮你转 ASSETS）。auth 中间件在前=静态页同样在门后。
 app.notFound((c) => c.env.ASSETS.fetch(c.req.raw));
