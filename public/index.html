@@ -79,12 +79,18 @@ tr:hover td{background:var(--w3-panel2)}
 .dstat .lbl{color:var(--w3-text3);font-size:12px;margin-top:2px}
 .dgrid{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;align-items:start}
 @media(max-width:900px){.dgrid{grid-template-columns:1fr}}
-.dbar{display:flex;flex-direction:column;gap:10px}
-.dbar-row{display:grid;grid-template-columns:132px 1fr 30px;gap:11px;align-items:center}
-.dbar-lbl{font-size:12.5px;color:var(--w3-text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dbar-track{height:8px;border-radius:6px;background:var(--w3-panel2);overflow:hidden}
-.dbar-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--w3-accent),#a9ccff);min-width:2px}
-.dbar-val{font-size:12px;color:var(--w3-text3);text-align:right;font-variant-numeric:tabular-nums}
+/* 环形图（donut）卡 */
+.ddonut-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+@media(max-width:760px){.ddonut-row{grid-template-columns:1fr}}
+.donut-wrap{display:flex;gap:18px;align-items:center}
+@media(max-width:520px){.donut-wrap{flex-direction:column;align-items:stretch}}
+.donut-wrap svg{flex:none;display:block}
+.dlg{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.dlg-row{display:grid;grid-template-columns:11px 1fr auto auto;gap:9px;align-items:center;font-size:12.5px}
+.dlg-dot{width:10px;height:10px;border-radius:3px;flex:none}
+.dlg-name{color:var(--w3-text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dlg-val{color:var(--w3-text);font-variant-numeric:tabular-nums;text-align:right}
+.dlg-pct{color:var(--w3-text3);font-variant-numeric:tabular-nums;text-align:right;min-width:46px}
 .dtl{position:relative;padding-left:16px}
 .dtl::before{content:"";position:absolute;left:3px;top:5px;bottom:5px;width:1px;background:var(--w3-line)}
 .dtl-item{position:relative;padding:0 0 13px}
@@ -708,15 +714,47 @@ function relTime(iso) {
     if (s < 86400) return Math.floor(s / 3600) + " 小时前"; if (s < 2592000) return Math.floor(s / 86400) + " 天前";
     return new Date(iso).toLocaleDateString(); } catch { return ""; }
 }
-function dashBars(rows, nameFn) {
-  const max = Math.max(1, ...rows.map((r) => r.count));
-  return `<div class="dbar">${rows.map((r) => `<div class="dbar-row"><span class="dbar-lbl" title="${esc(nameFn(r))}">${esc(nameFn(r))}</span><span class="dbar-track"><span class="dbar-fill" style="width:${Math.round(r.count / max * 100)}%"></span></span><span class="dbar-val">${r.count}</span></div>`).join("")}</div>`;
+// 受控蓝色阶（同色相不同明度，非彩虹）；按数量降序分配，相邻明暗交替便于区分
+const DONUT_COLORS = ["#7db1ff", "#3a6bb5", "#a9ccff", "#4a82d6", "#cfe0ff", "#5f9bf0", "#2b5493", "#1e3f70"];
+// 百分比：最大余数法（Hamilton）配到 0.1%，保证各段之和恰好 100.0%（不因四舍五入超/欠 100）
+function pctList(data, total) {
+  if (!total) return data.map(() => 0);
+  const raw = data.map((d) => d.count / total * 1000);   // 以「0.1%」为单位
+  const out = raw.map((x) => Math.floor(x));
+  let rem = 1000 - out.reduce((a, b) => a + b, 0);
+  const order = raw.map((x, i) => ({ i, frac: x - Math.floor(x) })).sort((a, b) => b.frac - a.frac);
+  for (let k = 0; k < rem; k++) out[order[k % order.length].i]++;
+  return out.map((t) => t / 10);
+}
+// 纯 SVG donut：stroke-dasharray 画段 + 段间 gap 露出 track（零图表库）。rows=[{name,count}]，活取降序。
+function donutCard(title, rows, centerLabel) {
+  const data = rows.filter((r) => r.count > 0).sort((a, b) => b.count - a.count);
+  const total = data.reduce((s, r) => s + r.count, 0);
+  const pcts = pctList(data, total);
+  const size = 132, sw = 18, cx = size / 2, r = (size - sw) / 2, C = 2 * Math.PI * r, gap = 2;
+  let off = 0;
+  const segs = data.map((dd, i) => {
+    const len = total ? dd.count / total * C : 0;
+    const vis = Math.max(len - gap, len > 0 ? 1.2 : 0);   // 最小弧长兜底：最小段(如 1/64)也可见
+    const s = `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${DONUT_COLORS[i % DONUT_COLORS.length]}" stroke-width="${sw}" stroke-dasharray="${vis.toFixed(2)} ${(C - vis).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"/>`;
+    off += len; return s;
+  }).join("");
+  const svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${esc(title)}">
+    <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="var(--w3-panel2)" stroke-width="${sw}"/>
+    <g transform="rotate(-90 ${cx} ${cx})">${segs}</g>
+    <text x="${cx}" y="${cx - 1}" text-anchor="middle" font-size="27" font-weight="700" fill="var(--w3-text)" style="font-variant-numeric:tabular-nums">${total}</text>
+    <text x="${cx}" y="${cx + 16}" text-anchor="middle" font-size="11" fill="var(--w3-text3)">${esc(centerLabel)}</text>
+  </svg>`;
+  const legend = data.map((dd, i) => {
+    return `<div class="dlg-row"><span class="dlg-dot" style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></span><span class="dlg-name" title="${esc(dd.name)}">${esc(dd.name)}</span><span class="dlg-val">${dd.count}</span><span class="dlg-pct">${pcts[i]}%</span></div>`;
+  }).join("") || `<span class="muted">无数据</span>`;
+  return `<div class="card"><h3>${esc(title)}</h3><div class="donut-wrap">${svg}<div class="dlg">${legend}</div></div></div>`;
 }
 function paintDash(d) {
   $("#dash-repo").textContent = d.repo ? `发布到 ${d.repo}` : "";
   const stat = (ic, num, lbl) => `<div class="card"><div class="ic">${ic}</div><div><div class="num tnum">${num}</div><div class="lbl">${lbl}</div></div></div>`;
-  const catRows = Object.entries(d.byCat || {}).map(([slug, count]) => ({ slug, count })).sort((a, b) => b.count - a.count);
-  const formRows = (d.byForm || []).slice().sort((a, b) => b.count - a.count);
+  const modelRows = Object.entries(d.byCat || {}).map(([slug, count]) => ({ name: catName(slug), count }));
+  const typeRows = (d.byForm || []).map((x) => ({ name: x.form, count: x.count }));
   const feat = (d.featured || []).map((p) => `<div class="ft"><img src="${esc(imgUrl(p.thumb))}" loading="lazy"><span class="cap" title="${esc(p.title)}">${esc(p.title)}</span></div>`).join("") || `<span class="muted">未设精选产品（首页自动按形态轮询挑）</span>`;
   const tl = (d.activity || []).map((a) => `<div class="dtl-item"><div class="dtl-msg" title="${esc(a.message || "")}">${esc(a.message || "")}</div><div class="dtl-meta"><span class="tnum">${esc(a.sha)}</span>${a.date ? ` · ${esc(relTime(a.date))}` : ""}</div></div>`).join("") || `<span class="muted">暂无记录</span>`;
   $("#dash-body").innerHTML = `
@@ -726,15 +764,13 @@ function paintDash(d) {
       ${stat("⬡", d.formsCount != null ? d.formsCount : "—", "品类 / 形态")}
       ${stat("▦", d.mediaCount, "媒体")}
     </div>
+    <div class="ddonut-row">
+      ${modelRows.length ? donutCard("机型分布 By model", modelRows, "产品") : '<div class="card"><h3>机型分布 By model</h3><span class="muted">无</span></div>'}
+      ${typeRows.length ? donutCard("品类 / 形态分布 By type", typeRows, "产品") : '<div class="card"><h3>品类 / 形态分布 By type</h3><span class="muted">无</span></div>'}
+    </div>
     <div class="dgrid">
-      <div>
-        <div class="card"><h3>机型分布 By model</h3>${catRows.length ? dashBars(catRows, (r) => catName(r.slug)) : '<span class="muted">无</span>'}</div>
-        <div class="card"><h3>品类 / 形态分布 By type</h3>${formRows.length ? dashBars(formRows, (r) => r.form) : '<span class="muted">无</span>'}</div>
-      </div>
-      <div>
-        <div class="card"><h3>最近活动 Activity</h3><div class="dtl">${tl}</div></div>
-        <div class="card"><h3>精选产品 · 首页（${(d.featured || []).length}）</h3><div class="dfeat">${feat}</div><p style="margin-top:11px;font-size:12px"><a onclick="showHome()" style="cursor:pointer">→ 去首页管理</a></p></div>
-      </div>
+      <div><div class="card"><h3>最近活动 Activity</h3><div class="dtl">${tl}</div></div></div>
+      <div><div class="card"><h3>精选产品 · 首页（${(d.featured || []).length}）</h3><div class="dfeat">${feat}</div><p style="margin-top:11px;font-size:12px"><a onclick="showHome()" style="cursor:pointer">→ 去首页管理</a></p></div></div>
     </div>`;
 }
 
