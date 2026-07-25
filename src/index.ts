@@ -266,18 +266,19 @@ async function saveMediaTags(env: Env, tags: Record<string, string>) {
 // 列 R2 对象(分页抽干、上限保护) + 合并标签 + 对外 URL(img.wanew.com)
 app.get("/api/admin/media", async (c) => {
   const tags = await loadMediaTags(c.env);
+  const fm = await loadFolders(c.env);
   const items: any[] = [];
   let cursor: string | undefined;
   do {
     const res: any = await c.env.IMAGES.list({ limit: 1000, cursor });
     for (const o of res.objects) {
-      if (o.key === MEDIA_META) continue;
-      items.push({ key: o.key, size: o.size, uploaded: o.uploaded, url: c.env.IMG_BASE + o.key, tag: tags[o.key] || "" });
+      if (o.key === MEDIA_META || o.key === MEDIA_FOLDERS) continue;
+      items.push({ key: o.key, size: o.size, uploaded: o.uploaded, url: c.env.IMG_BASE + o.key, tag: tags[o.key] || "", folder: fm.assign[o.key] || "" });
     }
     cursor = res.truncated ? res.cursor : undefined;
   } while (cursor && items.length < 5000);
   items.sort((a, b) => ((b.uploaded && b.uploaded.getTime ? b.uploaded.getTime() : 0) - (a.uploaded && a.uploaded.getTime ? a.uploaded.getTime() : 0)));
-  return c.json({ media: items, count: items.length });
+  return c.json({ media: items, count: items.length, folders: fm.folders });
 });
 
 // 打标签(clean|marketing|空=清标签)——写 _meta/media-index.json
@@ -299,7 +300,61 @@ app.delete("/api/admin/media", async (c) => {
   await c.env.IMAGES.delete(key);
   const tags = await loadMediaTags(c.env);
   if (tags[key] !== undefined) { delete tags[key]; await saveMediaTags(c.env, tags); }
+  // 顺手清文件夹归属（图没了归属也该没）
+  const fm = await loadFolders(c.env);
+  if (fm.assign[key] !== undefined) { delete fm.assign[key]; await saveFolders(c.env, fm); }
   return c.json({ ok: true, deleted: key });
+});
+
+// ---- 文件夹（W5 P5+·Joe 反馈③）：纯元数据，不移动 R2 对象、不删图 ----
+// _meta/media-folders.json = { folders:[名称], assign:{ key: 文件夹名 } }。key 无归属=未归类。
+const MEDIA_FOLDERS = "_meta/media-folders.json";
+type FoldersMeta = { folders: string[]; assign: Record<string, string> };
+async function loadFolders(env: Env): Promise<FoldersMeta> {
+  const obj = await env.IMAGES.get(MEDIA_FOLDERS);
+  if (!obj) return { folders: [], assign: {} };
+  try { const j: any = JSON.parse(await obj.text()); return { folders: Array.isArray(j.folders) ? j.folders : [], assign: (j.assign && typeof j.assign === "object") ? j.assign : {} }; }
+  catch { return { folders: [], assign: {} }; }
+}
+async function saveFolders(env: Env, m: FoldersMeta) {
+  await env.IMAGES.put(MEDIA_FOLDERS, JSON.stringify(m), { httpMetadata: { contentType: "application/json" } });
+}
+
+// 新建文件夹
+app.post("/api/admin/media/folders", async (c) => {
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const name = String(body?.name || "").trim();
+  if (!name) return c.json({ error: "文件夹名不能为空" }, 400);
+  if (name.length > 40) return c.json({ error: "文件夹名过长（≤40）" }, 400);
+  if (/[\/\\]/.test(name)) return c.json({ error: "文件夹名不能含斜杠" }, 400);
+  const m = await loadFolders(c.env);
+  if (m.folders.includes(name)) return c.json({ error: "同名文件夹已存在" }, 400);
+  m.folders.push(name); await saveFolders(c.env, m);
+  return c.json({ ok: true, folders: m.folders });
+});
+
+// 删除文件夹（只删归类元数据，图片一律保留、退回未归类）
+app.delete("/api/admin/media/folders", async (c) => {
+  const name = c.req.query("name") || "";
+  if (!name) return c.json({ error: "bad name" }, 400);
+  const m = await loadFolders(c.env);
+  m.folders = m.folders.filter((f) => f !== name);
+  let unassigned = 0;
+  for (const k of Object.keys(m.assign)) if (m.assign[k] === name) { delete m.assign[k]; unassigned++; }
+  await saveFolders(c.env, m);
+  return c.json({ ok: true, folders: m.folders, unassigned });
+});
+
+// 把图片归入文件夹（folder=空=退回未归类）——纯元数据，不动 R2 对象
+app.put("/api/admin/media/folder", async (c) => {
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const key = String(body?.key || ""), folder = String(body?.folder || "");
+  if (!key || key === MEDIA_META) return c.json({ error: "bad key" }, 400);
+  const m = await loadFolders(c.env);
+  if (folder && !m.folders.includes(folder)) return c.json({ error: "文件夹不存在" }, 400);
+  if (folder) m.assign[key] = folder; else delete m.assign[key];
+  await saveFolders(c.env, m);
+  return c.json({ ok: true, key, folder });
 });
 
 // ================= W5 P5：仪表盘（只读概览，零写入零撞车；admin 默认落地页）=================

@@ -55,8 +55,18 @@ tr:hover td{background:var(--w3-panel2)}
 .mtile img{width:100%;height:110px;object-fit:contain;background:var(--w3-tile);border-radius:5px;display:block}
 .mtile-key{color:var(--w3-text3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mtile-tag{margin:4px 0}
+.mtile-folder{width:100%;height:26px;padding:0 6px;font-size:11px;margin:4px 0}
 .mtile-act{display:flex;gap:3px;flex-wrap:wrap}
 .mtile-act button{height:24px;padding:0 7px;font-size:11px}
+/* 媒体文件夹条 */
+.folderbar{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 12px}
+.fchip{height:28px;padding:0 10px;font-size:12px;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--w3-line);background:var(--w3-bg2);color:var(--w3-text2);border-radius:999px;cursor:pointer}
+.fchip:hover{border-color:var(--w3-line2);background:var(--w3-panel2)}
+.fchip.active{border-color:var(--w3-accent);background:rgba(125,177,255,.12);color:var(--w3-text)}
+.fchip .fcount{font-size:11px;color:var(--w3-text3);font-variant-numeric:tabular-nums}
+.fchip.active .fcount{color:var(--w3-accent)}
+.fchip .fdel{color:var(--w3-text3);font-size:14px;line-height:1;padding:0 2px;border-radius:4px}
+.fchip .fdel:hover{color:var(--w3-err);background:rgba(255,157,157,.12)}
 /* 仪表盘（W5 P5·世界级 dense 首页）*/
 .dstat{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px;margin-bottom:18px}
 .dstat .card{margin:0;display:flex;align-items:center;gap:13px;padding:15px 16px;transition:border-color .15s var(--dz-ease),background .15s var(--dz-ease)}
@@ -280,11 +290,13 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
       <button onclick="backToList()">← 返回列表</button>
       <span class="idtag muted" id="media-count">媒体库</span>
       <div class="spacer"></div>
-      <select class="dz-field" onchange="mediaSetFilter(this.value)"><option value="">全部</option><option value="clean">干净产品图</option><option value="marketing">营销拼图</option><option value="untagged">未标</option></select>
+      <select class="dz-field" onchange="mediaSetFilter(this.value)"><option value="">全部标签</option><option value="clean">干净产品图</option><option value="marketing">营销拼图</option><option value="untagged">未标</option></select>
+      <button onclick="folderCreate()">📁 新建文件夹</button>
       <button class="primary" onclick="document.getElementById('media-upload').click()">⬆ 上传</button>
       <input type="file" id="media-upload" accept="image/*" multiple style="display:none" onchange="mediaUpload([...this.files]);this.value=''">
     </div>
-    <p class="muted" style="font-size:12px;margin:0 0 12px">R2 图床（对外 img.wanew.com）。标签仅内部管理用（干净产品图 vs 营销拼图），不影响官网。⚠️ 删除=直接删 R2、不可撤销——被产品引用的图删了会裂详情页，删前想清楚。</p>
+    <div id="media-folderbar" class="folderbar"></div>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">R2 图床（对外 img.wanew.com）。文件夹是内部归类（纯元数据，不移动 R2 对象、可随时改）。标签(干净/营销)与文件夹独立、可叠加筛选。⚠️ 删除图片=直接删 R2、不可撤销；删文件夹只清归类、图片保留退回未归类。</p>
     <div id="media-grid" class="mgrid"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
@@ -555,33 +567,65 @@ async function saveHome() {
   btn.disabled = false; btn.textContent = "🚀 保存首页";
 }
 
-// ---------- 媒体库（W5 P4·R2 浏览/标签/删除）----------
-let mediaItems = [], mediaFilter = "";
+// ---------- 媒体库（W5 P4·R2 浏览/标签/删除 + P5+ 文件夹归类）----------
+let mediaItems = [], mediaFilter = "", mediaFolders = [], folderFilter = "";   // folderFilter: ""=全部, "__none__"=未归类, 否则文件夹名
 async function showMedia() { showView("media"); await loadMedia(); }
 async function loadMedia() {
   const box = $("#media-grid");
   box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
-  try { const r = await api("/media"); mediaItems = r.media || []; }
+  try { const r = await api("/media"); mediaItems = r.media || []; mediaFolders = r.folders || []; }
   catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadMedia()">重试</button></div>`; return; }
-  paintMedia();
+  if (folderFilter && folderFilter !== "__none__" && !mediaFolders.includes(folderFilter)) folderFilter = "";   // 文件夹被删则复位
+  paintFolderbar(); paintMedia();
 }
 function mediaSetFilter(f) { mediaFilter = f; paintMedia(); }
+function folderSetFilter(f) { folderFilter = f; paintFolderbar(); paintMedia(); }
+function paintFolderbar() {
+  const count = (f) => mediaItems.filter((m) => f === "__none__" ? !m.folder : m.folder === f).length;
+  const chip = (val, label, n, extra = "") => `<button class="fchip${folderFilter === val ? " active" : ""}" onclick="folderSetFilter('${esc(val)}')">${esc(label)}<span class="fcount">${n}</span>${extra}</button>`;
+  let h = `<button class="fchip${folderFilter === "" ? " active" : ""}" onclick="folderSetFilter('')">全部<span class="fcount">${mediaItems.length}</span></button>`;
+  h += chip("__none__", "未归类", count("__none__"));
+  h += mediaFolders.map((f) => chip(f, f, count(f), ` <span class="fdel" title="删除文件夹（图片保留）" onclick="event.stopPropagation();folderDelete('${esc(f)}')">×</span>`)).join("");
+  $("#media-folderbar").innerHTML = h;
+}
 function paintMedia() {
-  const f = mediaFilter;
-  const list = mediaItems.filter((m) => !f || (f === "untagged" ? !m.tag : m.tag === f));
+  const f = mediaFilter, ff = folderFilter;
+  const list = mediaItems.filter((m) => (!f || (f === "untagged" ? !m.tag : m.tag === f)) && (!ff || (ff === "__none__" ? !m.folder : m.folder === ff)));
   $("#media-count").textContent = `${list.length} / ${mediaItems.length} 张`;
+  const folderOpts = (cur) => `<option value=""${!cur ? " selected" : ""}>未归类</option>` + mediaFolders.map((fd) => `<option value="${esc(fd)}"${cur === fd ? " selected" : ""}>${esc(fd)}</option>`).join("");
   $("#media-grid").innerHTML = list.map((m) => `
     <div class="mtile">
       <img src="${esc(m.url)}" loading="lazy" title="${esc(m.key)}">
       <div class="mtile-key" title="${esc(m.key)}">${esc(m.key.split("/").pop())}</div>
       <div class="mtile-tag">${m.tag === "clean" ? `<span class="pill">干净产品图</span>` : m.tag === "marketing" ? `<span class="pill pf">营销拼图</span>` : `<span class="muted">未标</span>`}</div>
+      <select class="mtile-folder" onchange="mediaMoveFolder('${esc(m.key)}',this.value)" title="归入文件夹">${folderOpts(m.folder)}</select>
       <div class="mtile-act">
         <button onclick="mediaTag('${esc(m.key)}','clean')">干净</button>
         <button onclick="mediaTag('${esc(m.key)}','marketing')">营销</button>
         <button onclick="mediaTag('${esc(m.key)}','')">清标</button>
         <button class="danger" onclick="mediaDelete('${esc(m.key)}')">删</button>
       </div>
-    </div>`).join("") || `<div class="card muted">无媒体${f ? "（此筛选下）" : ""}</div>`;
+    </div>`).join("") || `<div class="card muted">无媒体${(f || ff) ? "（此筛选下）" : ""}</div>`;
+}
+async function folderCreate() {
+  const name = (prompt("新建文件夹名称（≤40，不含斜杠）：") || "").trim();
+  if (!name) return;
+  try { const r = await api("/media/folders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) }); mediaFolders = r.folders || []; paintFolderbar(); paintMedia(); msg("已建文件夹：" + name); }
+  catch (e) { msg("建文件夹失败：" + e.message, 1); }
+}
+async function folderDelete(name) {
+  const n = mediaItems.filter((m) => m.folder === name).length;
+  if (!confirm(`删除文件夹「${name}」？\n\n只清空归类元数据，${n} 张图片一律保留、退回未归类（不删任何图片）。`)) return;
+  try {
+    const r = await api("/media/folders?name=" + encodeURIComponent(name), { method: "DELETE" });
+    mediaFolders = r.folders || []; mediaItems.forEach((m) => { if (m.folder === name) m.folder = ""; });
+    if (folderFilter === name) folderFilter = "";
+    paintFolderbar(); paintMedia(); msg(`已删文件夹「${name}」· ${r.unassigned || 0} 张退回未归类`);
+  } catch (e) { msg("删文件夹失败：" + e.message, 1); }
+}
+async function mediaMoveFolder(key, folder) {
+  try { await api("/media/folder", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, folder }) }); const m = mediaItems.find((x) => x.key === key); if (m) m.folder = folder; paintFolderbar(); paintMedia(); msg(folder ? "已归入「" + folder + "」" : "已退回未归类"); }
+  catch (e) { msg("归类失败：" + e.message, 1); }
 }
 async function mediaTag(key, tag) {
   try { await api("/media/tag", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, tag }) }); const m = mediaItems.find((x) => x.key === key); if (m) m.tag = tag; paintMedia(); msg(tag ? "已标记" : "已清标签"); }
@@ -591,7 +635,7 @@ async function mediaDelete(key) {
   if (!confirm(`删除这张图？\n${key}\n\n⚠️ 直接删 R2、不可撤销。若有产品详情页引用它，页面会裂图。`)) return;
   const typed = prompt(`危险操作二次确认：输入「删除」继续`);
   if (typed !== "删除") return msg("已取消");
-  try { await api("/media?key=" + encodeURIComponent(key), { method: "DELETE" }); mediaItems = mediaItems.filter((x) => x.key !== key); paintMedia(); msg("已删除 " + key.split("/").pop()); }
+  try { await api("/media?key=" + encodeURIComponent(key), { method: "DELETE" }); mediaItems = mediaItems.filter((x) => x.key !== key); paintFolderbar(); paintMedia(); msg("已删除 " + key.split("/").pop()); }
   catch (e) { msg("删除失败：" + e.message, 1); }
 }
 async function mediaUpload(files) {
