@@ -3,10 +3,11 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev --port 8790",
-    "typecheck": "tsc --noEmit && node test/pipeline-zero-diff.mjs",
-    "_comment_deploy": "deploy=\u603b\u5de5\u3002\u95f8=typecheck(\u542bzero-diff)\u5148\u7eff\u3002account_id\u5df2\u9489\u6b7bwrangler.jsonc\u3001\u57df\u5df2\u6302zone,\u8d26\u53f7\u7ea7\u4ee4\u724c\u5373\u53ef,\u8be6\u89c1README.md\u3002",
-    "deploy": "wrangler deploy",
-    "guard:zerodiff": "node test/pipeline-zero-diff.mjs"
+    "typecheck": "tsc --noEmit && node scripts/vendor.mjs check",
+    "_comment_deploy": "deploy=总工。闸=typecheck(tsc + vendor 漂移守卫)先绿。account_id已钉死wrangler.jsonc、域已挂zone，账号级令牌即可，详见README.md。",
+    "guard:vendor": "node scripts/vendor.mjs check",
+    "vendor:sync": "node scripts/vendor.mjs sync",
+    "deploy": "wrangler deploy"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260717.1",

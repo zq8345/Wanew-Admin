@@ -46,7 +46,7 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
 import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory } from "./publish";
 // @ts-ignore js 模块
-import { ghConfig, readFile } from "../../functions/_lib/github.js";
+import { ghConfig, readFile } from "../vendor/github.js";
 
 const operator = (c: any) => c.req.header("cf-access-authenticated-user-email") || "dev-bypass";
 
@@ -158,7 +158,7 @@ app.put("/api/admin/categories", async (c) => {
   try {
     const ctx2 = { ...ctx, categories: v.cats, catmap: Object.fromEntries(v.cats.categories.map((cc: any) => [cc.slug, cc.display])) };
     for (const slug of changed) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug));
-    const r = await (await import("../../functions/_lib/github.js") as any).commitFiles(c.env, cfg, files, `admin: categories update (${operator(c)})`);
+    const r = await (await import("../vendor/github.js") as any).commitFiles(c.env, cfg, files, `admin: categories update (${operator(c)})`);
     return c.json({ ok: true, rebaked: changed, filesWritten: files.length, note: changed.length ? "display 变更类目已重烘焙" : "仅顺序/无实质变更——首页瓦片顺序随下次本地管线", ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
@@ -193,7 +193,7 @@ app.put("/api/admin/models", async (c) => {
   try {
     const ctx2 = { ...ctx, locales: loc };
     for (const slug of changed) if (ctx.catmap[slug] !== undefined) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug));
-    const r = await (await import("../../functions/_lib/github.js") as any).commitFiles(c.env, cfg, files, `admin: model_display update (${operator(c)})`);
+    const r = await (await import("../vendor/github.js") as any).commitFiles(c.env, cfg, files, `admin: model_display update (${operator(c)})`);
     return c.json({ ok: true, rebaked: changed, filesWritten: files.length, ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });

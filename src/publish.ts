@@ -8,15 +8,15 @@
 //     locale/urlOf → 列表卡片 URL 不本地化）。
 // 单真源铁律：render/chrome/github 全部跨目录 import，零复制。
 // @ts-ignore js 模块
-import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf } from "../../functions/_lib/render.js";
+import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf } from "../vendor/render.js";
 // @ts-ignore js 模块
-import { makeChrome } from "../../functions/_lib/chrome.js";
+import { makeChrome } from "../vendor/chrome.js";
 // @ts-ignore js 模块
-import { ghConfig, commitFiles, readFile } from "../../functions/_lib/github.js";
+import { ghConfig, commitFiles, readFile } from "../vendor/github.js";
 // ⭐ locale→目录规则直接 import 真源（纯 ESM 零 Node 依赖）。第一版我凭注释复刻、漏了 locales.dir
 //   覆盖字段——读真源当场抓包（批㉔ 列名教训：复刻必对真源；能 import 就绝不复刻）。
 // @ts-ignore js 模块
-import { localeDirs } from "../../scripts/locale-dirs.mjs";
+import { localeDirs } from "../vendor/locale-dirs.mjs";
 import type { Env } from "./index";
 
 export interface Ctx {
