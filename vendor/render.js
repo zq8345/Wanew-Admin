@@ -219,7 +219,7 @@ export function setTileAlts(html, locale, catalog, modelDisplay) {
 // 机型卡按【存在性】过滤,不是按一张写死的清单:一张卡只在它指向的页面于该语种存在时才出现。
 // 这不是我发明的规则 —— 它精确预测了 pt 首页的现状(7 张,正好是有 pt 页的 7 个分类)。en 8 张。
 // 好处是它自己会长:等 /pt/performance-gen-2/ 建出来,pt 首页自动就有第 8 张,没人需要记得。
-export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, exists, dirOf, enabled, products, featured }) {
+export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, exists, dirOf, enabled, products, featured, internal_noindex = [] }) {
   const sfx = catalog["card.alt.category"];
   const suffix = sfx[locale] ?? sfx.en;
   const cards = tiles
@@ -245,7 +245,7 @@ export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, e
     }).join("\n          ");
     out = out.split("{{PRODUCT_STRIP}}").join(strip);
   }
-  return renderPage(out, { locale, catalog, urlOf, dirOf, enabled });
+  return renderPage(out, { locale, catalog, urlOf, dirOf, enabled, internal_noindex });
 }
 
 // Home product strip = a CURATED shortlist (总工: 6–8 hand-picked heroes with good photos, never a
@@ -281,8 +281,13 @@ export function pickHomeProducts(entries, cap = 8, featured = null) {
 
 // R3 的通用页渲染:模板 + 散文目录 -> 页面。首页只是它多一个 {{TILES}} 的特例。
 // (a) 是为首页定制的;(b) 有 11 个页、(c)(d)(e) 还有 71 个 —— 同一套机器,参数化一次用四桶。
-export function renderPage(tpl, { locale, catalog, urlOf, path = "/", dirOf, enabled }) {
+export function renderPage(tpl, { locale, catalog, urlOf, path = "/", dirOf, enabled, internal_noindex = [] }) {
   let out = tpl;
+  // internal locale(如 zh):no-SEO —— 强制 noindex 且【零 hreflang】。zh 不在 enabled 里,所以
+  // en/pt/es 的 hreflang 簇本就不会指向它(一个方向);这里堵另一个方向:zh 页自己不发 hreflang
+  // (否则会挂出指向 en/pt/es 的 alternate 却漏自指,是坏簇)。用 {{HREFLANG}} 那个 <head> 槽位
+  // 承载 robots meta —— 不新增注入点,en/pt/es 分支逐字不变(zero-diff)。
+  const isInternal = Array.isArray(internal_noindex) && internal_noindex.includes(locale);
   // ⛔ 目录前缀必须【派生】,不许在这里写死。原来这里是 `locale === "en" ? path : "/pt" + path`
   //    —— 一个【二元】判据:凡不是 en 的一律当 pt。第三门语言一进来,82 个 es 页的 canonical
   //    全部指向 /pt/,等于对 Google 声明"西语页是葡语页的副本"。它不报错、不白屏,和上面
@@ -319,7 +324,9 @@ export function renderPage(tpl, { locale, catalog, urlOf, path = "/", dirOf, ena
     //   —— 等于告诉 Google「有这个链接,但它不是本站的语言版本」。**半加一门语言比不加更糟。**
     // ⚠️ 存在性是规则:某语种没有这个页(比如 es-hold 扣留的产品),就【不发】它的 alternate,
     //   否则是在声明一个 404。这和切换器、body 内链用的是同一条规则,不是这里新发明的。
-    HREFLANG: `<!-- hreflang alternates (derived from locales.json + page existence) -->\n` +
+    HREFLANG: isInternal
+      ? `<meta name="robots" content="noindex, follow" />`   // zh: 内部页,不收录、零 hreflang
+      : `<!-- hreflang alternates (derived from locales.json + page existence) -->\n` +
       enabled
         // urlOf 把 p 原样还回来 = "该语种没有这个页" —— 复用它,不另造一个 exists 参数。
         .filter((loc) => !pre(loc) || urlOf(path, loc) !== path)

@@ -4,6 +4,8 @@
 //    而 regen 里同一件事写成了 `(loc) => (loc === DEFAULT ? "" : "pt")` —— 一个硬编码的 "pt"。
 //    两处实现同一条规则,加第三门语言时 regen 会把 es 页写进 /pt/。总工那条「清单本身就是那个
 //    bug」在这里的形态是「同一条规则的第二份实现」。合成一份。
+// render-set = enabled(SEO 语种) ∪ render_extra(仅渲染、不进 SEO 的内部语种，如 zh)。
+// 两者用同一条目录派生规则。render_extra 缺省 → 与之前逐字相同(向后兼容,不动 en/pt/es)。
 export const localeDirs = (locales) =>
-  Object.fromEntries(locales.enabled.map((loc) =>
+  Object.fromEntries([...locales.enabled, ...(locales.render_extra || [])].map((loc) =>
     [loc, loc === locales.default ? "" : (locales.dir || {})[loc] || loc.split("-")[0]]));

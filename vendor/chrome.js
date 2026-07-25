@@ -55,7 +55,11 @@ export function makeChrome({ catalog, locales, partial, manifest, pageExists, lo
   const BLOCKS = { header: block("header"), switcher: block("switcher"), switcheritem: block("switcheritem"),
     switchercurrent: block("switchercurrent"), footer: block("footer"), mobilenav: block("mobilenav") };
 
-  const LOCALES = locales.enabled;
+  // render-set: enabled(SEO) ∪ render_extra(内部/no-SEO，如 zh)。切换器与目录反查按 render-set，
+  // 所以 zh 会出现在语言菜单里、/zh/ 页能被反查出 locale=zh(否则回落 en → zh 页出英文导航)。
+  // hreflang/sitemap 不看这里(它们只吃 enabled)——zh 因此渲染但不进 SEO。
+  // render_extra 缺省 → LOCALES===enabled，行为逐字不变(收敛闸:en/pt/es chrome 字节不动)。
+  const LOCALES = [...locales.enabled, ...(locales.render_extra || [])];
   const DEFAULT_LOC = locales.default;
   const LOC_DIR = locDir;
 
