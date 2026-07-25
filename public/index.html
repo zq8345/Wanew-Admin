@@ -155,6 +155,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="dz-nav-item" data-view="media" onclick="showMedia()"><span class="ic">▦</span> 媒体</div>
     <div class="dz-eyebrow">内容 Content</div>
     <div class="dz-nav-item" data-view="home" onclick="showHome()"><span class="ic">⌂</span> 首页</div>
+    <div class="dz-nav-item" data-view="contact" onclick="showContact()"><span class="ic">✆</span> 联系方式</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">▭</span> 页面 <span class="soon-tag">SOON</span></div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">≣</span> 攻略 <span class="soon-tag">SOON</span></div>
     <div class="dz-eyebrow">增长 Growth</div>
@@ -294,6 +295,20 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div id="home-featured-box"></div>
   </div>
 
+  <!-- ============ 联系方式（阶段B·data/contact-info.json 语言无关值）============ -->
+  <div id="v-contact" style="display:none">
+    <div class="edit-bar">
+      <button onclick="backToList()">← 返回列表</button>
+      <span class="idtag muted">联系方式 · 语言无关值</span>
+      <div class="spacer"></div>
+      <a class="editbar-link" href="https://wanew.com/contact/" target="_blank">🌐 官网联系页</a>
+      <button id="btn-contact-preview" onclick="previewContact()" title="渲染联系页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
+      <button class="primary" id="btn-contact-save" onclick="saveContact()">🚀 保存联系方式</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">编辑官网联系页的联系方式（电话 / WhatsApp / 微信 / 邮箱 / 地址 / 工时 / 地图）。这些是<b>语言无关值、四语共用</b>；标签文案（"电话""扫码加微信"等四语）由官网维护、此处不改。保存=重烘焙 /contact/ 页（三语+zh）提交官网仓，≈1分钟上线；保存前可「预览」看真实渲染。</p>
+    <div id="contact-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
+  </div>
+
   <!-- ============ 媒体库（W5 P4·R2 浏览/标签/删除）============ -->
   <div id="v-media" style="display:none">
     <div class="edit-bar">
@@ -430,7 +445,7 @@ async function bulkDelete() {
 
 // ---------- 编辑 ----------
 const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
-function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : "")))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-contact").style.display = v === "contact" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "contact" ? "› 联系方式" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : ""))))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
 function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
@@ -583,6 +598,102 @@ async function saveHome() {
     await loadHomeView();   // 重载=新值成为基线
   } catch (e) { msg("保存失败：" + e.message, 1); }
   btn.disabled = false; btn.textContent = "🚀 保存首页";
+}
+
+// ---------- 联系方式（阶段B·contact-info.json 语言无关值）----------
+const CONTACT_FIELDS = [
+  { key: "phone_display", label: "显示电话", ph: "+86 186 8116 0111" },
+  { key: "phone_tel", label: "电话拨号链接 (tel)", ph: "+8618681160111" },
+  { key: "whatsapp", label: "WhatsApp 号码", ph: "8618681160111" },
+  { key: "whatsapp_link", label: "WhatsApp wa.me 链接", ph: "https://wa.me/8618681160111" },
+  { key: "wechat_id", label: "微信号", ph: "18681160111" },
+  { key: "wechat_qr", label: "微信二维码图", ph: "/static/upload/... 或 图库 URL", qr: true },
+  { key: "email", label: "邮箱", ph: "hello@wanew.com" },
+  { key: "address", label: "地址", ph: "No. 62, Baotian 1st Road, …", big: true },
+  { key: "hours", label: "工作时间", ph: "Mon–Fri 9:00–18:00 (GMT+8)" },
+  { key: "response", label: "响应时效", ph: "within 1 business day" },
+  { key: "map_link", label: "地图链接", ph: "https://www.google.com/maps/…", big: true },
+];
+let contactData = {};
+async function showContact() { showView("contact"); await loadContact(); }
+async function loadContact() {
+  const box = $("#contact-fields");
+  box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
+  try { const r = await api("/contact"); contactData = r.contact || {}; }
+  catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadContact()">重试</button></div>`; return; }
+  paintContact();
+}
+function paintContact() {
+  $("#contact-fields").innerHTML = `<div class="card"><h3>联系方式字段 <span class="muted" style="font-weight:400;font-size:11px">data/contact-info.json · 11 个语言无关值</span></h3>` +
+    CONTACT_FIELDS.map((f) => {
+      const v = contactData[f.key] || "";
+      const lbl = `<label>${esc(f.label)} <span class="muted" style="font-weight:400;font-size:11px">${esc(f.key)}</span></label>`;
+      if (f.qr) {
+        const src = v ? (/^https?:\/\//.test(v) ? v : "https://wanew.com" + v) : "";   // 根相对=wanew.com；全 URL=直用
+        return `<div class="field">${lbl}
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="flex:1">
+              <input data-ck="${f.key}" value="${esc(v)}" placeholder="${esc(f.ph)}" style="width:100%">
+              <button style="margin-top:6px" onclick="contactQrUpload()">⬆ 图库上传新二维码</button>
+              <span class="muted" style="font-size:11px;margin-left:6px">上传后自动填入 URL；也可手填路径</span>
+            </div>
+            <span id="contact-qr-preview">${src ? `<img src="${esc(src)}" style="width:76px;height:76px;object-fit:contain;background:var(--w3-tile);border-radius:6px;padding:3px" title="当前二维码" onerror="this.style.opacity=.3">` : `<span class="muted" style="font-size:11px">无图</span>`}</span>
+          </div></div>`;
+      }
+      const tag = f.big
+        ? `<textarea data-ck="${f.key}" placeholder="${esc(f.ph)}" style="min-height:52px">${esc(v)}</textarea>`
+        : `<input data-ck="${f.key}" value="${esc(v)}" placeholder="${esc(f.ph)}" style="width:100%">`;
+      return `<div class="field">${lbl}${tag}</div>`;
+    }).join("") + `</div>`;
+}
+function collectContactEdits() {
+  const edits = [];
+  document.querySelectorAll("#contact-fields [data-ck]").forEach((el) => {
+    const key = el.dataset.ck, v = el.value;
+    if (v !== (contactData[key] || "")) edits.push({ key, value: v });
+  });
+  return edits;
+}
+function contactQrUpload() {
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    msg("上传二维码 " + f.name + "…");
+    try {
+      const r = await fetch("/api/admin/upload?name=" + encodeURIComponent(f.name), { method: "POST", headers: { "content-type": f.type }, body: f });
+      const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status);
+      const el = document.querySelector('#contact-fields [data-ck="wechat_qr"]'); if (el) el.value = j.url;   // 全 URL(hash 名天然防缓存)
+      paintContactQrPreview(j.url);
+      msg("二维码已上传，URL 已填入 —— 记得点保存");
+    } catch (e) { msg("二维码上传失败：" + e.message, 1); }
+  };
+  inp.click();
+}
+function paintContactQrPreview(url) {   // 上传后即时刷新预览图（不整块重绘、保住其它输入未保存值）
+  const box = $("#contact-qr-preview"); if (!box) return;
+  box.innerHTML = `<img src="${esc(url)}" style="width:76px;height:76px;object-fit:contain;background:var(--w3-tile);border-radius:6px;padding:3px" title="当前二维码" onerror="this.style.opacity=.3">`;
+}
+async function previewContact() {
+  const edits = collectContactEdits();
+  const w = window.open("", "_blank");
+  if (w) w.document.write('<!doctype html><meta charset="utf-8"><title>联系页预览渲染中…</title><body style="font:14px sans-serif;padding:24px;color:#333">渲染联系页预览中…</body>');
+  try {
+    const r = await api("/contact", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits, dryRun: true }) });
+    if (r.previewHtml && w) { const html = r.previewHtml.replace(/<head([^>]*)>/i, '<head$1><base href="https://wanew.com/">'); w.document.open(); w.document.write(html); w.document.close(); msg("已在新标签打开联系页渲染预览（未提交、未上线）"); }
+    else { if (w) w.close(); msg((r.error || "预览无渲染 HTML"), 1); }
+  } catch (e) { if (w) w.close(); msg("预览失败：" + e.message, 1); }
+}
+async function saveContact() {
+  const edits = collectContactEdits();
+  if (!edits.length) return msg("没有改动");
+  if (!confirm(`将保存 ${edits.length} 个联系方式字段到官网仓（重烘焙 /contact/ 页三语+zh、≈1分钟上线）。\n此操作直接修改生产官网仓。确定？`)) return;
+  const btn = $("#btn-contact-save"); btn.disabled = true; btn.textContent = "保存中…";
+  try {
+    const r = await api("/contact", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits }) });
+    msg(`✅ 联系方式已保存（commit ${(r.commit || "").slice(0, 7)}）· 写 ${(r.files || []).length} 文件 · ≈1分钟官网可见`);
+    await loadContact();
+  } catch (e) { msg("保存失败：" + e.message, 1); }
+  btn.disabled = false; btn.textContent = "🚀 保存联系方式";
 }
 
 // ---------- 媒体库（W5 P4·R2 浏览/标签/删除 + P5+ 文件夹归类）----------

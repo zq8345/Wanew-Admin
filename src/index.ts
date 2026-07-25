@@ -44,8 +44,8 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // ================= 批2-2：产品 CRUD（双步三语，继承 [[path]].js 骨架） =================
 // 写路径全部走 loadCtx（GitHub 读真源）→ validate(merge) → publish/unpublish（原子 commit）。
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
-import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory, publishHomepage } from "./publish";
-import type { HomeEdit } from "./publish";
+import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS } from "./publish";
+import type { HomeEdit, ContactEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
 // @ts-ignore js 模块 —— FORM_KEY = 形态/品类轴 slug 真源（render.js，守卫盯字节；本仓只读镜像）
@@ -248,6 +248,34 @@ app.put("/api/admin/homepage", async (c) => {
     const r: any = await publishHomepage(c.env, cfg, ctx, { edits: body.edits as HomeEdit[] | undefined, featured: body.featured }, { email: operator(c), dryRun: !!body.dryRun });
     if (r.error) return c.json(r, 502);
     return c.json({ ok: true, ...r, note: r.dry ? "dry preview" : "homepage updated; Pages deploys in ~1 min" });
+  } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
+});
+
+// ================= 阶段B：联系方式（data/contact-info.json 语言无关值）=================
+// GET 读现值(表单回填)；PUT 保存 → publishContact(renderPage 重烘焙 /contact/ 页×locales + 双步 applyChrome)。
+// body.dryRun=true → 预览(返 previewHtml + 将写文件、不提交)。标签(contact.json i18n)官网维护、本编辑器不碰。
+app.get("/api/admin/contact", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const raw = await readFile(c.env, cfg, "data/contact-info.json");
+  if (!raw) return c.json({ error: "contact-info.json missing（官网上线联系页后可用）" }, 404);
+  const j = JSON.parse(raw);
+  const contact: Record<string, string> = {};
+  for (const k of CONTACT_KEYS) contact[k] = typeof j[k] === "string" ? j[k] : "";   // 只回填 11 个白名单字段
+  return c.json({ contact, keys: CONTACT_KEYS });
+});
+
+app.put("/api/admin/contact", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  if (!Array.isArray(body?.edits)) return c.json({ error: "edits must be an array" }, 400);
+  const ctx = await loadCtx(c.env, cfg);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
+  try {
+    const r: any = await publishContact(c.env, cfg, ctx, body.edits as ContactEdit[], { email: operator(c), dryRun: !!body.dryRun });
+    if (r.error) return c.json(r, 502);
+    return c.json({ ok: true, ...r, note: r.dry ? "dry preview" : "contact updated; Pages deploys in ~1 min" });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 

@@ -8,7 +8,7 @@
 //     locale/urlOf → 列表卡片 URL 不本地化）。
 // 单真源铁律：render/chrome/github 全部跨目录 import，零复制。
 // @ts-ignore js 模块
-import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf, renderHome } from "../vendor/render.js";
+import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf, renderHome, renderPage } from "../vendor/render.js";
 // @ts-ignore js 模块
 import { makeChrome } from "../vendor/chrome.js";
 // @ts-ignore js 模块
@@ -344,5 +344,67 @@ export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, payload: { e
     locales: RENDER_SET,
   };
   const r = await commitFiles(env, cfg, files, `admin: homepage content update (${opts.email})`);
+  return { ...r, files: files.map((f) => f.path) };
+}
+
+// ================= 阶段B：联系方式（data/contact-info.json 语言无关值）=================
+// 编辑 11 个语言无关值 → renderPage(config=contact-info) 重烘焙 /contact/ 页×locales + 双步 applyChrome
+// → 一个原子 commit（contact-info.json + contact/index.html×RENDER_SET）。镜像 regen.mjs 的 page 循环
+// （catalog:{...chrome,...shared,...contact.json 标签}, config: contactCfg, path:"/contact/"）。
+// ⚠️ 标签(contact.json)是官网维护的 i18n，本编辑器不碰；只改语言无关值。Pages 只 serve 预烘焙 HTML，
+// 故必须自己 renderPage 重烘焙、不能只写 json（同首页 CMS）。
+export interface ContactEdit { key: string; value: string; }
+export const CONTACT_KEYS = ["phone_display", "phone_tel", "whatsapp", "whatsapp_link", "wechat_id", "wechat_qr", "email", "address", "hours", "response", "map_link"];
+
+export async function publishContact(env: Env, cfg: any, ctx: Ctx, edits: ContactEdit[], opts: { email: string; dryRun?: boolean }) {
+  const { locales, catalog, chrome, locDir } = ctx;
+  const [cfgRaw, tpl, pcatRaw, sharedRaw] = await Promise.all([
+    readFile(env, cfg, "data/contact-info.json"),
+    readFile(env, cfg, "data/templates/page-contact.html"),
+    readFile(env, cfg, "data/pages/contact.json"),
+    readFile(env, cfg, "data/pages/shared.json"),
+  ]);
+  const miss = [!cfgRaw && "data/contact-info.json", !tpl && "data/templates/page-contact.html", !pcatRaw && "data/pages/contact.json"].filter(Boolean);
+  if (miss.length) return { error: "联系页源缺失", missing: miss };
+  const contactJson = JSON.parse(cfgRaw as string);
+  const pcat = JSON.parse(pcatRaw as string);
+  const shared = sharedRaw ? JSON.parse(sharedRaw) : {};
+  // merge：只覆盖被编辑的白名单键，其余（含 _schema 及未编辑值）原样保留。语言无关=无 locale 维度。
+  const merged = JSON.parse(JSON.stringify(contactJson));
+  for (const e of edits) {
+    if (!e || typeof e.key !== "string" || !CONTACT_KEYS.includes(e.key)) return { error: `未知联系方式键：${e && e.key}` };
+    if (typeof e.value !== "string") return { error: `值须为字符串：${e.key}` };
+    merged[e.key] = e.value;
+  }
+  if (!edits.length) return { error: "没有改动" };
+
+  const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
+  const dirOf = (loc: string) => locDir[loc] ?? "";
+  const RENDER_SET: string[] = [...(locales.enabled || []), ...(locales.render_extra || [])];
+  const INTERNAL: string[] = locales.internal_noindex || [];
+  const catBase = { ...catalog, ...shared, ...pcat };   // 镜像 regen：{...catalog,...shared,...pcat}
+
+  const files: any[] = [{ path: "data/contact-info.json", content: matchJson(cfgRaw, merged) }];
+  const chromeErrors: string[] = [];
+  for (const locale of RENDER_SET) {
+    const dir = dirOf(locale);
+    const rel = dir ? `${dir}/contact/index.html` : "contact/index.html";
+    const isExtra = (locales.render_extra || []).includes(locale);
+    if (!ctx.pagesList.has(rel) && !isExtra) continue;   // enabled 缺页不创建；render_extra(zh)从模板播种
+    const h0 = renderPage(tpl, { locale, catalog: catBase, urlOf, path: "/contact/", dirOf, enabled: locales.enabled, internal_noindex: INTERNAL, config: merged } as any /* 真源签名含 config，tsc 对 js 默认参推断不全，同 renderHome 走 as any */);
+    const { html, errors } = chrome.applyChrome((h0 as string).replace(/\r/g, ""), rel);   // ⭐双步第二段
+    chromeErrors.push(...errors);
+    const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;
+    files.push({ path: rel, content: matchEol(prevRaw, html) });
+  }
+  if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
+  const enPage = files.find((f) => f.path === "contact/index.html");
+  if (opts.dryRun) return {
+    dry: true,
+    previewHtml: enPage ? enPage.content : null,
+    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })),
+    locales: RENDER_SET,
+  };
+  const r = await commitFiles(env, cfg, files, `admin: contact info update (${opts.email})`);
   return { ...r, files: files.map((f) => f.path) };
 }
