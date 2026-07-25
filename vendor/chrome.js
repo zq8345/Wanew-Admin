@@ -116,7 +116,7 @@ export function makeChrome({ catalog, locales, partial, manifest, pageExists, lo
     // 对应页，不存在→该语言首页兜底（存在性规则只决定 href，不再决定条目有无）。
     const items = LOCALES.map((loc) => {
       const short = loc.split("-")[0];
-      const label = pick(`switcher.code.${short}`, locale);
+      const label = pick(`switcher.native.${short}`, locale);   // dropdown = endonym (English/Português/Español/简体中文); button keeps the short code
       if (loc === locale)
         return renderBlock(BLOCKS.switchercurrent, locale, {}).replace(/\{\{sw\.([a-z]+)\}\}/g, () => label);
       const dir = LOC_DIR[loc] ?? "";
