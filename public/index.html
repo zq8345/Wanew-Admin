@@ -66,6 +66,11 @@ tr:hover td{background:var(--w3-panel2)}
 .dfeat .ft{width:90px;text-align:center;font-size:11px;color:var(--w3-text3)}
 .dfeat .ft img{width:90px;height:70px;object-fit:contain;background:var(--w3-tile);border-radius:6px;display:block}
 .chip{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--w3-tile);border:1px solid var(--w3-line);font-size:12px;font-variant-numeric:tabular-nums;line-height:1.6}
+.dz-tabs{display:flex;gap:4px;border-bottom:1px solid var(--w3-line);margin-bottom:14px}
+.dz-tab{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;padding:8px 14px;font-size:13px;color:var(--w3-text3);cursor:pointer;margin-bottom:-1px}
+.dz-tab:hover{color:var(--w3-text)}
+.dz-tab.active{color:var(--w3-text);border-bottom-color:var(--w3-accent)}
+.dz-tab .muted{font-size:11px}
 .card{background:var(--w3-bg2);border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);padding:14px 16px;margin-bottom:14px}
 .card h3{margin:0 0 10px;font-size:12px;color:var(--w3-text3);font-weight:600;text-transform:uppercase;letter-spacing:.08em}
 .field{margin-bottom:12px}
@@ -196,21 +201,44 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     </div>
   </div>
 
-  <!-- ============ 分类 / 机型管理视图 ============ -->
+  <!-- ============ 分类视图（两轴：机型 / 品类形态）============ -->
   <div id="v-cats" style="display:none">
-    <div class="dz-toolbar">
-      <button onclick="backToList()">← 返回列表</button>
-      <span class="muted">分类 / 机型管理 · slug 一期不可变（改 slug=断 URL），仅改显示名与顺序</span>
-      <div class="spacer"></div>
-      <button class="primary" onclick="saveCats()">💾 保存（重烘焙受影响页）</button>
+    <div class="dz-tabs">
+      <button class="dz-tab active" data-tab="model" onclick="catTab('model')">机型 <span class="muted">Model</span></button>
+      <button class="dz-tab" data-tab="form" onclick="catTab('form')">品类 / 形态 <span class="muted">Type</span></button>
     </div>
-    <table>
-      <thead><tr>
-        <th style="width:96px">顺序</th><th style="width:180px">类目 slug</th><th>显示名（列表/导航）</th><th>机型显示名（详情/首页瓦片）</th>
-      </tr></thead>
-      <tbody id="cats-rows"><tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
-    </table>
-    <p class="muted" style="font-size:12px;margin-top:10px">保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。slug 增删属二期。</p>
+
+    <!-- 机型轴（可编辑：categories.json + model_display）-->
+    <div id="cat-tab-model">
+      <div class="dz-toolbar">
+        <button onclick="backToList()">← 返回列表</button>
+        <span class="muted">机型 · slug 一期不可变（改 slug=断 URL），仅改显示名与顺序</span>
+        <div class="spacer"></div>
+        <button class="primary" onclick="saveCats()">💾 保存（重烘焙受影响页）</button>
+      </div>
+      <table>
+        <thead><tr>
+          <th style="width:96px">顺序</th><th style="width:180px">机型 slug</th><th>显示名（列表/导航）</th><th>机型显示名（详情/首页瓦片）</th>
+        </tr></thead>
+        <tbody id="cats-rows"><tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
+      </table>
+      <p class="muted" style="font-size:12px;margin-top:10px">保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。slug 增删属二期。</p>
+    </div>
+
+    <!-- 形态/品类轴（只读：FORM_KEY 代码真源）-->
+    <div id="cat-tab-form" style="display:none">
+      <div class="dz-toolbar">
+        <button onclick="backToList()">← 返回列表</button>
+        <span class="muted">品类 / 形态 · 只读（slug/顺序定义在 render.js 代码，显示名=产品 form 字段）</span>
+      </div>
+      <table>
+        <thead><tr>
+          <th style="width:60px">#</th><th>形态显示名（Type）</th><th style="width:160px">slug（/type/…）</th><th style="width:100px">产品数</th>
+        </tr></thead>
+        <tbody id="forms-rows"><tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
+      </table>
+      <p class="muted" style="font-size:12px;margin-top:10px">⚠️ 形态轴当前**只读**——显示名/顺序定义在官网 <span class="tnum">render.js（FORM_KEY）</span> 与 <span class="tnum">regen.mjs（TYPES）</span>，无独立数据文件。做成可编辑（改名+排序）需引入 <span class="tnum">data/forms.json</span> 并重构官网 render，属碰官网仓的跨窗改动，待协调后一批做。</p>
+    </div>
   </div>
 
   <!-- ============ 首页内容 CMS（W5 P1·第一刀=Hero）============ -->
@@ -359,7 +387,7 @@ function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
 let catsEdit = [];
-async function showCats() { showView("cats"); await loadCatsView(); }
+async function showCats() { showView("cats"); catTab("model"); await loadCatsView(); }
 async function loadCatsView() {
   const rows = $("#cats-rows");
   rows.innerHTML = `<tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr>`;
@@ -396,6 +424,26 @@ async function saveCats() {
     msg(`✅ 已保存（分类 ${(rc.commit || "").slice(0, 7)} / 机型 ${(rm.commit || "").slice(0, 7)}）· 重烘焙 ${rebaked} 类 · ≈1分钟上线`);
     await loadCats();   // 刷新产品编辑页的类目下拉（新显示名）
   } catch (e) { msg("保存失败：" + e.message, 1); }
+}
+
+// ---------- 分类：机型 / 品类形态 双 tab 切换 ----------
+function catTab(t) {
+  document.querySelectorAll("#v-cats .dz-tab").forEach((el) => el.classList.toggle("active", el.dataset.tab === t));
+  $("#cat-tab-model").style.display = t === "model" ? "" : "none";
+  $("#cat-tab-form").style.display = t === "form" ? "" : "none";
+  if (t === "form" && !_formsLoaded) loadForms();
+}
+let _formsLoaded = false;
+async function loadForms() {
+  const rows = $("#forms-rows");
+  rows.innerHTML = `<tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr>`;
+  try {
+    const d = await api("/forms");
+    const known = (d.forms || []).map((f, i) => `<tr><td class="muted tnum">${i + 1}</td><td>${esc(f.form)}</td><td class="tnum muted">${esc(f.slug)}</td><td class="tnum">${f.count}</td></tr>`).join("");
+    const orph = (d.orphans || []).map((f) => `<tr><td class="muted">⚠️</td><td>${esc(f.form)} <span class="muted" style="font-size:11px">(未映射 slug，列表页筛不出)</span></td><td class="muted">—</td><td class="tnum">${f.count}</td></tr>`).join("");
+    rows.innerHTML = known + orph || `<tr><td colspan="4" class="muted">无形态</td></tr>`;
+    _formsLoaded = true;
+  } catch (e) { rows.innerHTML = `<tr><td colspan="4" class="muted">加载失败：${esc(e.message)} <button onclick="loadForms()">重试</button></td></tr>`; }
 }
 
 // ---------- 首页内容 CMS（W5 P1·第一刀=Hero）----------

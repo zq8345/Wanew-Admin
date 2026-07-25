@@ -48,6 +48,8 @@ import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCat
 import type { HomeEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
+// @ts-ignore js 模块 —— FORM_KEY = 形态/品类轴 slug 真源（render.js，守卫盯字节；本仓只读镜像）
+import { FORM_KEY } from "../vendor/render.js";
 
 const operator = (c: any) => c.req.header("cf-access-authenticated-user-email") || "dev-bypass";
 
@@ -353,6 +355,24 @@ app.get("/api/admin/settings", async (c) => {
     ghTokenConfigured: !!c.env.GITHUB_TOKEN,   // 只报有无，绝不报值
     locales: { enabled, default: loc.default || null, renderExtra, renderSet },
   });
+});
+
+// ================= W5 P5+：品类/形态轴（只读；display/slug/顺序定义在 render.js 代码，非可编辑数据）=================
+// ⚠️ 机型轴=categories.json(可编辑) vs 形态轴=FORM_KEY(render.js 代码真源)+产品内联 p.form 字符串。
+// 无 forms.json → 改形态显示名/顺序须重构官网 render(碰官网仓)。此端点只读展示：形态显示名/slug/产品数。
+app.get("/api/admin/forms", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const raw = await readFile(c.env, cfg, "data/products-index.json");
+  const products: any[] = raw ? JSON.parse(raw) : [];
+  const count: Record<string, number> = {};
+  for (const p of products) { const f = p.form || ""; count[f] = (count[f] || 0) + 1; }
+  // FORM_KEY 顺序=代码真源顺序（形态显示名 → slug）
+  const known = Object.entries(FORM_KEY as Record<string, string>).map(([form, slug]) => ({ form, slug, count: count[form] || 0 }));
+  // 孤儿：产品有 form 值但不在 FORM_KEY（未映射 slug=列表页筛不出）——吼出来
+  const knownForms = new Set(Object.keys(FORM_KEY as Record<string, string>));
+  const orphans = Object.keys(count).filter((f) => f && !knownForms.has(f)).map((f) => ({ form: f, slug: "", count: count[f] }));
+  return c.json({ forms: known, orphans, editable: false, note: "形态轴 slug/顺序定义在 render.js(FORM_KEY)，显示名=产品内联 form 字段。可编辑需 forms.json 重构官网 render。" });
 });
 
 // run_worker_first=true 时 Worker 先跑：未匹配的路由必须**显式**回落静态资源
