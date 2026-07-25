@@ -57,6 +57,14 @@ tr:hover td{background:var(--w3-panel2)}
 .mtile-tag{margin:4px 0}
 .mtile-act{display:flex;gap:3px;flex-wrap:wrap}
 .mtile-act button{height:24px;padding:0 7px;font-size:11px}
+/* 仪表盘（W5 P5）*/
+.dstat{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px}
+.dstat .card{margin:0;text-align:center}
+.dstat .num{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.dstat .lbl{color:var(--w3-text3);font-size:12px;margin-top:2px}
+.dfeat{display:flex;gap:10px;flex-wrap:wrap}
+.dfeat .ft{width:90px;text-align:center;font-size:11px;color:var(--w3-text3)}
+.dfeat .ft img{width:90px;height:70px;object-fit:contain;background:var(--w3-tile);border-radius:6px;display:block}
 .card{background:var(--w3-bg2);border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);padding:14px 16px;margin-bottom:14px}
 .card h3{margin:0 0 10px;font-size:12px;color:var(--w3-text3);font-weight:600;text-transform:uppercase;letter-spacing:.08em}
 .field{margin-bottom:12px}
@@ -97,12 +105,12 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
 <div class="dz-wrap">
   <nav class="dz-side">
     <div class="dz-eyebrow">目录 Catalog</div>
-    <div class="dz-nav-item active" onclick="backToList()"><span class="ic">▤</span> 产品</div>
-    <div class="dz-nav-item soon" title="即将上线"><span class="ic">◧</span> 仪表盘 <span class="soon-tag">SOON</span></div>
-    <div class="dz-nav-item" onclick="showCats()"><span class="ic">⊞</span> 分类</div>
-    <div class="dz-nav-item" onclick="showMedia()"><span class="ic">▦</span> 媒体</div>
+    <div class="dz-nav-item active" data-view="dash" onclick="showDash()"><span class="ic">◧</span> 仪表盘</div>
+    <div class="dz-nav-item" data-view="list" onclick="backToList()"><span class="ic">▤</span> 产品</div>
+    <div class="dz-nav-item" data-view="cats" onclick="showCats()"><span class="ic">⊞</span> 分类</div>
+    <div class="dz-nav-item" data-view="media" onclick="showMedia()"><span class="ic">▦</span> 媒体</div>
     <div class="dz-eyebrow">内容 Content</div>
-    <div class="dz-nav-item" onclick="showHome()"><span class="ic">⌂</span> 首页</div>
+    <div class="dz-nav-item" data-view="home" onclick="showHome()"><span class="ic">⌂</span> 首页</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">▭</span> 页面 <span class="soon-tag">SOON</span></div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">≣</span> 攻略 <span class="soon-tag">SOON</span></div>
     <div class="dz-eyebrow">增长 Growth</div>
@@ -233,6 +241,12 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div id="media-grid" class="mgrid"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
+  <!-- ============ 仪表盘（W5 P5·只读概览·默认落地页）============ -->
+  <div id="v-dash" style="display:none">
+    <div class="dz-pagehead"><h1>仪表盘</h1><span class="meta" id="dash-repo"></span></div>
+    <div id="dash-body"><div class="card muted">加载中… <span class="spin"></span></div></div>
+  </div>
+
   </main>
 </div>
 <div class="msg" id="msg"></div>
@@ -275,6 +289,7 @@ function msg(t, err) { const m = $("#msg"); m.textContent = t; m.className = "ms
   const fs = $("#f-form"), ef = $("#e-form");
   FORMS.forEach((f) => { fs.append(new Option(f, f)); ef.append(new Option(f, f)); });
   ["#q", "#f-cat", "#f-form"].forEach((s) => $(s).addEventListener("input", renderRows));
+  showDash();   // 默认落地=仪表盘（比落在"产品"更像后台首页）
 })();
 
 async function loadCats() {
@@ -333,7 +348,7 @@ async function bulkDelete() {
 
 // ---------- 编辑 ----------
 const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
-function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "media" ? "› 媒体库" : ""))); }
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "media" ? "› 媒体库" : ""))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
 function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
@@ -514,6 +529,35 @@ async function mediaUpload(files) {
     catch (e) { msg(f.name + " 上传失败：" + e.message, 1); }
   }
   await loadMedia();
+}
+
+// ---------- 仪表盘（W5 P5·只读概览）----------
+async function showDash() { showView("dash"); await loadDashboard(); }
+async function loadDashboard() {
+  const box = $("#dash-body");
+  box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
+  try { const d = await api("/dashboard"); paintDash(d); }
+  catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadDashboard()">重试</button></div>`; }
+}
+function paintDash(d) {
+  $("#dash-repo").textContent = d.repo ? `发布到 ${d.repo}` : "";
+  const catRows = Object.entries(d.byCat || {}).sort((a, b) => b[1] - a[1]).map(([slug, n]) => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--w3-line)"><span>${esc(catName(slug))}</span><span class="muted tnum">${n}</span></div>`).join("");
+  const feat = (d.featured || []).map((p) => `<div class="ft"><img src="${esc(imgUrl(p.thumb))}" loading="lazy"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.title)}</div></div>`).join("") || `<span class="muted">未设精选产品（首页自动按形态轮询挑）</span>`;
+  const lh = d.lastHome;
+  $("#dash-body").innerHTML = `
+    <div class="dstat">
+      <div class="card"><div class="num tnum">${d.products}</div><div class="lbl">产品</div></div>
+      <div class="card"><div class="num tnum">${d.categories}</div><div class="lbl">类目</div></div>
+      <div class="card"><div class="num tnum">${d.models}</div><div class="lbl">机型</div></div>
+      <div class="card"><div class="num tnum">${d.mediaCount}</div><div class="lbl">媒体</div></div>
+    </div>
+    <div class="edit-grid">
+      <div class="card"><h3>精选产品 · 首页 Popular products（${(d.featured || []).length}）</h3><div class="dfeat">${feat}</div><p style="margin-top:8px;font-size:12px"><a onclick="showHome()" style="cursor:pointer">→ 去首页管理</a></p></div>
+      <div>
+        <div class="card"><h3>产品按类目分布</h3>${catRows || '<span class="muted">无</span>'}</div>
+        <div class="card"><h3>最近一次首页发布</h3>${lh ? `<div style="font-size:13px">commit <span class="tnum">${esc(lh.sha)}</span>${lh.date ? ` · ${esc(new Date(lh.date).toLocaleString())}` : ""}</div><div class="muted" style="font-size:12px;margin-top:4px">${esc(lh.message || "")}</div>` : '<span class="muted">暂无记录</span>'}</div>
+      </div>
+    </div>`;
 }
 
 async function openEdit(id) {

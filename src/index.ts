@@ -300,6 +300,41 @@ app.delete("/api/admin/media", async (c) => {
   return c.json({ ok: true, deleted: key });
 });
 
+// ================= W5 P5：仪表盘（只读概览，零写入零撞车；admin 默认落地页）=================
+app.get("/api/admin/dashboard", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const [prodRaw, catRaw, featRaw, locRaw] = await Promise.all([
+    readFile(c.env, cfg, "data/products-index.json"),
+    readFile(c.env, cfg, "data/categories.json"),
+    readFile(c.env, cfg, "data/pages/home-featured.json"),
+    readFile(c.env, cfg, "data/locales.json"),
+  ]);
+  const products: any[] = prodRaw ? JSON.parse(prodRaw) : [];
+  const categories: any[] = catRaw ? (JSON.parse(catRaw).categories || []) : [];
+  const models = locRaw ? Object.keys(JSON.parse(locRaw).model_display || {}) : [];
+  const featuredIds: number[] = featRaw ? (JSON.parse(featRaw).ids || []) : [];
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const featured = featuredIds.map((id) => byId.get(id)).filter(Boolean).map((p: any) => ({ id: p.id, title: p.title, thumb: p.thumb, category: p.category }));
+  const byCat: Record<string, number> = {};
+  for (const p of products) byCat[p.category] = (byCat[p.category] || 0) + 1;
+  // 媒体数（R2 count，best-effort）
+  let mediaCount = 0;
+  try {
+    let cur: string | undefined;
+    do { const res: any = await c.env.IMAGES.list({ limit: 1000, cursor: cur }); mediaCount += res.objects.filter((o: any) => o.key !== MEDIA_META).length; cur = res.truncated ? res.cursor : undefined; } while (cur && mediaCount < 20000);
+  } catch {}
+  // 最近一次首页发布（GitHub commits API，best-effort、只读）
+  let lastHome: any = null;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${c.env.GITHUB_REPO}/commits?path=data/pages/home.json&per_page=1`, {
+      headers: { Authorization: `Bearer ${c.env.GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
+    });
+    if (res.ok) { const arr: any = await res.json(); if (Array.isArray(arr) && arr[0]) lastHome = { sha: String(arr[0].sha).slice(0, 7), date: arr[0].commit?.committer?.date || null, message: (arr[0].commit?.message || "").split("\n")[0] }; }
+  } catch {}
+  return c.json({ products: products.length, categories: categories.length, models: models.length, mediaCount, byCat, featured, imgBase: c.env.IMG_BASE, lastHome, repo: c.env.GITHUB_REPO });
+});
+
 // run_worker_first=true 时 Worker 先跑：未匹配的路由必须**显式**回落静态资源
 // （骨架首 boot 实测 / 404 抓出来的——Hono 不会自动帮你转 ASSETS）。auth 中间件在前=静态页同样在门后。
 app.notFound((c) => c.env.ASSETS.fetch(c.req.raw));
