@@ -379,11 +379,16 @@ function slugify(name: string): string {
   return String(name).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 // 从现源合成种子（catalog.json 不存在时）——models 顺序=categories.json 顺序（=CATS 页面顺序）
-function seedCatalog(catsJson: any, locJson: any): { models: any[]; types: any[] } {
+// aggregates=performance-gen-2 聚合页（model_display 有但非类目）：§2.4a 放 catalog 保持单一真源。
+function seedCatalog(catsJson: any, locJson: any): { models: any[]; types: any[]; aggregates: any[] } {
   const md = (locJson && locJson.model_display) || {};
+  const catSlugs = new Set(((catsJson && catsJson.categories) || []).map((c: any) => c.slug));
   const models = ((catsJson && catsJson.categories) || []).map((c: any, i: number) => ({ slug: c.slug, name: c.display, detailName: md[c.slug] || c.display, order: i }));
   const types = Object.entries(FORM_KEY as Record<string, string>).map(([name, slug], i) => ({ slug, name, order: i }));
-  return { models, types };
+  const aggregates: any[] = [];
+  // 在 model_display 但不在 categories 的键=聚合页（现仅 performance-gen-2=gen-1+gen-3）
+  if (md["performance-gen-2"] && !catSlugs.has("performance-gen-2")) aggregates.push({ slug: "performance-gen-2", detailName: md["performance-gen-2"], of: ["performance-gen-1", "performance-gen-3"] });
+  return { models, types, aggregates };
 }
 app.get("/api/admin/catalog", async (c) => {
   const cfg = ghConfig(c.env);
@@ -395,17 +400,22 @@ app.get("/api/admin/catalog", async (c) => {
     readFile(c.env, cfg, "data/locales.json"),
   ]);
   const products: any[] = prodRaw ? JSON.parse(prodRaw) : [];
-  let cat: { models: any[]; types: any[] }; let exists = false;
-  if (catalogRaw) { try { const j = JSON.parse(catalogRaw); cat = { models: j.models || [], types: j.types || [] }; exists = true; } catch { cat = seedCatalog(catsRaw ? JSON.parse(catsRaw) : {}, locRaw ? JSON.parse(locRaw) : {}); } }
+  let cat: { models: any[]; types: any[]; aggregates: any[] }; let exists = false;
+  if (catalogRaw) { try { const j = JSON.parse(catalogRaw); cat = { models: j.models || [], types: j.types || [], aggregates: j.aggregates || [] }; exists = true; } catch { cat = seedCatalog(catsRaw ? JSON.parse(catsRaw) : {}, locRaw ? JSON.parse(locRaw) : {}); } }
   else cat = seedCatalog(catsRaw ? JSON.parse(catsRaw) : {}, locRaw ? JSON.parse(locRaw) : {});
   // 产品计数（删除护栏用）：model 按 p.category，type 按 p.form
   const byModel: Record<string, number> = {}, byType: Record<string, number> = {};
   for (const p of products) { byModel[p.category] = (byModel[p.category] || 0) + 1; if (p.form) byType[p.form] = (byType[p.form] || 0) + 1; }
-  return c.json({ models: cat.models, types: cat.types, exists, counts: { byModel, byType }, live: false, note: "INERT：官网 render 未读 catalog.json，保存后需官网 Stage A 后同 release 才生效。" });
+  // exists=官网已落 catalog.json（随 render 迁移 release 一起落）→ 可保存生效；否则=预览、admin 不抢先写
+  return c.json({ models: cat.models, types: cat.types, aggregates: cat.aggregates, exists, counts: { byModel, byType }, note: exists ? "catalog.json 已生效——保存经官网 render 生成。" : "预览：官网尚未落 catalog.json（Stage A 后随 render 迁移 release 落种子）。此处增删暂不可保存，admin 不抢先写以免搅浑 byte-equiv 基线。" });
 });
 app.put("/api/admin/catalog", async (c) => {
   const cfg = ghConfig(c.env);
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  // 🚧 gate：catalog.json 必须已由官网 release 落地才允许 admin 写——不抢先写以免搅浑 byte-equiv 基线
+  const existingRaw = await readFile(c.env, cfg, CATALOG_FILE);
+  if (!existingRaw) return c.json({ error: "catalog.json 尚未由官网落地。Stage A 后官网随 render 迁移 release 落种子，届时此处才可保存。admin 不抢先写。", notLanded: true }, 409);
+  let existing: any = {}; try { existing = JSON.parse(existingRaw); } catch {}
   let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
   const models = Array.isArray(body?.models) ? body.models : null;
   const types = Array.isArray(body?.types) ? body.types : null;
@@ -424,13 +434,16 @@ app.put("/api/admin/catalog", async (c) => {
   };
   const err = chk(models, "机型", (x) => (typeof x.detailName === "string" && x.detailName.trim() ? null : `机型 detailName 不能为空（slug=${x.slug}）`)) || chk(types, "品类");
   if (err) return c.json({ error: err }, 400);
+  // aggregates=聚合页（phase-1 UI 只读，不在此编辑）：保留 body 传回的、否则沿用现有，别丢
+  const aggregates = Array.isArray(body?.aggregates) ? body.aggregates : (Array.isArray(existing.aggregates) ? existing.aggregates : []);
   const norm = {
     models: models.map((m: any, i: number) => ({ slug: m.slug, name: m.name.trim(), detailName: m.detailName.trim(), order: i })),
     types: types.map((t: any, i: number) => ({ slug: t.slug, name: t.name.trim(), order: i })),
+    aggregates,
   };
   try {
-    const r = await commitFiles(c.env, cfg, [{ path: CATALOG_FILE, content: JSON.stringify(norm, null, 2) + "\n" }], `admin: catalog.json update (${operator(c)}) [INERT until render migration]`);
-    return c.json({ ok: true, ...r, live: false, note: "已写 data/catalog.json（INERT）——站上暂不变，待官网 render 迁移 release 生效。" });
+    const r = await commitFiles(c.env, cfg, [{ path: CATALOG_FILE, content: JSON.stringify(norm, null, 2) + "\n" }], `admin: catalog.json update (${operator(c)})`);
+    return c.json({ ok: true, ...r, note: "已写 data/catalog.json。经官网 render 生成后站上生效。" });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 

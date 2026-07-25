@@ -246,8 +246,8 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="dz-toolbar">
       <span class="muted" id="cat-hint"></span>
       <div class="spacer"></div>
-      <button onclick="catAdd()">＋ 新增</button>
-      <button class="primary" onclick="saveCatalog()">💾 保存 catalog.json</button>
+      <button id="btn-cat-add" onclick="catAdd()">＋ 新增</button>
+      <button class="primary" id="btn-cat-save" onclick="saveCatalog()">💾 保存 catalog.json</button>
     </div>
 
     <!-- 机型轴 -->
@@ -258,6 +258,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
         </tr></thead>
         <tbody id="cats-rows"><tr><td colspan="6" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
       </table>
+      <div id="cat-aggregates" style="margin-top:10px"></div>
     </div>
 
     <!-- 品类/形态轴 -->
@@ -427,16 +428,27 @@ function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; 
 function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类增删（catalog.json：机型 model + 品类 type，INERT 直到官网 render 迁移）----------
-let catModels = [], catTypes = [], catCounts = { byModel: {}, byType: {} }, catActive = "model";
+let catModels = [], catTypes = [], catAggregates = [], catCounts = { byModel: {}, byType: {} }, catActive = "model", catExists = false;
 async function showCats() { showView("cats"); catTab("model"); await loadCatalog(); }
 async function loadCatalog() {
   $("#cats-rows").innerHTML = `<tr><td colspan="6" class="muted">加载中… <span class="spin"></span></td></tr>`;
   $("#forms-rows").innerHTML = `<tr><td colspan="5" class="muted">加载中… <span class="spin"></span></td></tr>`;
   try {
     const d = await api("/catalog");
-    catModels = d.models || []; catTypes = d.types || []; catCounts = d.counts || { byModel: {}, byType: {} };
+    catModels = d.models || []; catTypes = d.types || []; catAggregates = d.aggregates || []; catCounts = d.counts || { byModel: {}, byType: {} }; catExists = !!d.exists;
   } catch (e) { $("#cats-rows").innerHTML = `<tr><td colspan="6" class="muted">加载失败：${esc(e.message)} <button onclick="loadCatalog()">重试</button></td></tr>`; return; }
-  paintCatModels(); paintCatTypes();
+  updateCatGate(); paintCatModels(); paintCatTypes();
+}
+// exists=官网已落 catalog.json（随 render 迁移 release）→可保存生效；否则=预览、禁保存（admin 不抢先写）
+function updateCatGate() {
+  const b = $("#cat-inert-banner"), save = $("#btn-cat-save"), add = $("#btn-cat-add");
+  if (catExists) {
+    b.style.background = ""; b.innerHTML = `<span>✅ catalog.json 已生效——增删/改名/排序保存后经官网 render 生成（≈1 分钟）。slug 建后不可变（改=断 URL）。</span>`;
+    save.disabled = false; add.disabled = false; save.title = "";
+  } else {
+    b.innerHTML = `<span>👀 <b>预览模式</b>：官网尚未落地 <b>catalog.json</b>（Stage A 后随 render 迁移 release 一起落）。下方=当前线上分类的合成预览，<b>增删/改名暂不可保存</b>——admin 不抢先写，避免搅浑官网的 byte-equiv 基线。</span>`;
+    save.disabled = true; add.disabled = true; save.title = "官网落地 catalog.json 后才可保存";
+  }
 }
 function catTab(t) {
   catActive = t;
@@ -461,6 +473,10 @@ function paintCatModels() {
       <td><button class="danger" onclick="catDelModel(${i})" ${n ? `disabled title="有 ${n} 个产品，禁删——请先移走"` : ""}>删</button></td>
     </tr>`;
   }).join("") || `<tr><td colspan="6" class="muted">无机型</td></tr>`;
+  const agg = $("#cat-aggregates");
+  if (agg) agg.innerHTML = (catAggregates && catAggregates.length)
+    ? `<div class="muted" style="font-size:12px">聚合页（只读）：${catAggregates.map((a) => `<span class="chip" title="聚合 ${(a.of || []).join(" + ")}">${esc(a.detailName || a.slug)} <span class="tnum">/${esc(a.slug)}/</span></span>`).join(" ")} · 由多个机型聚合、无独立产品，phase-1 只读（未来要管再开）。</div>`
+    : "";
 }
 function paintCatTypes() {
   $("#forms-rows").innerHTML = catTypes.map((t, i) => {
@@ -504,10 +520,11 @@ function catAdd() {
 async function saveCatalog() {
   for (const m of catModels) { if (!m.name.trim()) return msg(`机型显示名不能为空（${m.slug}）`, 1); if (!m.detailName.trim()) return msg(`机型 detailName 不能为空（${m.slug}）`, 1); }
   for (const t of catTypes) { if (!t.name.trim()) return msg(`品类显示名不能为空（${t.slug}）`, 1); }
-  if (!confirm(`保存 catalog.json（机型 ${catModels.length} / 品类 ${catTypes.length}）到官网仓。\n⚠️ INERT：站上暂不变，需官网 Stage A 后同步 render release 才生效。\n确定？`)) return;
+  if (!catExists) return msg("官网尚未落地 catalog.json，暂不可保存（admin 不抢先写）", 1);
+  if (!confirm(`保存 catalog.json（机型 ${catModels.length} / 品类 ${catTypes.length}）到官网仓。\n保存后经官网 render 生成、约 1 分钟站上生效。\n确定？`)) return;
   try {
-    const r = await api("/catalog", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ models: catModels, types: catTypes }) });
-    msg(`✅ 已写 catalog.json（commit ${(r.commit || "").slice(0, 7)}）· INERT，待官网 render 迁移生效`);
+    const r = await api("/catalog", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ models: catModels, types: catTypes, aggregates: catAggregates }) });
+    msg(`✅ 已写 catalog.json（commit ${(r.commit || "").slice(0, 7)}）`);
     await loadCatalog();
   } catch (e) { msg("保存失败：" + e.message, 1); }
 }
