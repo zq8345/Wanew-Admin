@@ -38,6 +38,13 @@ tr:hover td{background:var(--w3-panel2)}
 .bulkbar b{color:var(--w3-accent)}
 /* 编辑页 */
 .edit-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+/* W5 工具栏改造：吸顶工具栏，右侧发布列已撤，内容全宽 */
+.edit-bar{position:sticky;top:0;z-index:15;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0;margin-bottom:12px;background:var(--w3-panel);border-bottom:1px solid var(--w3-line)}
+.edit-bar .spacer{flex:1}
+.edit-bar select{height:var(--dz-control-h);max-width:170px;padding:0 8px}
+.edit-bar .idtag{font-size:12px;font-variant-numeric:tabular-nums}
+.editbar-link{padding:0 10px;height:var(--dz-control-h);display:inline-flex;align-items:center;border:1px solid var(--w3-line2);border-radius:var(--dz-radius-s);color:var(--w3-text)!important;text-decoration:none;font-size:13px}
+.editbar-link:hover{background:var(--w3-panel2);text-decoration:none}
 .card{background:var(--w3-bg2);border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);padding:14px 16px;margin-bottom:14px}
 .card h3{margin:0 0 10px;font-size:12px;color:var(--w3-text3);font-weight:600;text-transform:uppercase;letter-spacing:.08em}
 .field{margin-bottom:12px}
@@ -123,56 +130,47 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
 
   <!-- ============ 编辑视图 ============ -->
   <div id="v-edit" style="display:none">
-    <div class="toolbar">
+    <!-- 吸顶工具栏：返回 + #ID + 机型/形态 + 预览/存草稿箱/发布（右侧发布列已撤，内容全宽） -->
+    <div class="edit-bar">
       <button onclick="backToList()">← 返回列表</button>
-      <span class="muted" id="edit-title-crumb"></span>
+      <span class="idtag muted" id="edit-title-crumb"></span>
+      <div class="spacer"></div>
+      <select id="e-cat" title="机型（类目）*"></select>
+      <select id="e-form" title="形态"><option value="">形态（未设）</option></select>
+      <a id="btn-site" class="editbar-link" href="#" target="_blank" style="display:none">🌐 官网</a>
+      <button id="btn-preview" onclick="runPreview()" title="跑发布管线渲染真实详情页、新标签打开预览（不提交、不上线）">🔍 预览</button>
+      <button id="btn-draft" onclick="saveDraft()" title="存到本浏览器草稿（localStorage）；换设备/清缓存不可见，不写官网仓">💾 存草稿箱</button>
+      <button class="primary" id="btn-publish" onclick="saveAndPublish()">🚀 发布</button>
     </div>
+    <p class="muted" id="pub-note" style="font-size:12px;margin:0 0 12px"></p>
     <!-- 草稿恢复横幅（诚实方案B：列表不显示草稿态，只在打开编辑页时提示恢复） -->
     <div class="banner" id="draft-banner">
       <span>💾 本机有此产品的未发布暂存（<span id="draft-time"></span>）——仅存于此浏览器。</span>
       <button class="primary" onclick="restoreDraft()">恢复暂存</button>
       <button onclick="dropDraft()">丢弃</button>
     </div>
-    <div class="edit-grid">
-      <!-- 左：内容 -->
-      <div>
-        <div class="card">
-          <h3>内容（英文主稿）</h3>
-          <div class="field"><label>标题 *</label><input id="e-title"></div>
-          <div class="field"><label>摘要 summary_html（列表卡/详情顶部）</label><textarea id="e-summary"></textarea></div>
-          <div class="field"><label>描述 description_html *</label><textarea id="e-desc" class="desc"></textarea></div>
-          <p class="muted" style="margin:4px 0 0;font-size:12px">⚠️ 葡/西翻译由本地翻译流程维护——此处保存只更新英文，<b>不会覆盖已有 pt/es 翻译</b>（merge 保护）。</p>
-        </div>
-        <div class="card">
-          <h3>图库（第一张=封面；拖拽排序）</h3>
-          <div class="gallery" id="gallery"></div>
-          <p class="muted" style="margin:8px 0 0;font-size:12px">支持拖拽图片文件到 ➕ 上传（≤8MB，jpg/png/webp/gif）；新图 URL 走 img.wanew.com。</p>
-        </div>
-        <details class="seo card" id="seo">
-          <summary>SEO（meta，可选——留空自动派生）</summary>
-          <div class="field"><label>meta_title（留空=标题派生）</label><input id="e-mtitle"></div>
-          <div class="field"><label>meta_description</label><textarea id="e-mdesc"></textarea></div>
-        </details>
-      </div>
-      <!-- 右：发布 -->
-      <div>
-        <div class="card">
-          <h3>发布</h3>
-          <div class="field"><label>机型（类目）*</label><select id="e-cat"></select></div>
-          <div class="field"><label>形态</label><select id="e-form"><option value="">（未设）</option></select></div>
-          <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
-            <button class="green" id="btn-publish" onclick="saveAndPublish()">🚀 保存并发布</button>
-            <button id="btn-draft" onclick="saveDraft()" title="草稿仅保存在此浏览器（localStorage），换设备/清缓存不可见；不会写入官网仓库">💾 暂存本机</button>
-            <button id="btn-preview" onclick="runPreview()" title="跑完整发布管线但不提交——看将写哪些文件">🧪 发布预演（不上线）</button>
-            <a id="btn-site" href="#" target="_blank" style="display:none;text-align:center;padding:6px 12px;border:1px solid var(--border);border-radius:6px;text-decoration:none">🌐 官网查看</a>
-          </div>
-          <p class="muted" style="font-size:12px;margin:10px 0 0" id="pub-note"></p>
-        </div>
-        <div class="card" id="preview-out" style="display:none">
-          <h3>预演结果</h3>
-          <div id="preview-body" style="font-size:12.5px"></div>
-        </div>
-      </div>
+    <!-- 全宽内容区 -->
+    <div class="card">
+      <h3>内容（英文主稿）</h3>
+      <div class="field"><label>标题 *</label><input id="e-title"></div>
+      <div class="field"><label>摘要 summary_html（列表卡/详情顶部）</label><textarea id="e-summary"></textarea></div>
+      <div class="field"><label>描述 description_html *</label><textarea id="e-desc" class="desc"></textarea></div>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">⚠️ 葡/西翻译由本地翻译流程维护——此处保存只更新英文，<b>不会覆盖已有 pt/es 翻译</b>（merge 保护）。</p>
+    </div>
+    <div class="card">
+      <h3>图库（第一张=封面；拖拽排序）</h3>
+      <div class="gallery" id="gallery"></div>
+      <p class="muted" style="margin:8px 0 0;font-size:12px">支持拖拽图片文件到 ➕ 上传（≤8MB，jpg/png/webp/gif）；新图 URL 走 img.wanew.com。</p>
+    </div>
+    <details class="seo card" id="seo">
+      <summary>SEO（meta，可选——留空自动派生）</summary>
+      <div class="field"><label>meta_title（留空=标题派生）</label><input id="e-mtitle"></div>
+      <div class="field"><label>meta_description</label><textarea id="e-mdesc"></textarea></div>
+    </details>
+    <!-- 预览兜底：dryRun 无 previewHtml 时列将写文件（正常路径=新标签渲染） -->
+    <div class="card" id="preview-out" style="display:none">
+      <h3>预览（渲染兜底 · 列将写文件）</h3>
+      <div id="preview-body" style="font-size:12.5px"></div>
     </div>
   </div>
 
@@ -342,11 +340,11 @@ async function openEdit(id) {
   showView("edit"); $("#preview-out").style.display = "none"; $("#draft-banner").classList.remove("on");
   if (id == null) {
     cur = { id: null, category: cats[0]?.slug || "", form: null, i18n: { en: { title: "", summary_html: "", description_html: "", meta_title: "", meta_description: "" } }, images: [] };
-    fillForm(cur); $("#edit-title-crumb").textContent = "新建产品"; $("#btn-site").style.display = "none";
+    fillForm(cur); $("#edit-title-crumb").textContent = "新建"; $("#btn-site").style.display = "none";
   } else {
     $("#edit-title-crumb").textContent = "加载 #" + id + "…";
     try { cur = await api("/products/" + id); } catch (e) { msg("加载失败：" + e.message, 1); return backToList(); }
-    fillForm(cur); $("#edit-title-crumb").textContent = `#${id} · ${cur.i18n.en.title}`;
+    fillForm(cur); $("#edit-title-crumb").textContent = `#${id}`;
     const a = $("#btn-site"); a.href = `${SITE}/${cur.category}/${id}`; a.style.display = "";
   }
   // 草稿提示（诚实方案B：仅编辑页提示，不在列表造状态）
@@ -458,22 +456,32 @@ async function saveAndPublish() {
       : await api("/products", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
     localStorage.removeItem(DKEY(cur?.id));
     msg(`✅ 已发布（commit ${(r.commit || "").slice(0, 8)}）· 写入 ${(r.files || []).length} 个文件 · ≈1分钟后官网可见`);
-    if (!cur?.id && r.id) { cur = { ...b, id: r.id }; $("#edit-title-crumb").textContent = `#${r.id} · ${b.i18n.en.title}`; const a = $("#btn-site"); a.href = `${SITE}/${b.category}/${r.id}`; a.style.display = ""; }
+    if (!cur?.id && r.id) { cur = { ...b, id: r.id }; $("#edit-title-crumb").textContent = `#${r.id}`; const a = $("#btn-site"); a.href = `${SITE}/${b.category}/${r.id}`; a.style.display = ""; }
   } catch (e) { msg("发布失败：" + e.message, 1); }
-  btn.disabled = false; btn.textContent = "🚀 保存并发布";
+  btn.disabled = false; btn.textContent = "🚀 发布";
 }
 async function runPreview() {
-  if (!cur?.id) return msg("新建产品请先发布一次后再预演", 1);
+  if (!cur?.id) return msg("新建产品请先发布一次后再预览", 1);
   const b = collectForm(); const err = validateLocal(b);
   if (err) return msg(err, 1);
   const btn = $("#btn-preview"); btn.disabled = true;
+  const w = window.open("", "_blank");   // 先开窗口保住用户手势（防弹窗拦截）
+  if (w) w.document.write('<!doctype html><meta charset="utf-8"><title>预览渲染中…</title><body style="font:14px sans-serif;padding:24px;color:#333">渲染预览中…</body>');
   try {
     const r = await api("/preview/" + cur.id, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
-    $("#preview-out").style.display = "";
-    $("#preview-body").innerHTML = `<p class="muted">将写入 ${(r.files || []).length} 个文件（未提交）：</p>` +
-      (r.files || []).map((f) => `<div style="padding:3px 0;border-bottom:1px solid var(--border)">${esc(f.path)} <span class="muted">${f.bytes}B${f.eol ? " · " + f.eol : ""}${f.hasHeader !== undefined ? (f.hasHeader && f.hasFooter ? " · chrome✓" : " · ⚠️chrome缺") : ""}</span></div>`).join("") +
-      `<p class="muted" style="margin:6px 0 0">多语言：${(r.merged_i18n_locales || []).join(" / ")}（merge 保护）</p>`;
-  } catch (e) { msg("预演失败：" + e.message, 1); }
+    if (r.previewHtml && w) {
+      // 注 <base href> 让 CSS/图从生产站 wanew.com 加载；纯预览、不提交、不上线
+      const html = r.previewHtml.replace(/<head([^>]*)>/i, '<head$1><base href="https://wanew.com/">');
+      w.document.open(); w.document.write(html); w.document.close();
+      msg("已在新标签打开渲染预览（未提交、未上线）");
+    } else {
+      if (w) w.close();
+      $("#preview-out").style.display = "";
+      $("#preview-body").innerHTML = `<p class="muted">无渲染 HTML，列将写文件（未提交）：</p>` +
+        (r.files || []).map((f) => `<div style="padding:3px 0;border-bottom:1px solid var(--w3-line)">${esc(f.path)} <span class="muted">${f.bytes}B${f.eol ? " · " + f.eol : ""}</span></div>`).join("") +
+        `<p class="muted" style="margin:6px 0 0">多语言：${(r.merged_i18n_locales || []).join(" / ")}（merge 保护）</p>`;
+    }
+  } catch (e) { if (w) w.close(); msg("预览失败：" + e.message, 1); }
   btn.disabled = false;
 }
 </script>

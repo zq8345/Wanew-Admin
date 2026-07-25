@@ -159,8 +159,11 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
   }
   if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
   // 批3：dryRun=preview 单真源化——同一条管线跑到 commit 前一步返回摘要（消内联第二实现，字节必同源）
+  // W5「存草稿箱·预览」：附带默认 locale 详情页渲染 HTML（前端注 <base href> 新标签打开=所见即所得，不提交）。
+  const previewPage = files.find((f: any) => f.path === `${prod.category}/${prod.id}.html`);
   if (opts.dryRun) return {
     dry: true,
+    previewHtml: previewPage ? previewPage.content : null,   // 默认 locale 详情页（新品/编辑均建默认 locale）
     // bytes=真字节数（TextEncoder）——.length 是 UTF-16 码元数，与磁盘字节对照会差出多字节字符数
     // （批3-1 的"361B 行尾差"定性就是这么错的：字符数 vs 字节数、单位不一致的对照）。
     files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0,
