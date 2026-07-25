@@ -219,7 +219,7 @@ export function setTileAlts(html, locale, catalog, modelDisplay) {
 // 机型卡按【存在性】过滤,不是按一张写死的清单:一张卡只在它指向的页面于该语种存在时才出现。
 // 这不是我发明的规则 —— 它精确预测了 pt 首页的现状(7 张,正好是有 pt 页的 7 个分类)。en 8 张。
 // 好处是它自己会长:等 /pt/performance-gen-2/ 建出来,pt 首页自动就有第 8 张,没人需要记得。
-export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, exists, dirOf, enabled }) {
+export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, exists, dirOf, enabled, products, featured }) {
   const sfx = catalog["card.alt.category"];
   const suffix = sfx[locale] ?? sfx.en;
   const cards = tiles
@@ -231,7 +231,52 @@ export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, e
         `              </div>\n              <div class="product-grid-text"><b>${name}</b></div>\n            </a>\n          </div>`;
     })
     .join("\n          \n          ");
-  return renderPage(tpl.split("{{TILES}}").join(cards), { locale, catalog, urlOf, dirOf, enabled });
+  let out = tpl.split("{{TILES}}").join(cards);
+  // W3 首页产品图模块(机型瓦片之上):真实产品照走同一存在性/本地化规则 —— 从 manifest 挑
+  // 按【形态多样性】轮询的一组(至多 8 件,每件带真实缩略图+本地化标题+详情链接),不写死 id,
+  // 产品增删自动跟随。en 侧不发前缀,pt/es 侧存在则前缀(urlOf 复用),alt 派生(entryTitle+altOf)。
+  if (out.includes("{{PRODUCT_STRIP}}")) {
+    const strip = pickHomeProducts(products || [], 8, featured).map((e) => {
+      const title = entryTitle(e, locale);
+      const href = urlOf(`/${e.category}/${e.id}`, locale);
+      return `<a class="w3-pstrip__card" href="${href}">\n` +
+        `            <div class="w3-pstrip__img"><img src="${e.thumb}" alt="${altOf(title, locale, catalog)}" loading="lazy"></div>\n` +
+        `            <div class="w3-pstrip__title">${title}</div>\n          </a>`;
+    }).join("\n          ");
+    out = out.split("{{PRODUCT_STRIP}}").join(strip);
+  }
+  return renderPage(out, { locale, catalog, urlOf, dirOf, enabled });
+}
+
+// Home product strip = a CURATED shortlist (总工: 6–8 hand-picked heroes with good photos, never a
+// catalog dump). If data/pages/home-featured.json supplies ids, use exactly those in order (that is
+// the curation, made against real photo quality). Only when no curated list is wired does it fall
+// back to the diversity round-robin below. `featured` is the id array (or null) passed by the caller.
+export function pickHomeProducts(entries, cap = 8, featured = null) {
+  if (Array.isArray(featured) && featured.length) {
+    const byId = new Map(entries.filter((e) => e.thumb).map((e) => [e.id, e]));
+    const picked = featured.map((id) => byId.get(Number(id))).filter(Boolean);
+    if (picked.length) return picked.slice(0, cap);
+  }
+  const byForm = new Map();
+  for (const e of entries) {
+    if (!e.thumb) continue;
+    const k = e.form || "";
+    if (!byForm.has(k)) byForm.set(k, []);
+    byForm.get(k).push(e);
+  }
+  for (const list of byForm.values()) list.sort((a, b) => a.id - b.id);
+  const forms = [...byForm.keys()].sort();
+  const out = [];
+  for (let round = 0; out.length < cap; round++) {
+    let progressed = false;
+    for (const f of forms) {
+      const list = byForm.get(f);
+      if (round < list.length) { out.push(list[round]); progressed = true; if (out.length >= cap) break; }
+    }
+    if (!progressed) break;
+  }
+  return out;
 }
 
 // R3 的通用页渲染:模板 + 散文目录 -> 页面。首页只是它多一个 {{TILES}} 的特例。
@@ -392,7 +437,7 @@ export function regenListPage(html, entries, catFilter, { locale = "en", catalog
   // locale falls back to English), which is the worst kind of wrong: right by accident.
   const cards = scope.map((e) => cardHtml(e, locale, catalog, urlOf)).join("") + "\n            ";
   html = html.replace(
-    /(<div class="row" id="productGrid">)(?:\s*<div class="col-xl-3[^"]*"[^>]*data-cat="[^"]*"[^>]*>[\s\S]*?<\/a>\s*<\/div>\s*<\/div>)*\s*(<\/div>)/,
+    /(<div class="row" id="productGrid"[^>]*>)(?:\s*<div class="col-xl-3[^"]*"[^>]*data-cat="[^"]*"[^>]*>[\s\S]*?<\/a>\s*<\/div>\s*<\/div>)*\s*(<\/div>)/,
     (m, open, close) => open + cards + close
   );
   // Both chip rows count WITHIN scope — a chip's number has to describe the grid under it, or it
