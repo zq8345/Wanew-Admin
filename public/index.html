@@ -57,14 +57,32 @@ tr:hover td{background:var(--w3-panel2)}
 .mtile-tag{margin:4px 0}
 .mtile-act{display:flex;gap:3px;flex-wrap:wrap}
 .mtile-act button{height:24px;padding:0 7px;font-size:11px}
-/* 仪表盘（W5 P5）*/
-.dstat{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:16px}
-.dstat .card{margin:0;text-align:center}
-.dstat .num{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+/* 仪表盘（W5 P5·世界级 dense 首页）*/
+.dstat{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px;margin-bottom:18px}
+.dstat .card{margin:0;display:flex;align-items:center;gap:13px;padding:15px 16px;transition:border-color .15s var(--dz-ease),background .15s var(--dz-ease)}
+.dstat .card:hover{border-color:var(--w3-line2);background:var(--w3-panel2)}
+.dstat .ic{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:10px;font-size:18px;background:rgba(125,177,255,.12);color:var(--w3-accent)}
+.dstat .num{font-size:25px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.05}
 .dstat .lbl{color:var(--w3-text3);font-size:12px;margin-top:2px}
-.dfeat{display:flex;gap:10px;flex-wrap:wrap}
-.dfeat .ft{width:90px;text-align:center;font-size:11px;color:var(--w3-text3)}
-.dfeat .ft img{width:90px;height:70px;object-fit:contain;background:var(--w3-tile);border-radius:6px;display:block}
+.dgrid{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;align-items:start}
+@media(max-width:900px){.dgrid{grid-template-columns:1fr}}
+.dbar{display:flex;flex-direction:column;gap:10px}
+.dbar-row{display:grid;grid-template-columns:132px 1fr 30px;gap:11px;align-items:center}
+.dbar-lbl{font-size:12.5px;color:var(--w3-text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dbar-track{height:8px;border-radius:6px;background:var(--w3-panel2);overflow:hidden}
+.dbar-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--w3-accent),#a9ccff);min-width:2px}
+.dbar-val{font-size:12px;color:var(--w3-text3);text-align:right;font-variant-numeric:tabular-nums}
+.dtl{position:relative;padding-left:16px}
+.dtl::before{content:"";position:absolute;left:3px;top:5px;bottom:5px;width:1px;background:var(--w3-line)}
+.dtl-item{position:relative;padding:0 0 13px}
+.dtl-item:last-child{padding-bottom:0}
+.dtl-item::before{content:"";position:absolute;left:-16px;top:3px;width:7px;height:7px;border-radius:50%;background:var(--w3-accent);box-shadow:0 0 0 3px var(--w3-bg2)}
+.dtl-msg{font-size:12.5px;color:var(--w3-text);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dtl-meta{font-size:11px;color:var(--w3-text3);margin-top:2px;font-variant-numeric:tabular-nums}
+.dfeat{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px}
+.dfeat .ft{font-size:11px;color:var(--w3-text3);min-width:0}
+.dfeat .ft img{width:100%;aspect-ratio:1/1;object-fit:contain;background:var(--w3-tile);border-radius:8px;padding:4px;display:block;margin-bottom:4px}
+.dfeat .ft .cap{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--w3-tile);border:1px solid var(--w3-line);font-size:12px;font-variant-numeric:tabular-nums;line-height:1.6}
 .dz-tabs{display:flex;gap:4px;border-bottom:1px solid var(--w3-line);margin-bottom:14px}
 .dz-tab{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;padding:8px 14px;font-size:13px;color:var(--w3-text3);cursor:pointer;margin-bottom:-1px}
@@ -593,23 +611,38 @@ async function loadDashboard() {
   try { const d = await api("/dashboard"); paintDash(d); }
   catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadDashboard()">重试</button></div>`; }
 }
+function relTime(iso) {
+  try { const t = new Date(iso).getTime(); const s = (Date.now() - t) / 1000;
+    if (s < 60) return "刚刚"; if (s < 3600) return Math.floor(s / 60) + " 分钟前";
+    if (s < 86400) return Math.floor(s / 3600) + " 小时前"; if (s < 2592000) return Math.floor(s / 86400) + " 天前";
+    return new Date(iso).toLocaleDateString(); } catch { return ""; }
+}
+function dashBars(rows, nameFn) {
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  return `<div class="dbar">${rows.map((r) => `<div class="dbar-row"><span class="dbar-lbl" title="${esc(nameFn(r))}">${esc(nameFn(r))}</span><span class="dbar-track"><span class="dbar-fill" style="width:${Math.round(r.count / max * 100)}%"></span></span><span class="dbar-val">${r.count}</span></div>`).join("")}</div>`;
+}
 function paintDash(d) {
   $("#dash-repo").textContent = d.repo ? `发布到 ${d.repo}` : "";
-  const catRows = Object.entries(d.byCat || {}).sort((a, b) => b[1] - a[1]).map(([slug, n]) => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--w3-line)"><span>${esc(catName(slug))}</span><span class="muted tnum">${n}</span></div>`).join("");
-  const feat = (d.featured || []).map((p) => `<div class="ft"><img src="${esc(imgUrl(p.thumb))}" loading="lazy"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.title)}</div></div>`).join("") || `<span class="muted">未设精选产品（首页自动按形态轮询挑）</span>`;
-  const lh = d.lastHome;
+  const stat = (ic, num, lbl) => `<div class="card"><div class="ic">${ic}</div><div><div class="num tnum">${num}</div><div class="lbl">${lbl}</div></div></div>`;
+  const catRows = Object.entries(d.byCat || {}).map(([slug, count]) => ({ slug, count })).sort((a, b) => b.count - a.count);
+  const formRows = (d.byForm || []).slice().sort((a, b) => b.count - a.count);
+  const feat = (d.featured || []).map((p) => `<div class="ft"><img src="${esc(imgUrl(p.thumb))}" loading="lazy"><span class="cap" title="${esc(p.title)}">${esc(p.title)}</span></div>`).join("") || `<span class="muted">未设精选产品（首页自动按形态轮询挑）</span>`;
+  const tl = (d.activity || []).map((a) => `<div class="dtl-item"><div class="dtl-msg" title="${esc(a.message || "")}">${esc(a.message || "")}</div><div class="dtl-meta"><span class="tnum">${esc(a.sha)}</span>${a.date ? ` · ${esc(relTime(a.date))}` : ""}</div></div>`).join("") || `<span class="muted">暂无记录</span>`;
   $("#dash-body").innerHTML = `
     <div class="dstat">
-      <div class="card"><div class="num tnum">${d.products}</div><div class="lbl">产品</div></div>
-      <div class="card"><div class="num tnum">${d.categories}</div><div class="lbl">类目</div></div>
-      <div class="card"><div class="num tnum">${d.models}</div><div class="lbl">机型</div></div>
-      <div class="card"><div class="num tnum">${d.mediaCount}</div><div class="lbl">媒体</div></div>
+      ${stat("▤", d.products, "产品")}
+      ${stat("◫", d.categories, "机型")}
+      ${stat("⬡", d.formsCount != null ? d.formsCount : "—", "品类 / 形态")}
+      ${stat("▦", d.mediaCount, "媒体")}
     </div>
-    <div class="edit-grid">
-      <div class="card"><h3>精选产品 · 首页 Popular products（${(d.featured || []).length}）</h3><div class="dfeat">${feat}</div><p style="margin-top:8px;font-size:12px"><a onclick="showHome()" style="cursor:pointer">→ 去首页管理</a></p></div>
+    <div class="dgrid">
       <div>
-        <div class="card"><h3>产品按类目分布</h3>${catRows || '<span class="muted">无</span>'}</div>
-        <div class="card"><h3>最近一次首页发布</h3>${lh ? `<div style="font-size:13px">commit <span class="tnum">${esc(lh.sha)}</span>${lh.date ? ` · ${esc(new Date(lh.date).toLocaleString())}` : ""}</div><div class="muted" style="font-size:12px;margin-top:4px">${esc(lh.message || "")}</div>` : '<span class="muted">暂无记录</span>'}</div>
+        <div class="card"><h3>机型分布 By model</h3>${catRows.length ? dashBars(catRows, (r) => catName(r.slug)) : '<span class="muted">无</span>'}</div>
+        <div class="card"><h3>品类 / 形态分布 By type</h3>${formRows.length ? dashBars(formRows, (r) => r.form) : '<span class="muted">无</span>'}</div>
+      </div>
+      <div>
+        <div class="card"><h3>最近活动 Activity</h3><div class="dtl">${tl}</div></div>
+        <div class="card"><h3>精选产品 · 首页（${(d.featured || []).length}）</h3><div class="dfeat">${feat}</div><p style="margin-top:11px;font-size:12px"><a onclick="showHome()" style="cursor:pointer">→ 去首页管理</a></p></div>
       </div>
     </div>`;
 }

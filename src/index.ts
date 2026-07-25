@@ -320,21 +320,27 @@ app.get("/api/admin/dashboard", async (c) => {
   const featured = featuredIds.map((id) => byId.get(id)).filter(Boolean).map((p: any) => ({ id: p.id, title: p.title, thumb: p.thumb, category: p.category }));
   const byCat: Record<string, number> = {};
   for (const p of products) byCat[p.category] = (byCat[p.category] || 0) + 1;
+  // 形态分布（FORM_KEY 代码顺序；display=form 字符串）
+  const formCount: Record<string, number> = {};
+  for (const p of products) { const f = p.form || ""; if (f) formCount[f] = (formCount[f] || 0) + 1; }
+  const byForm = Object.keys(FORM_KEY as Record<string, string>).map((form) => ({ form, count: formCount[form] || 0 }));
+  const formsCount = Object.keys(FORM_KEY as Record<string, string>).length;
   // 媒体数（R2 count，best-effort）
   let mediaCount = 0;
   try {
     let cur: string | undefined;
     do { const res: any = await c.env.IMAGES.list({ limit: 1000, cursor: cur }); mediaCount += res.objects.filter((o: any) => o.key !== MEDIA_META).length; cur = res.truncated ? res.cursor : undefined; } while (cur && mediaCount < 20000);
   } catch {}
-  // 最近一次首页发布（GitHub commits API，best-effort、只读）
-  let lastHome: any = null;
+  // 最近活动时间线（GitHub commits API 仓库级最近 6 条，best-effort、只读）
+  let activity: any[] = [];
   try {
-    const res = await fetch(`https://api.github.com/repos/${c.env.GITHUB_REPO}/commits?path=data/pages/home.json&per_page=1`, {
+    const res = await fetch(`https://api.github.com/repos/${c.env.GITHUB_REPO}/commits?per_page=6`, {
       headers: { Authorization: `Bearer ${c.env.GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
     });
-    if (res.ok) { const arr: any = await res.json(); if (Array.isArray(arr) && arr[0]) lastHome = { sha: String(arr[0].sha).slice(0, 7), date: arr[0].commit?.committer?.date || null, message: (arr[0].commit?.message || "").split("\n")[0] }; }
+    if (res.ok) { const arr: any = await res.json(); if (Array.isArray(arr)) activity = arr.map((x: any) => ({ sha: String(x.sha).slice(0, 7), date: x.commit?.committer?.date || null, message: (x.commit?.message || "").split("\n")[0] })); }
   } catch {}
-  return c.json({ products: products.length, categories: categories.length, models: models.length, mediaCount, byCat, featured, imgBase: c.env.IMG_BASE, lastHome, repo: c.env.GITHUB_REPO });
+  const lastHome = activity[0] || null;   // 兼容旧字段
+  return c.json({ products: products.length, categories: categories.length, models: models.length, formsCount, mediaCount, byCat, byForm, featured, imgBase: c.env.IMG_BASE, activity, lastHome, repo: c.env.GITHUB_REPO });
 });
 
 // ================= W5 P5：设置（品牌/口径只读对齐，零写入零撞车）=================
