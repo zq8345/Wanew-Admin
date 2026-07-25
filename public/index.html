@@ -65,6 +65,7 @@ tr:hover td{background:var(--w3-panel2)}
 .dfeat{display:flex;gap:10px;flex-wrap:wrap}
 .dfeat .ft{width:90px;text-align:center;font-size:11px;color:var(--w3-text3)}
 .dfeat .ft img{width:90px;height:70px;object-fit:contain;background:var(--w3-tile);border-radius:6px;display:block}
+.chip{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--w3-tile);border:1px solid var(--w3-line);font-size:12px;font-variant-numeric:tabular-nums;line-height:1.6}
 .card{background:var(--w3-bg2);border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);padding:14px 16px;margin-bottom:14px}
 .card h3{margin:0 0 10px;font-size:12px;color:var(--w3-text3);font-weight:600;text-transform:uppercase;letter-spacing:.08em}
 .field{margin-bottom:12px}
@@ -118,7 +119,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">⇄</span> 翻译 <span class="soon-tag">SOON</span></div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">✉</span> 询盘 <span class="soon-tag">SOON</span></div>
     <div class="dz-side-foot">
-      <div class="dz-nav-item soon" title="即将上线"><span class="ic">⚙</span> 设置 <span class="soon-tag">SOON</span></div>
+      <div class="dz-nav-item" data-view="settings" onclick="showSettings()"><span class="ic">⚙</span> 设置</div>
       <div class="dz-nav-item soon" title="即将上线"><span class="ic">◑</span> 团队 <span class="soon-tag">SOON</span></div>
       <div class="dz-user-foot"><span class="av">◐</span> <span class="who" id="who"></span></div>
     </div>
@@ -247,6 +248,11 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div id="dash-body"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
+  <div id="v-settings" style="display:none">
+    <div class="dz-pagehead"><h1>设置</h1><span class="meta">运行口径（只读）</span></div>
+    <div id="settings-body"><div class="card muted">加载中… <span class="spin"></span></div></div>
+  </div>
+
   </main>
 </div>
 <div class="msg" id="msg"></div>
@@ -348,7 +354,7 @@ async function bulkDelete() {
 
 // ---------- 编辑 ----------
 const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
-function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "media" ? "› 媒体库" : ""))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : "")))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
 function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
@@ -558,6 +564,39 @@ function paintDash(d) {
         <div class="card"><h3>最近一次首页发布</h3>${lh ? `<div style="font-size:13px">commit <span class="tnum">${esc(lh.sha)}</span>${lh.date ? ` · ${esc(new Date(lh.date).toLocaleString())}` : ""}</div><div class="muted" style="font-size:12px;margin-top:4px">${esc(lh.message || "")}</div>` : '<span class="muted">暂无记录</span>'}</div>
       </div>
     </div>`;
+}
+
+// ---------- 设置（W5 P5·品牌/口径只读对齐）----------
+async function showSettings() { showView("settings"); await loadSettings(); }
+async function loadSettings() {
+  const box = $("#settings-body");
+  box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
+  try { const d = await api("/settings"); paintSettings(d); }
+  catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadSettings()">重试</button></div>`; }
+}
+function paintSettings(d) {
+  const loc = d.locales || {};
+  const chips = (arr) => (arr && arr.length ? arr.map((x) => `<span class="chip">${esc(x)}</span>`).join(" ") : '<span class="muted">—</span>');
+  const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:16px;padding:5px 0;border-bottom:1px solid var(--w3-line)"><span class="muted">${k}</span><span style="text-align:right">${v}</span></div>`;
+  $("#settings-body").innerHTML = `
+    <div class="edit-grid">
+      <div class="card">
+        <h3>发布目标</h3>
+        ${row("代码仓 Repo", `<span class="tnum">${esc(d.repo || "—")}</span>`)}
+        ${row("分支 Branch", `<span class="tnum">${esc(d.branch || "—")}</span>`)}
+        ${row("图床域 IMG_BASE", `<span class="tnum">${esc(d.imgBase || "—")}</span>`)}
+        ${row("GitHub Token", d.ghTokenConfigured ? '<span style="color:var(--w3-ok,#2b8a3e)">● 已配置</span>' : '<span style="color:var(--w3-danger,#c92a2a)">○ 未配置</span>')}
+        ${row("当前操作人", `<span class="tnum">${esc(d.operator || "—")}</span>`)}
+      </div>
+      <div class="card">
+        <h3>多语言口径 Locales</h3>
+        <div style="padding:5px 0"><div class="muted" style="font-size:12px;margin-bottom:4px">已启用 enabled（对外收录）</div>${chips(loc.enabled)}</div>
+        <div style="padding:5px 0"><div class="muted" style="font-size:12px;margin-bottom:4px">默认 default</div>${loc.default ? `<span class="chip">${esc(loc.default)}</span>` : '<span class="muted">—</span>'}</div>
+        <div style="padding:5px 0"><div class="muted" style="font-size:12px;margin-bottom:4px">内部渲染 render_extra（noindex，如 zh）</div>${chips(loc.renderExtra)}</div>
+        <div style="padding:5px 0"><div class="muted" style="font-size:12px;margin-bottom:4px">实际渲染集 RENDER_SET = enabled ∪ render_extra</div>${chips(loc.renderSet)}</div>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:12px;font-size:12px">以上口径为 Worker 环境变量与 <span class="tnum">data/locales.json</span> 真源，只读展示。改这些是 i18n / 部署命脉——请改仓库配置，后台不开写口。</p>`;
 }
 
 async function openEdit(id) {

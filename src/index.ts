@@ -335,6 +335,26 @@ app.get("/api/admin/dashboard", async (c) => {
   return c.json({ products: products.length, categories: categories.length, models: models.length, mediaCount, byCat, featured, imgBase: c.env.IMG_BASE, lastHome, repo: c.env.GITHUB_REPO });
 });
 
+// ================= W5 P5：设置（品牌/口径只读对齐，零写入零撞车）=================
+// 纯展示当前运行口径——发布目标仓/分支、图床域、locale 集（enabled∪render_extra=RENDER_SET）、
+// 操作人、GITHUB_TOKEN 有无（永不报值）。改这些口径是 i18n/部署命脉，只能改 repo 配置，不在后台开写口。
+app.get("/api/admin/settings", async (c) => {
+  const cfg = ghConfig(c.env);
+  const locRaw = cfg ? await readFile(c.env, cfg, "data/locales.json") : null;
+  const loc = locRaw ? JSON.parse(locRaw) : {};
+  const enabled: string[] = Array.isArray(loc.enabled) ? loc.enabled : [];
+  const renderExtra: string[] = Array.isArray(loc.render_extra) ? loc.render_extra : [];
+  const renderSet = Array.from(new Set([...enabled, ...renderExtra]));
+  return c.json({
+    repo: c.env.GITHUB_REPO,
+    branch: c.env.GITHUB_BRANCH,
+    imgBase: c.env.IMG_BASE,
+    operator: c.req.header("cf-access-authenticated-user-email") || "dev-bypass",
+    ghTokenConfigured: !!c.env.GITHUB_TOKEN,   // 只报有无，绝不报值
+    locales: { enabled, default: loc.default || null, renderExtra, renderSet },
+  });
+});
+
 // run_worker_first=true 时 Worker 先跑：未匹配的路由必须**显式**回落静态资源
 // （骨架首 boot 实测 / 404 抓出来的——Hono 不会自动帮你转 ASSETS）。auth 中间件在前=静态页同样在门后。
 app.notFound((c) => c.env.ASSETS.fetch(c.req.raw));
