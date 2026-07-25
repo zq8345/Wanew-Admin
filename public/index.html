@@ -77,9 +77,9 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
 <div class="dz-wrap">
   <nav class="dz-side">
     <div class="dz-eyebrow">目录 Catalog</div>
-    <div class="dz-nav-item active"><span class="ic">▤</span> 产品</div>
+    <div class="dz-nav-item active" onclick="backToList()"><span class="ic">▤</span> 产品</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">◧</span> 仪表盘 <span class="soon-tag">SOON</span></div>
-    <div class="dz-nav-item soon" title="即将上线"><span class="ic">⊞</span> 分类 <span class="soon-tag">SOON</span></div>
+    <div class="dz-nav-item" onclick="showCats()"><span class="ic">⊞</span> 分类</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">▦</span> 媒体 <span class="soon-tag">SOON</span></div>
     <div class="dz-eyebrow">内容 Content</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">⌂</span> 首页 <span class="soon-tag">SOON</span></div>
@@ -175,6 +175,24 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
       </div>
     </div>
   </div>
+
+  <!-- ============ 分类 / 机型管理视图 ============ -->
+  <div id="v-cats" style="display:none">
+    <div class="dz-toolbar">
+      <button onclick="backToList()">← 返回列表</button>
+      <span class="muted">分类 / 机型管理 · slug 一期不可变（改 slug=断 URL），仅改显示名与顺序</span>
+      <div class="spacer"></div>
+      <button class="primary" onclick="saveCats()">💾 保存（重烘焙受影响页）</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th style="width:96px">顺序</th><th style="width:180px">类目 slug</th><th>显示名（列表/导航）</th><th>机型显示名（详情/首页瓦片）</th>
+      </tr></thead>
+      <tbody id="cats-rows"><tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
+    </table>
+    <p class="muted" style="font-size:12px;margin-top:10px">保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。slug 增删属二期。</p>
+  </div>
+
   </main>
 </div>
 <div class="msg" id="msg"></div>
@@ -276,8 +294,49 @@ async function bulkDelete() {
 
 // ---------- 编辑 ----------
 const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
-function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : ""; }
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : ""); }
 function backToList() { showView("list"); loadList(); }
+
+// ---------- 分类 / 机型管理 ----------
+let catsEdit = [];
+async function showCats() { showView("cats"); await loadCatsView(); }
+async function loadCatsView() {
+  const rows = $("#cats-rows");
+  rows.innerHTML = `<tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr>`;
+  try {
+    const [cg, mg] = await Promise.all([api("/categories"), api("/models")]);
+    const md = mg.model_display || {};
+    window._origMd = md;   // 保留原全键集（含 performance-gen-2 等非类目孤儿键；PUT /models 校验键集不可变）
+    catsEdit = (cg.categories || []).map((c) => ({ slug: c.slug, display: c.display || "", model: md[c.slug] || "" }));
+  } catch (e) { rows.innerHTML = `<tr><td colspan="4" class="muted">加载失败：${esc(e.message)} <button onclick="loadCatsView()">重试</button></td></tr>`; return; }
+  paintCats();
+}
+function paintCats() {
+  $("#cats-rows").innerHTML = catsEdit.map((c, i) => `
+    <tr>
+      <td class="muted"><button onclick="catMove(${i},-1)" ${i === 0 ? "disabled" : ""}>↑</button> <button onclick="catMove(${i},1)" ${i === catsEdit.length - 1 ? "disabled" : ""}>↓</button></td>
+      <td class="muted">${esc(c.slug)}</td>
+      <td><input value="${esc(c.display)}" oninput="catsEdit[${i}].display=this.value" style="width:100%"></td>
+      <td><input value="${esc(c.model)}" oninput="catsEdit[${i}].model=this.value" style="width:100%"></td>
+    </tr>`).join("") || `<tr><td colspan="4" class="muted">无类目</td></tr>`;
+}
+function catMove(i, d) { const j = i + d; if (j < 0 || j >= catsEdit.length) return; const t = catsEdit[i]; catsEdit[i] = catsEdit[j]; catsEdit[j] = t; paintCats(); }
+async function saveCats() {
+  for (const c of catsEdit) {
+    if (!c.display.trim()) return msg("显示名不能为空：" + c.slug, 1);
+    if (!c.model.trim()) return msg("机型显示名不能为空：" + c.slug, 1);
+  }
+  if (!confirm(`将把分类显示名 / 机型显示名 / 顺序保存到官网仓（重烘焙受影响页、≈1分钟上线）。\n此操作直接修改生产官网仓。确定？`)) return;
+  try {
+    const rc = await api("/categories", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ categories: catsEdit.map((c) => ({ slug: c.slug, display: c.display.trim() })) }) });
+    const model_display = { ...(window._origMd || {}) };   // 原全键集打底（防掉孤儿键触发键集校验 400）
+    for (const c of catsEdit) model_display[c.slug] = c.model.trim();   // 只覆盖可编辑的 7 个类目
+    const rm = await api("/models", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ model_display }) });
+    const rebaked = (rc.rebaked || []).length + (rm.rebaked || []).length;
+    msg(`✅ 已保存（分类 ${(rc.commit || "").slice(0, 7)} / 机型 ${(rm.commit || "").slice(0, 7)}）· 重烘焙 ${rebaked} 类 · ≈1分钟上线`);
+    await loadCats();   // 刷新产品编辑页的类目下拉（新显示名）
+  } catch (e) { msg("保存失败：" + e.message, 1); }
+}
 
 async function openEdit(id) {
   showView("edit"); $("#preview-out").style.display = "none"; $("#draft-banner").classList.remove("on");
