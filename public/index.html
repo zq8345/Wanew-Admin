@@ -208,6 +208,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     </div>
     <p class="muted" style="font-size:12px;margin:0 0 12px">编辑首页 Hero 区文案（en / pt-BR / es-MX 三语）。保存=重烘焙首页并提交官网仓，≈1分钟上线。⚠️ 只改被编辑的语言、保留其余（i18n merge 防翻译擦除）；保存前可「预览」看真实渲染。</p>
     <div id="home-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
+    <div id="home-featured-box"></div>
   </div>
 
   </main>
@@ -362,16 +363,22 @@ const HOME_HERO_KEYS = [
   { key: "home.hero.cta", label: "按钮文字 (CTA)" },
   { key: "home.hero.serving", label: "serving 行" },
 ];
-let homeData = {}, homeLocales = [];
+let homeData = {}, homeLocales = [], homeFeatured = [], origFeatured = [];
 async function showHome() { showView("home"); await loadHomeView(); }
 async function loadHomeView() {
   const box = $("#home-fields");
   box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
-  try { const r = await api("/homepage"); homeData = r.home || {}; }
+  try {
+    if (!products.length) await loadList();   // 精选产品选择器需要产品列表
+    const r = await api("/homepage"); homeData = r.home || {};
+    homeFeatured = (r.featured || []).filter((id) => products.some((p) => p.id === id));   // 去陈旧 id（产品已删）
+    origFeatured = homeFeatured.slice();
+  }
   catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadHomeView()">重试</button></div>`; return; }
   const first = HOME_HERO_KEYS.map((k) => homeData[k.key]).find((v) => v && typeof v === "object");
   homeLocales = first ? Object.keys(first) : ["en"];
   paintHome();
+  paintFeatured();
 }
 function paintHome() {
   $("#home-fields").innerHTML = HOME_HERO_KEYS.map((k) => {
@@ -390,23 +397,49 @@ function collectHomeEdits() {
   });
   return edits;
 }
+// 精选产品（首页 Popular products）——手选 ≤8 产品、排序；不选=首页自动按形态轮询
+function paintFeatured() {
+  const box = $("#home-featured-box"); if (!box) return;
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const chosen = homeFeatured.map((id) => byId.get(id)).filter(Boolean);
+  const avail = products.filter((p) => !homeFeatured.includes(p.id));
+  box.innerHTML = `<div class="card"><h3>精选产品 · 首页 Popular products <span class="muted" style="font-weight:400;font-size:11px">最多 8 个、按顺序显示；不选=首页自动按形态轮询挑</span></h3>` +
+    (chosen.length ? chosen.map((p, i) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--w3-line)">
+        <button onclick="featMove(${i},-1)" ${i === 0 ? "disabled" : ""}>↑</button><button onclick="featMove(${i},1)" ${i === chosen.length - 1 ? "disabled" : ""}>↓</button>
+        ${p.thumb ? `<img class="thumb" src="${esc(imgUrl(p.thumb))}" style="width:30px;height:30px">` : ""}
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.title)}</span>
+        <span class="muted">#${p.id}</span>
+        <button class="danger" onclick="featRemove(${p.id})">移除</button>
+      </div>`).join("") : `<p class="muted">未选精选产品——首页将自动按形态轮询挑 8 个。</p>`) +
+    `<div class="field" style="margin-top:10px"><label>添加产品（${homeFeatured.length}/8）</label><select ${homeFeatured.length >= 8 ? "disabled" : ""} onchange="featAdd(this.value);this.value='';"><option value="">＋ 选产品加入…</option>${avail.map((p) => `<option value="${p.id}">${esc(p.title)} (#${p.id})</option>`).join("")}</select></div></div>`;
+}
+function featMove(i, d) { const j = i + d; if (j < 0 || j >= homeFeatured.length) return; const t = homeFeatured[i]; homeFeatured[i] = homeFeatured[j]; homeFeatured[j] = t; paintFeatured(); }
+function featRemove(id) { homeFeatured = homeFeatured.filter((x) => x !== id); paintFeatured(); }
+function featAdd(v) { const id = Number(v); if (id && !homeFeatured.includes(id) && homeFeatured.length < 8) { homeFeatured.push(id); paintFeatured(); } }
+const featChanged = () => JSON.stringify(homeFeatured) !== JSON.stringify(origFeatured);
+function homePayload(extra) {
+  const p = { edits: collectHomeEdits(), ...(extra || {}) };
+  if (featChanged()) p.featured = homeFeatured;   // 只在改了才传（后端 featured===undefined=不动）
+  return p;
+}
 async function previewHome() {
-  const edits = collectHomeEdits();
   const w = window.open("", "_blank");   // 先开窗保住用户手势
   if (w) w.document.write('<!doctype html><meta charset="utf-8"><title>首页预览渲染中…</title><body style="font:14px sans-serif;padding:24px;color:#333">渲染首页预览中…</body>');
   try {
-    const r = await api("/homepage", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits, dryRun: true }) });
+    const r = await api("/homepage", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(homePayload({ dryRun: true })) });
     if (r.previewHtml && w) { const html = r.previewHtml.replace(/<head([^>]*)>/i, '<head$1><base href="https://wanew.com/">'); w.document.open(); w.document.write(html); w.document.close(); msg("已在新标签打开首页渲染预览（未提交、未上线）"); }
-    else { if (w) w.close(); msg("预览无渲染 HTML", 1); }
+    else { if (w) w.close(); msg((r.error || "预览无渲染 HTML"), 1); }
   } catch (e) { if (w) w.close(); msg("预览失败：" + e.message, 1); }
 }
 async function saveHome() {
-  const edits = collectHomeEdits();
-  if (!edits.length) return msg("没有改动");
-  if (!confirm(`将保存 ${edits.length} 处首页 Hero 文案到官网仓（重烘焙首页三语+zh、≈1分钟上线）。\n此操作直接修改生产官网仓。确定？`)) return;
+  const p = homePayload();
+  if (!p.edits.length && p.featured === undefined) return msg("没有改动");
+  const parts = [p.edits.length ? `${p.edits.length} 处文案` : "", p.featured !== undefined ? "精选产品" : ""].filter(Boolean).join(" + ");
+  if (!confirm(`将保存首页（${parts}）到官网仓（重烘焙首页三语+zh、≈1分钟上线）。\n此操作直接修改生产官网仓。确定？`)) return;
   const btn = $("#btn-home-save"); btn.disabled = true; btn.textContent = "保存中…";
   try {
-    const r = await api("/homepage", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits }) });
+    const r = await api("/homepage", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(p) });
     msg(`✅ 首页已保存（commit ${(r.commit || "").slice(0, 7)}）· 写 ${(r.files || []).length} 文件 · ≈1分钟官网可见`);
     await loadHomeView();   // 重载=新值成为基线
   } catch (e) { msg("保存失败：" + e.message, 1); }

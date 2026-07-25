@@ -225,21 +225,25 @@ app.post("/api/admin/preview/:id", async (c) => {
 app.get("/api/admin/homepage", async (c) => {
   const cfg = ghConfig(c.env);
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
-  const raw = await readFile(c.env, cfg, "data/pages/home.json");
+  const [raw, featRaw] = await Promise.all([
+    readFile(c.env, cfg, "data/pages/home.json"),
+    readFile(c.env, cfg, "data/pages/home-featured.json"),
+  ]);
   if (!raw) return c.json({ error: "home.json missing" }, 404);
-  return c.json({ home: JSON.parse(raw) });
+  return c.json({ home: JSON.parse(raw), featured: featRaw ? (JSON.parse(featRaw).ids || []) : [] });
 });
 
 app.put("/api/admin/homepage", async (c) => {
   const cfg = ghConfig(c.env);
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
   let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
-  const edits: HomeEdit[] = body?.edits;
-  if (!Array.isArray(edits)) return c.json({ error: "edits must be an array" }, 400);
+  // edits(文案) 和/或 featured(精选产品 id 数组) —— publishHomepage 校验"至少一个"
+  if (body?.edits !== undefined && !Array.isArray(body.edits)) return c.json({ error: "edits must be an array" }, 400);
+  if (body?.featured !== undefined && body.featured !== null && !Array.isArray(body.featured)) return c.json({ error: "featured must be an array or null" }, 400);
   const ctx = await loadCtx(c.env, cfg);
   if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
   try {
-    const r: any = await publishHomepage(c.env, cfg, ctx, edits, { email: operator(c), dryRun: !!body.dryRun });
+    const r: any = await publishHomepage(c.env, cfg, ctx, { edits: body.edits as HomeEdit[] | undefined, featured: body.featured }, { email: operator(c), dryRun: !!body.dryRun });
     if (r.error) return c.json(r, 502);
     return c.json({ ok: true, ...r, note: r.dry ? "dry preview" : "homepage updated; Pages deploys in ~1 min" });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }

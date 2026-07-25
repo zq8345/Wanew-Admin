@@ -280,7 +280,8 @@ export function mergeHome(homeJson: any, edits: HomeEdit[], allowedKeys: Set<str
   return { home };
 }
 
-export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, edits: HomeEdit[], opts: { email: string; dryRun?: boolean }) {
+export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, payload: { edits?: HomeEdit[]; featured?: (number | string)[] | null }, opts: { email: string; dryRun?: boolean }) {
+  const edits = payload.edits || [];
   const { locales, catalog, manifest, locDir, chrome } = ctx;
   // 首页专属输入（loadCtx 未加载的单独读；publish 时读最新=对官网并发改动自愈）
   const [homeRaw, homeTpl, tilesRaw, sharedRaw, featRaw] = await Promise.all([
@@ -295,13 +296,22 @@ export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, edits: HomeE
   const homeJson = JSON.parse(homeRaw as string);
   const tiles = JSON.parse(tilesRaw as string);
   const shared = sharedRaw ? JSON.parse(sharedRaw) : {};
-  const featured = featRaw ? (JSON.parse(featRaw).ids || null) : null;
   // 允许编辑的 locale = home.json 现有 locale 集（en/pt-BR/es-MX，从首键取）；允许键=全部现有键
   const keys = Object.keys(homeJson);
   const allowedLocales = keys.length ? Object.keys(homeJson[keys[0]]) : (locales.enabled || []);
-  const mv = mergeHome(homeJson, edits, new Set(keys), allowedLocales);
+  const mv = edits.length ? mergeHome(homeJson, edits, new Set(keys), allowedLocales) : { home: homeJson };
   if (mv.error) return { error: mv.error };
   const home = mv.home;
+  // 精选产品(home-featured)：payload.featured 提供则校验(须是真产品 id、去重、cap 8)+写文件；否则读现值不动
+  let featured: any = featRaw ? (JSON.parse(featRaw).ids || null) : null;
+  let featuredChanged = false;
+  if (payload.featured !== undefined) {
+    const seen = new Set<number>();
+    const ids = (payload.featured || []).map(Number).filter((n) => Number.isFinite(n) && manifest.some((e: any) => e.id === n) && !seen.has(n) && (seen.add(n), true)).slice(0, 8);
+    featured = ids.length ? ids : null;
+    featuredChanged = true;
+  }
+  if (!edits.length && !featuredChanged) return { error: "没有改动（无文案编辑、无精选产品变更）" };
 
   const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
   const dirOf = (loc: string) => locDir[loc] ?? "";
@@ -310,7 +320,9 @@ export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, edits: HomeE
   const INTERNAL: string[] = locales.internal_noindex || [];
   const cat = { ...catalog, ...shared, ...home };
 
-  const files: any[] = [{ path: "data/pages/home.json", content: matchJson(homeRaw, home) }];
+  const files: any[] = [];
+  if (edits.length) files.push({ path: "data/pages/home.json", content: matchJson(homeRaw, home) });
+  if (featuredChanged) files.push({ path: "data/pages/home-featured.json", content: matchJson(featRaw, { ids: featured || [] }) });
   const chromeErrors: string[] = [];
   for (const locale of RENDER_SET) {
     const dir = dirOf(locale);
