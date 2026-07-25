@@ -357,6 +357,19 @@ app.put("/api/admin/media/folder", async (c) => {
   return c.json({ ok: true, key, folder });
 });
 
+// 批量归类（Joe②：多选一次性移入/退回）——一次读写，比逐张 PUT 省往返
+app.put("/api/admin/media/folder-batch", async (c) => {
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const keys: string[] = Array.isArray(body?.keys) ? body.keys.filter((k: any) => typeof k === "string" && k && k !== MEDIA_META) : [];
+  const folder = String(body?.folder || "");
+  if (!keys.length) return c.json({ error: "keys 不能为空" }, 400);
+  const m = await loadFolders(c.env);
+  if (folder && !m.folders.includes(folder)) return c.json({ error: "文件夹不存在" }, 400);
+  for (const key of keys) { if (folder) m.assign[key] = folder; else delete m.assign[key]; }
+  await saveFolders(c.env, m);
+  return c.json({ ok: true, count: keys.length, folder });
+});
+
 // ================= W5 P5：仪表盘（只读概览，零写入零撞车；admin 默认落地页）=================
 app.get("/api/admin/dashboard", async (c) => {
   const cfg = ghConfig(c.env);

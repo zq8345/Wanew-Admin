@@ -366,6 +366,22 @@ export function renderPage(tpl, { locale, catalog, urlOf, path = "/", dirOf, ena
     if (v === undefined || v === null || v === "") throw new Error(`renderPage: catalog ${key} 在 ${locale} 下没有值`);
     return v;
   });
+  // L3(审计):FAQPage 结构化数据 —— 从【已渲染】的 .faq-item Q&A 派生(token 已解析),
+  // JSON.stringify 负责转义(catalog 文本里的引号/换行不会破坏 JSON-LD)。任何含 faq-item 的
+  // 页自动获得,没有就跳过。答案去 HTML 标签取纯文本(schema.org acceptedAnswer.text)。
+  if (out.includes('class="faq-item"')) {
+    const qs = [...out.matchAll(/<div class="faq-question"[^>]*>\s*<span>([\s\S]*?)<\/span>/g)]
+      .map((m) => m[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim());
+    const as = [...out.matchAll(/<div class="faq-answer">([\s\S]*?)<\/div>/g)]
+      .map((m) => m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+    const n = Math.min(qs.length, as.length);
+    const mainEntity = [];
+    for (let i = 0; i < n; i++) if (qs[i] && as[i]) mainEntity.push({ "@type": "Question", name: qs[i], acceptedAnswer: { "@type": "Answer", text: as[i] } });
+    if (mainEntity.length) {
+      const schema = { "@context": "https://schema.org", "@type": "FAQPage", mainEntity };
+      out = out.replace("</head>", `<script type="application/ld+json">${JSON.stringify(schema)}</script>\n</head>`);
+    }
+  }
   return assertNoTokens(out, locale);
 }
 
