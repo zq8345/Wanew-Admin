@@ -66,7 +66,7 @@ a:hover{text-decoration:underline}
 .dz-nav-item .cnt{margin-left:auto;font-size:11px;color:var(--w3-text3);font-variant-numeric:tabular-nums}
 .dz-nav-item.active .cnt{color:var(--w3-accent)}
 /* Phase 1 未建的分区：明示 soon，不装成可用（灰按钮必写原因） */
-.dz-nav-item.soon{opacity:.5;cursor:default}
+.dz-nav-item.soon{opacity:.5;cursor:not-allowed}
 .dz-nav-item.soon:hover{background:transparent;color:var(--w3-text3)}
 .dz-nav-item .soon-tag{margin-left:auto;font-size:10px;letter-spacing:.06em;color:var(--w3-text3);
   border:1px solid var(--w3-line);border-radius:4px;padding:0 4px}
