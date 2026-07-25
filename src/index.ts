@@ -44,7 +44,8 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // ================= 批2-2：产品 CRUD（双步三语，继承 [[path]].js 骨架） =================
 // 写路径全部走 loadCtx（GitHub 读真源）→ validate(merge) → publish/unpublish（原子 commit）。
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
-import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory } from "./publish";
+import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory, publishHomepage } from "./publish";
+import type { HomeEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
 
@@ -216,6 +217,32 @@ app.post("/api/admin/preview/:id", async (c) => {
   const r: any = await publishProduct(c.env, cfg, ctx, v.prod, { isNew: !existing, oldCategory: existing?.category, email: operator(c), dryRun: true });
   if (r.error) return c.json(r, 502);
   return c.json({ ...r, merged_i18n_locales: Object.keys(v.prod.i18n) });
+});
+
+// ================= W5 P1：首页内容 CMS =================
+// GET 读 home.json 现值(表单回填)；PUT 保存编辑 → publishHomepage(regen 首页 + 双步 applyChrome) → 原子 commit。
+// body.dryRun=true → dryRun 预览(返回 previewHtml + 将写文件、不提交)——安全红线:提交前 diff/渲染预览。
+app.get("/api/admin/homepage", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const raw = await readFile(c.env, cfg, "data/pages/home.json");
+  if (!raw) return c.json({ error: "home.json missing" }, 404);
+  return c.json({ home: JSON.parse(raw) });
+});
+
+app.put("/api/admin/homepage", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const edits: HomeEdit[] = body?.edits;
+  if (!Array.isArray(edits)) return c.json({ error: "edits must be an array" }, 400);
+  const ctx = await loadCtx(c.env, cfg);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
+  try {
+    const r: any = await publishHomepage(c.env, cfg, ctx, edits, { email: operator(c), dryRun: !!body.dryRun });
+    if (r.error) return c.json(r, 502);
+    return c.json({ ok: true, ...r, note: r.dry ? "dry preview" : "homepage updated; Pages deploys in ~1 min" });
+  } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
 // run_worker_first=true 时 Worker 先跑：未匹配的路由必须**显式**回落静态资源

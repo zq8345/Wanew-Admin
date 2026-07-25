@@ -94,7 +94,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="dz-nav-item" onclick="showCats()"><span class="ic">⊞</span> 分类</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">▦</span> 媒体 <span class="soon-tag">SOON</span></div>
     <div class="dz-eyebrow">内容 Content</div>
-    <div class="dz-nav-item soon" title="即将上线"><span class="ic">⌂</span> 首页 <span class="soon-tag">SOON</span></div>
+    <div class="dz-nav-item" onclick="showHome()"><span class="ic">⌂</span> 首页</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">▭</span> 页面 <span class="soon-tag">SOON</span></div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">≣</span> 攻略 <span class="soon-tag">SOON</span></div>
     <div class="dz-eyebrow">增长 Growth</div>
@@ -194,6 +194,20 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
       <tbody id="cats-rows"><tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
     </table>
     <p class="muted" style="font-size:12px;margin-top:10px">保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。slug 增删属二期。</p>
+  </div>
+
+  <!-- ============ 首页内容 CMS（W5 P1·第一刀=Hero）============ -->
+  <div id="v-home" style="display:none">
+    <div class="edit-bar">
+      <button onclick="backToList()">← 返回列表</button>
+      <span class="idtag muted">首页 · Hero 文案</span>
+      <div class="spacer"></div>
+      <a class="editbar-link" href="https://wanew.com/" target="_blank">🌐 官网首页</a>
+      <button id="btn-home-preview" onclick="previewHome()" title="渲染首页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
+      <button class="primary" id="btn-home-save" onclick="saveHome()">🚀 保存首页</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">编辑首页 Hero 区文案（en / pt-BR / es-MX 三语）。保存=重烘焙首页并提交官网仓，≈1分钟上线。⚠️ 只改被编辑的语言、保留其余（i18n merge 防翻译擦除）；保存前可「预览」看真实渲染。</p>
+    <div id="home-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
   </main>
@@ -296,7 +310,7 @@ async function bulkDelete() {
 
 // ---------- 编辑 ----------
 const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
-function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : ""); }
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : "")); }
 function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
@@ -338,6 +352,65 @@ async function saveCats() {
     msg(`✅ 已保存（分类 ${(rc.commit || "").slice(0, 7)} / 机型 ${(rm.commit || "").slice(0, 7)}）· 重烘焙 ${rebaked} 类 · ≈1分钟上线`);
     await loadCats();   // 刷新产品编辑页的类目下拉（新显示名）
   } catch (e) { msg("保存失败：" + e.message, 1); }
+}
+
+// ---------- 首页内容 CMS（W5 P1·第一刀=Hero）----------
+const HOME_HERO_KEYS = [
+  { key: "home.hero.eyebrow", label: "眉题 (eyebrow)" },
+  { key: "home.hero.title", label: "主标题 (title)" },
+  { key: "home.hero.subtitle", label: "副标题 (subtitle)" },
+  { key: "home.hero.cta", label: "按钮文字 (CTA)" },
+  { key: "home.hero.serving", label: "serving 行" },
+];
+let homeData = {}, homeLocales = [];
+async function showHome() { showView("home"); await loadHomeView(); }
+async function loadHomeView() {
+  const box = $("#home-fields");
+  box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
+  try { const r = await api("/homepage"); homeData = r.home || {}; }
+  catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadHomeView()">重试</button></div>`; return; }
+  const first = HOME_HERO_KEYS.map((k) => homeData[k.key]).find((v) => v && typeof v === "object");
+  homeLocales = first ? Object.keys(first) : ["en"];
+  paintHome();
+}
+function paintHome() {
+  $("#home-fields").innerHTML = HOME_HERO_KEYS.map((k) => {
+    const vals = homeData[k.key] || {};
+    return `<div class="card"><h3>${esc(k.label)} <span class="muted" style="font-weight:400;font-size:11px">${esc(k.key)}</span></h3>` +
+      homeLocales.map((loc) => `<div class="field"><label>${esc(loc)}</label><textarea data-hk="${esc(k.key)}" data-hl="${esc(loc)}" style="min-height:52px">${esc(vals[loc] || "")}</textarea></div>`).join("") +
+      `</div>`;
+  }).join("");
+}
+function collectHomeEdits() {
+  const edits = [];
+  document.querySelectorAll("#home-fields textarea[data-hk]").forEach((t) => {
+    const key = t.dataset.hk, loc = t.dataset.hl, v = t.value;
+    const orig = (homeData[key] || {})[loc] || "";
+    if (v !== orig) edits.push({ key, locale: loc, value: v });
+  });
+  return edits;
+}
+async function previewHome() {
+  const edits = collectHomeEdits();
+  const w = window.open("", "_blank");   // 先开窗保住用户手势
+  if (w) w.document.write('<!doctype html><meta charset="utf-8"><title>首页预览渲染中…</title><body style="font:14px sans-serif;padding:24px;color:#333">渲染首页预览中…</body>');
+  try {
+    const r = await api("/homepage", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits, dryRun: true }) });
+    if (r.previewHtml && w) { const html = r.previewHtml.replace(/<head([^>]*)>/i, '<head$1><base href="https://wanew.com/">'); w.document.open(); w.document.write(html); w.document.close(); msg("已在新标签打开首页渲染预览（未提交、未上线）"); }
+    else { if (w) w.close(); msg("预览无渲染 HTML", 1); }
+  } catch (e) { if (w) w.close(); msg("预览失败：" + e.message, 1); }
+}
+async function saveHome() {
+  const edits = collectHomeEdits();
+  if (!edits.length) return msg("没有改动");
+  if (!confirm(`将保存 ${edits.length} 处首页 Hero 文案到官网仓（重烘焙首页三语+zh、≈1分钟上线）。\n此操作直接修改生产官网仓。确定？`)) return;
+  const btn = $("#btn-home-save"); btn.disabled = true; btn.textContent = "保存中…";
+  try {
+    const r = await api("/homepage", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits }) });
+    msg(`✅ 首页已保存（commit ${(r.commit || "").slice(0, 7)}）· 写 ${(r.files || []).length} 文件 · ≈1分钟官网可见`);
+    await loadHomeView();   // 重载=新值成为基线
+  } catch (e) { msg("保存失败：" + e.message, 1); }
+  btn.disabled = false; btn.textContent = "🚀 保存首页";
 }
 
 async function openEdit(id) {

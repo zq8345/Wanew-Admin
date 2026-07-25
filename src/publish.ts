@@ -8,7 +8,7 @@
 //     locale/urlOf → 列表卡片 URL 不本地化）。
 // 单真源铁律：render/chrome/github 全部跨目录 import，零复制。
 // @ts-ignore js 模块
-import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf } from "../vendor/render.js";
+import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf, renderHome } from "../vendor/render.js";
 // @ts-ignore js 模块
 import { makeChrome } from "../vendor/chrome.js";
 // @ts-ignore js 模块
@@ -258,4 +258,79 @@ export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string)
     }
   }
   return files;
+}
+
+// ================= W5 P1：首页内容 CMS（镜像官网 regen.mjs 首页生成）=================
+// 编辑 home.json i18n 文案 → renderHome + 双步 applyChrome 重烘焙首页（RENDER_SET=enabled∪render_extra，
+// render_extra[zh] 从模板播种、internal_noindex 出 noindex）→ 一个原子 commit。
+// 安全：i18n merge 只动被编辑的 (key,locale)、保留其余（防翻译擦除）；输入构造镜像 regen.mjs 的 renderHome
+// 调用，renderHome 逻辑走 vendored render.js（守卫盯其签名变更，如本次 internal_noindex 增量）。
+export interface HomeEdit { key: string; locale: string; value: string; }
+
+// i18n merge：旧 home.json 打底，只覆盖被编辑的 (key,locale)，其余 locale/键原样保留。
+export function mergeHome(homeJson: any, edits: HomeEdit[], allowedKeys: Set<string>, allowedLocales: string[]): { home?: any; error?: string } {
+  const home = JSON.parse(JSON.stringify(homeJson || {}));
+  for (const e of edits) {
+    if (!e || typeof e.key !== "string" || !allowedKeys.has(e.key)) return { error: `未知首页键：${e && e.key}` };
+    if (!allowedLocales.includes(e.locale)) return { error: `未知 locale：${e.locale}（允许 ${allowedLocales.join("/")}）` };
+    if (typeof e.value !== "string") return { error: `值须为字符串：${e.key}/${e.locale}` };
+    if (!home[e.key] || typeof home[e.key] !== "object") return { error: `键结构异常：${e.key}` };
+    home[e.key][e.locale] = e.value;   // 只动这一个 (key,locale)
+  }
+  return { home };
+}
+
+export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, edits: HomeEdit[], opts: { email: string; dryRun?: boolean }) {
+  const { locales, catalog, manifest, locDir, chrome } = ctx;
+  // 首页专属输入（loadCtx 未加载的单独读；publish 时读最新=对官网并发改动自愈）
+  const [homeRaw, homeTpl, tilesRaw, sharedRaw, featRaw] = await Promise.all([
+    readFile(env, cfg, "data/pages/home.json"),
+    readFile(env, cfg, "data/templates/home.html"),
+    readFile(env, cfg, "data/pages/home-tiles.json"),
+    readFile(env, cfg, "data/pages/shared.json"),
+    readFile(env, cfg, "data/pages/home-featured.json"),
+  ]);
+  const miss = [!homeRaw && "data/pages/home.json", !homeTpl && "data/templates/home.html", !tilesRaw && "data/pages/home-tiles.json"].filter(Boolean);
+  if (miss.length) return { error: "首页源缺失", missing: miss };
+  const homeJson = JSON.parse(homeRaw as string);
+  const tiles = JSON.parse(tilesRaw as string);
+  const shared = sharedRaw ? JSON.parse(sharedRaw) : {};
+  const featured = featRaw ? (JSON.parse(featRaw).ids || null) : null;
+  // 允许编辑的 locale = home.json 现有 locale 集（en/pt-BR/es-MX，从首键取）；允许键=全部现有键
+  const keys = Object.keys(homeJson);
+  const allowedLocales = keys.length ? Object.keys(homeJson[keys[0]]) : (locales.enabled || []);
+  const mv = mergeHome(homeJson, edits, new Set(keys), allowedLocales);
+  if (mv.error) return { error: mv.error };
+  const home = mv.home;
+
+  const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
+  const dirOf = (loc: string) => locDir[loc] ?? "";
+  const pageExists = (p: string, loc: string) => { const d = dirOf(loc); return !d || ctx.pagesList.has(`${d}${p}index.html`); };
+  const RENDER_SET: string[] = [...(locales.enabled || []), ...(locales.render_extra || [])];
+  const INTERNAL: string[] = locales.internal_noindex || [];
+  const cat = { ...catalog, ...shared, ...home };
+
+  const files: any[] = [{ path: "data/pages/home.json", content: matchJson(homeRaw, home) }];
+  const chromeErrors: string[] = [];
+  for (const locale of RENDER_SET) {
+    const dir = dirOf(locale);
+    const rel = dir ? `${dir}/index.html` : "index.html";
+    const isExtra = (locales.render_extra || []).includes(locale);
+    if (!ctx.pagesList.has(rel) && !isExtra) continue;   // enabled 缺页不创建；render_extra(zh)从模板播种
+    const h0 = renderHome(homeTpl, { locale, catalog: cat, tiles, modelDisplay: locales.model_display, urlOf, exists: pageExists, dirOf, enabled: locales.enabled, products: manifest, featured, internal_noindex: INTERNAL } as any /* 真源签名，tsc 对 js 默认参数(internal_noindex=[])推断为 never[]，同 regenListPage 走 as any */);
+    const { html, errors } = chrome.applyChrome((h0 as string).replace(/\r/g, ""), rel);   // ⭐双步第二段
+    chromeErrors.push(...errors);
+    const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;
+    files.push({ path: rel, content: matchEol(prevRaw, html) });
+  }
+  if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
+  const enPage = files.find((f) => f.path === "index.html");
+  if (opts.dryRun) return {   // dryRun=预览：返回 en 首页渲染 HTML（前端注 base 新标签）+ 将写文件
+    dry: true,
+    previewHtml: enPage ? enPage.content : null,
+    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })),
+    locales: RENDER_SET,
+  };
+  const r = await commitFiles(env, cfg, files, `admin: homepage content update (${opts.email})`);
+  return { ...r, files: files.map((f) => f.path) };
 }
