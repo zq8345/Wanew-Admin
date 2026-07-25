@@ -47,7 +47,7 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory, publishHomepage } from "./publish";
 import type { HomeEdit } from "./publish";
 // @ts-ignore js 模块
-import { ghConfig, readFile } from "../vendor/github.js";
+import { ghConfig, readFile, commitFiles } from "../vendor/github.js";
 // @ts-ignore js 模块 —— FORM_KEY = 形态/品类轴 slug 真源（render.js，守卫盯字节；本仓只读镜像）
 import { FORM_KEY } from "../vendor/render.js";
 
@@ -368,6 +368,70 @@ app.put("/api/admin/media/folder-batch", async (c) => {
   for (const key of keys) { if (folder) m.assign[key] = folder; else delete m.assign[key]; }
   await saveFolders(c.env, m);
   return c.json({ ok: true, count: keys.length, folder });
+});
+
+// ================= Joe③：分类增删（catalog.json 统一真源 · admin 侧）=================
+// ⚠️ 现阶段 INERT：官网 render.js/regen.mjs 仍硬编码，未读 catalog.json → admin 写了站上不变。
+// 官网 Stage A 后按契约把 render 改成读 catalog.json，两边同 release 才生效。
+// 种子=现 7 机型(categories.json+model_display) + 5 品类(FORM_KEY)逐字节等价。slug 建后不可变。
+const CATALOG_FILE = "data/catalog.json";
+function slugify(name: string): string {
+  return String(name).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+// 从现源合成种子（catalog.json 不存在时）——models 顺序=categories.json 顺序（=CATS 页面顺序）
+function seedCatalog(catsJson: any, locJson: any): { models: any[]; types: any[] } {
+  const md = (locJson && locJson.model_display) || {};
+  const models = ((catsJson && catsJson.categories) || []).map((c: any, i: number) => ({ slug: c.slug, name: c.display, detailName: md[c.slug] || c.display, order: i }));
+  const types = Object.entries(FORM_KEY as Record<string, string>).map(([name, slug], i) => ({ slug, name, order: i }));
+  return { models, types };
+}
+app.get("/api/admin/catalog", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const [catalogRaw, prodRaw, catsRaw, locRaw] = await Promise.all([
+    readFile(c.env, cfg, CATALOG_FILE),
+    readFile(c.env, cfg, "data/products-index.json"),
+    readFile(c.env, cfg, "data/categories.json"),
+    readFile(c.env, cfg, "data/locales.json"),
+  ]);
+  const products: any[] = prodRaw ? JSON.parse(prodRaw) : [];
+  let cat: { models: any[]; types: any[] }; let exists = false;
+  if (catalogRaw) { try { const j = JSON.parse(catalogRaw); cat = { models: j.models || [], types: j.types || [] }; exists = true; } catch { cat = seedCatalog(catsRaw ? JSON.parse(catsRaw) : {}, locRaw ? JSON.parse(locRaw) : {}); } }
+  else cat = seedCatalog(catsRaw ? JSON.parse(catsRaw) : {}, locRaw ? JSON.parse(locRaw) : {});
+  // 产品计数（删除护栏用）：model 按 p.category，type 按 p.form
+  const byModel: Record<string, number> = {}, byType: Record<string, number> = {};
+  for (const p of products) { byModel[p.category] = (byModel[p.category] || 0) + 1; if (p.form) byType[p.form] = (byType[p.form] || 0) + 1; }
+  return c.json({ models: cat.models, types: cat.types, exists, counts: { byModel, byType }, live: false, note: "INERT：官网 render 未读 catalog.json，保存后需官网 Stage A 后同 release 才生效。" });
+});
+app.put("/api/admin/catalog", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const models = Array.isArray(body?.models) ? body.models : null;
+  const types = Array.isArray(body?.types) ? body.types : null;
+  if (!models || !types) return c.json({ error: "models / types 必须是数组" }, 400);
+  // 校验：slug 合法+唯一、name 非空
+  const chk = (arr: any[], label: string, extra?: (x: any) => string | null): string | null => {
+    const seen = new Set<string>();
+    for (const x of arr) {
+      if (!x || typeof x.slug !== "string" || !/^[a-z0-9-]+$/.test(x.slug)) return `${label} slug 非法：${JSON.stringify(x?.slug)}（仅 a-z 0-9 -）`;
+      if (seen.has(x.slug)) return `${label} slug 重复：${x.slug}`;
+      seen.add(x.slug);
+      if (typeof x.name !== "string" || !x.name.trim()) return `${label} 显示名不能为空（slug=${x.slug}）`;
+      if (extra) { const e = extra(x); if (e) return e; }
+    }
+    return null;
+  };
+  const err = chk(models, "机型", (x) => (typeof x.detailName === "string" && x.detailName.trim() ? null : `机型 detailName 不能为空（slug=${x.slug}）`)) || chk(types, "品类");
+  if (err) return c.json({ error: err }, 400);
+  const norm = {
+    models: models.map((m: any, i: number) => ({ slug: m.slug, name: m.name.trim(), detailName: m.detailName.trim(), order: i })),
+    types: types.map((t: any, i: number) => ({ slug: t.slug, name: t.name.trim(), order: i })),
+  };
+  try {
+    const r = await commitFiles(c.env, cfg, [{ path: CATALOG_FILE, content: JSON.stringify(norm, null, 2) + "\n" }], `admin: catalog.json update (${operator(c)}) [INERT until render migration]`);
+    return c.json({ ok: true, ...r, live: false, note: "已写 data/catalog.json（INERT）——站上暂不变，待官网 render 迁移 release 生效。" });
+  } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
 // ================= W5 P5：仪表盘（只读概览，零写入零撞车；admin 默认落地页）=================

@@ -233,43 +233,42 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     </div>
   </div>
 
-  <!-- ============ 分类视图（两轴：机型 / 品类形态）============ -->
+  <!-- ============ 分类视图（catalog.json 增删/改名/排序 · INERT 直到官网 render 迁移）============ -->
   <div id="v-cats" style="display:none">
-    <!-- 返回=页级导航，置于 tab 切换之上（Joe①）-->
     <div class="dz-pagenav"><button onclick="backToList()">← 返回列表</button></div>
+    <div class="banner" id="cat-inert-banner" style="display:flex">
+      <span>⚠️ 分类增删/改名/排序保存到 <b>data/catalog.json</b>——<b>暂不改站点</b>。官网 render 目前仍硬编码机型/品类，需 Stage A 后按契约同步 release 才生效（避免与官网导航重构撞车）。slug 建后不可变（改=断 URL）。</span>
+    </div>
     <div class="dz-tabs">
       <button class="dz-tab active" data-tab="model" onclick="catTab('model')">机型 <span class="muted">Model</span></button>
       <button class="dz-tab" data-tab="form" onclick="catTab('form')">品类 / 形态 <span class="muted">Type</span></button>
     </div>
-
-    <!-- 机型轴（可编辑：categories.json + model_display）-->
-    <div id="cat-tab-model">
-      <div class="dz-toolbar">
-        <span class="muted">机型 · slug 一期不可变（改 slug=断 URL），仅改显示名与顺序</span>
-        <div class="spacer"></div>
-        <button class="primary" onclick="saveCats()">💾 保存（重烘焙受影响页）</button>
-      </div>
-      <table>
-        <thead><tr>
-          <th style="width:96px">顺序</th><th style="width:180px">机型 slug</th><th>显示名（列表/导航）</th><th>机型显示名（详情/首页瓦片）</th>
-        </tr></thead>
-        <tbody id="cats-rows"><tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
-      </table>
-      <p class="muted" style="font-size:12px;margin-top:10px">保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。slug 增删属二期。</p>
+    <div class="dz-toolbar">
+      <span class="muted" id="cat-hint"></span>
+      <div class="spacer"></div>
+      <button onclick="catAdd()">＋ 新增</button>
+      <button class="primary" onclick="saveCatalog()">💾 保存 catalog.json</button>
     </div>
 
-    <!-- 形态/品类轴（只读：FORM_KEY 代码真源）-->
-    <div id="cat-tab-form" style="display:none">
-      <div class="dz-toolbar">
-        <span class="muted">品类 / 形态 · 只读（slug/顺序定义在 render.js 代码，显示名=产品 form 字段）</span>
-      </div>
+    <!-- 机型轴 -->
+    <div id="cat-tab-model">
       <table>
         <thead><tr>
-          <th style="width:60px">#</th><th>形态显示名（Type）</th><th style="width:160px">slug（/type/…）</th><th style="width:100px">产品数</th>
+          <th style="width:78px">顺序</th><th style="width:170px">slug</th><th>显示名（列表/导航）</th><th>机型显示名（详情/首页瓦片）</th><th style="width:64px">产品</th><th style="width:52px"></th>
         </tr></thead>
-        <tbody id="forms-rows"><tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
+        <tbody id="cats-rows"><tr><td colspan="6" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
       </table>
-      <p class="muted" style="font-size:12px;margin-top:10px">⚠️ 形态轴当前**只读**——显示名/顺序定义在官网 <span class="tnum">render.js（FORM_KEY）</span> 与 <span class="tnum">regen.mjs（TYPES）</span>，无独立数据文件。做成可编辑（改名+排序）需引入 <span class="tnum">data/forms.json</span> 并重构官网 render，属碰官网仓的跨窗改动，待协调后一批做。</p>
+    </div>
+
+    <!-- 品类/形态轴 -->
+    <div id="cat-tab-form" style="display:none">
+      <table>
+        <thead><tr>
+          <th style="width:78px">顺序</th><th style="width:170px">slug（/type/…）</th><th>显示名（=产品 form 字段）</th><th style="width:64px">产品</th><th style="width:52px"></th>
+        </tr></thead>
+        <tbody id="forms-rows"><tr><td colspan="5" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
+      </table>
+      <p class="muted" style="font-size:12px;margin-top:10px">⚠️ 改「品类显示名」= 改产品 <span class="tnum">form</span> 关联键——官网迁移 release 时需同步把该品类下产品的 form 值一并改（契约已注明）。新增/删除仅写 catalog.json。</p>
     </div>
   </div>
 
@@ -427,65 +426,90 @@ const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
 function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : "")))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
 function backToList() { showView("list"); loadList(); }
 
-// ---------- 分类 / 机型管理 ----------
-let catsEdit = [];
-async function showCats() { showView("cats"); catTab("model"); await loadCatsView(); }
-async function loadCatsView() {
-  const rows = $("#cats-rows");
-  rows.innerHTML = `<tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr>`;
+// ---------- 分类增删（catalog.json：机型 model + 品类 type，INERT 直到官网 render 迁移）----------
+let catModels = [], catTypes = [], catCounts = { byModel: {}, byType: {} }, catActive = "model";
+async function showCats() { showView("cats"); catTab("model"); await loadCatalog(); }
+async function loadCatalog() {
+  $("#cats-rows").innerHTML = `<tr><td colspan="6" class="muted">加载中… <span class="spin"></span></td></tr>`;
+  $("#forms-rows").innerHTML = `<tr><td colspan="5" class="muted">加载中… <span class="spin"></span></td></tr>`;
   try {
-    const [cg, mg] = await Promise.all([api("/categories"), api("/models")]);
-    const md = mg.model_display || {};
-    window._origMd = md;   // 保留原全键集（含 performance-gen-2 等非类目孤儿键；PUT /models 校验键集不可变）
-    catsEdit = (cg.categories || []).map((c) => ({ slug: c.slug, display: c.display || "", model: md[c.slug] || "" }));
-  } catch (e) { rows.innerHTML = `<tr><td colspan="4" class="muted">加载失败：${esc(e.message)} <button onclick="loadCatsView()">重试</button></td></tr>`; return; }
-  paintCats();
+    const d = await api("/catalog");
+    catModels = d.models || []; catTypes = d.types || []; catCounts = d.counts || { byModel: {}, byType: {} };
+  } catch (e) { $("#cats-rows").innerHTML = `<tr><td colspan="6" class="muted">加载失败：${esc(e.message)} <button onclick="loadCatalog()">重试</button></td></tr>`; return; }
+  paintCatModels(); paintCatTypes();
 }
-function paintCats() {
-  $("#cats-rows").innerHTML = catsEdit.map((c, i) => `
-    <tr>
-      <td class="muted"><button onclick="catMove(${i},-1)" ${i === 0 ? "disabled" : ""}>↑</button> <button onclick="catMove(${i},1)" ${i === catsEdit.length - 1 ? "disabled" : ""}>↓</button></td>
-      <td class="muted">${esc(c.slug)}</td>
-      <td><input value="${esc(c.display)}" oninput="catsEdit[${i}].display=this.value" style="width:100%"></td>
-      <td><input value="${esc(c.model)}" oninput="catsEdit[${i}].model=this.value" style="width:100%"></td>
-    </tr>`).join("") || `<tr><td colspan="4" class="muted">无类目</td></tr>`;
-}
-function catMove(i, d) { const j = i + d; if (j < 0 || j >= catsEdit.length) return; const t = catsEdit[i]; catsEdit[i] = catsEdit[j]; catsEdit[j] = t; paintCats(); }
-async function saveCats() {
-  for (const c of catsEdit) {
-    if (!c.display.trim()) return msg("显示名不能为空：" + c.slug, 1);
-    if (!c.model.trim()) return msg("机型显示名不能为空：" + c.slug, 1);
-  }
-  if (!confirm(`将把分类显示名 / 机型显示名 / 顺序保存到官网仓（重烘焙受影响页、≈1分钟上线）。\n此操作直接修改生产官网仓。确定？`)) return;
-  try {
-    const rc = await api("/categories", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ categories: catsEdit.map((c) => ({ slug: c.slug, display: c.display.trim() })) }) });
-    const model_display = { ...(window._origMd || {}) };   // 原全键集打底（防掉孤儿键触发键集校验 400）
-    for (const c of catsEdit) model_display[c.slug] = c.model.trim();   // 只覆盖可编辑的 7 个类目
-    const rm = await api("/models", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ model_display }) });
-    const rebaked = (rc.rebaked || []).length + (rm.rebaked || []).length;
-    msg(`✅ 已保存（分类 ${(rc.commit || "").slice(0, 7)} / 机型 ${(rm.commit || "").slice(0, 7)}）· 重烘焙 ${rebaked} 类 · ≈1分钟上线`);
-    await loadCats();   // 刷新产品编辑页的类目下拉（新显示名）
-  } catch (e) { msg("保存失败：" + e.message, 1); }
-}
-
-// ---------- 分类：机型 / 品类形态 双 tab 切换 ----------
 function catTab(t) {
+  catActive = t;
   document.querySelectorAll("#v-cats .dz-tab").forEach((el) => el.classList.toggle("active", el.dataset.tab === t));
   $("#cat-tab-model").style.display = t === "model" ? "" : "none";
   $("#cat-tab-form").style.display = t === "form" ? "" : "none";
-  if (t === "form" && !_formsLoaded) loadForms();
+  $("#cat-hint").textContent = t === "model"
+    ? "机型 Model · 增/删/改名/排序 → catalog.json。slug 建后不可变；有产品的机型禁删。"
+    : "品类 / 形态 Type · 增/删/改名/排序 → catalog.json。改显示名=改产品 form 关联键（迁移时同步）。";
 }
-let _formsLoaded = false;
-async function loadForms() {
-  const rows = $("#forms-rows");
-  rows.innerHTML = `<tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr>`;
+function mvUp(arr, i) { if (i > 0) { const t = arr[i]; arr[i] = arr[i - 1]; arr[i - 1] = t; } }
+function mvDn(arr, i) { if (i < arr.length - 1) { const t = arr[i]; arr[i] = arr[i + 1]; arr[i + 1] = t; } }
+function paintCatModels() {
+  $("#cats-rows").innerHTML = catModels.map((m, i) => {
+    const n = catCounts.byModel[m.slug] || 0;
+    return `<tr>
+      <td class="muted"><button onclick="catMoveModel(${i},-1)" ${i === 0 ? "disabled" : ""}>↑</button> <button onclick="catMoveModel(${i},1)" ${i === catModels.length - 1 ? "disabled" : ""}>↓</button></td>
+      <td class="muted tnum">${esc(m.slug)}</td>
+      <td><input value="${esc(m.name)}" oninput="catModels[${i}].name=this.value" style="width:100%"></td>
+      <td><input value="${esc(m.detailName)}" oninput="catModels[${i}].detailName=this.value" style="width:100%"></td>
+      <td class="tnum ${n ? "" : "muted"}">${n}</td>
+      <td><button class="danger" onclick="catDelModel(${i})" ${n ? `disabled title="有 ${n} 个产品，禁删——请先移走"` : ""}>删</button></td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">无机型</td></tr>`;
+}
+function paintCatTypes() {
+  $("#forms-rows").innerHTML = catTypes.map((t, i) => {
+    const n = catCounts.byType[t.name] || 0;
+    return `<tr>
+      <td class="muted"><button onclick="catMoveType(${i},-1)" ${i === 0 ? "disabled" : ""}>↑</button> <button onclick="catMoveType(${i},1)" ${i === catTypes.length - 1 ? "disabled" : ""}>↓</button></td>
+      <td class="muted tnum">${esc(t.slug)}</td>
+      <td><input value="${esc(t.name)}" oninput="catTypes[${i}].name=this.value" style="width:100%"></td>
+      <td class="tnum ${n ? "" : "muted"}">${n}</td>
+      <td><button class="danger" onclick="catDelType(${i})" ${n ? `disabled title="有 ${n} 个产品，禁删——请先移走"` : ""}>删</button></td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="5" class="muted">无品类</td></tr>`;
+}
+function catMoveModel(i, d) { d < 0 ? mvUp(catModels, i) : mvDn(catModels, i); paintCatModels(); }
+function catMoveType(i, d) { d < 0 ? mvUp(catTypes, i) : mvDn(catTypes, i); paintCatTypes(); }
+function catDelModel(i) {
+  const m = catModels[i]; const n = catCounts.byModel[m.slug] || 0;
+  if (n) return msg(`「${m.name}」有 ${n} 个产品，禁删——请先移走这些产品`, 1);
+  if (!confirm(`从 catalog.json 删除机型「${m.name}」(${m.slug})？\n（不级联删产品；保存后需官网 release 才生效）`)) return;
+  catModels.splice(i, 1); paintCatModels();
+}
+function catDelType(i) {
+  const t = catTypes[i]; const n = catCounts.byType[t.name] || 0;
+  if (n) return msg(`「${t.name}」有 ${n} 个产品，禁删——请先移走这些产品`, 1);
+  if (!confirm(`从 catalog.json 删除品类「${t.name}」(${t.slug})？\n（保存后需官网 release 才生效）`)) return;
+  catTypes.splice(i, 1); paintCatTypes();
+}
+function slugifyClient(name) { return String(name).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
+function catAdd() {
+  const isModel = catActive === "model";
+  const name = (prompt(`新增${isModel ? "机型" : "品类"}显示名：`) || "").trim();
+  if (!name) return;
+  const slug = slugifyClient(name);
+  if (!slug) return msg("名称需含字母/数字（用于生成 slug）", 1);
+  const arr = isModel ? catModels : catTypes;
+  if (arr.some((x) => x.slug === slug)) return msg(`slug「${slug}」已存在`, 1);
+  if (isModel) { catModels.push({ slug, name, detailName: name, order: catModels.length }); paintCatModels(); }
+  else { catTypes.push({ slug, name, order: catTypes.length }); paintCatTypes(); }
+  msg(`已新增（slug=${slug}）· 记得保存`);
+}
+async function saveCatalog() {
+  for (const m of catModels) { if (!m.name.trim()) return msg(`机型显示名不能为空（${m.slug}）`, 1); if (!m.detailName.trim()) return msg(`机型 detailName 不能为空（${m.slug}）`, 1); }
+  for (const t of catTypes) { if (!t.name.trim()) return msg(`品类显示名不能为空（${t.slug}）`, 1); }
+  if (!confirm(`保存 catalog.json（机型 ${catModels.length} / 品类 ${catTypes.length}）到官网仓。\n⚠️ INERT：站上暂不变，需官网 Stage A 后同步 render release 才生效。\n确定？`)) return;
   try {
-    const d = await api("/forms");
-    const known = (d.forms || []).map((f, i) => `<tr><td class="muted tnum">${i + 1}</td><td>${esc(f.form)}</td><td class="tnum muted">${esc(f.slug)}</td><td class="tnum">${f.count}</td></tr>`).join("");
-    const orph = (d.orphans || []).map((f) => `<tr><td class="muted">⚠️</td><td>${esc(f.form)} <span class="muted" style="font-size:11px">(未映射 slug，列表页筛不出)</span></td><td class="muted">—</td><td class="tnum">${f.count}</td></tr>`).join("");
-    rows.innerHTML = known + orph || `<tr><td colspan="4" class="muted">无形态</td></tr>`;
-    _formsLoaded = true;
-  } catch (e) { rows.innerHTML = `<tr><td colspan="4" class="muted">加载失败：${esc(e.message)} <button onclick="loadForms()">重试</button></td></tr>`; }
+    const r = await api("/catalog", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ models: catModels, types: catTypes }) });
+    msg(`✅ 已写 catalog.json（commit ${(r.commit || "").slice(0, 7)}）· INERT，待官网 render 迁移生效`);
+    await loadCatalog();
+  } catch (e) { msg("保存失败：" + e.message, 1); }
 }
 
 // ---------- 首页内容 CMS（W5 P1·第一刀=Hero）----------
