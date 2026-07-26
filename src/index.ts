@@ -44,7 +44,7 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // ================= 批2-2：产品 CRUD（双步三语，继承 [[path]].js 骨架） =================
 // 写路径全部走 loadCtx（GitHub 读真源）→ validate(merge) → publish/unpublish（原子 commit）。
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
-import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishService, SERVICE_META_KEYS, SERVICE_CARDS, publishPageMeta, SEO_PAGES } from "./publish";
+import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishService, SERVICE_META_KEYS, SERVICE_CARDS, publishPageMeta, SEO_PAGES, parseAuditMessage } from "./publish";
 import type { HomeEdit, ContactEdit, ServiceEdit, SeoEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
@@ -345,6 +345,37 @@ app.put("/api/admin/seo/:slug", async (c) => {
     if (r.error) return c.json(r, 502);
     return c.json({ ok: true, ...r, note: r.dry ? "dry preview" : `SEO ${slug} updated; Pages deploys in ~1 min` });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
+});
+
+// ================= P0-1 审计日志：官网仓 commit 历史里 admin: 那些（只读，零写路径）=================
+// 数据源=GitHub Commits API（已在仪表盘活动用过）；过滤 admin: 前缀+解析 operator/操作类型；筛选/分页。
+// 本期精简：列表(时间·操作人·类型·message)+→GitHub 链接；变更文件详情/回滚=二期。
+app.get("/api/admin/audit", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const page = Math.max(1, parseInt(c.req.query("page") || "1", 10) || 1);
+  const params = new URLSearchParams({ per_page: "100", page: String(page) });
+  const since = c.req.query("since"), until = c.req.query("until");
+  if (since) params.set("since", since);
+  if (until) params.set("until", until);
+  let arr: any[] = [];
+  try {
+    const res = await fetch(`https://api.github.com/repos/${c.env.GITHUB_REPO}/commits?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${c.env.GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return c.json({ error: "github commits failed", status: res.status }, 502);
+    const j: any = await res.json();
+    if (Array.isArray(j)) arr = j;
+  } catch (e: any) { return c.json({ error: "github fetch error", detail: String(e).slice(0, 200) }, 502); }
+  const all = arr.map((x: any) => {
+    const p = parseAuditMessage(x.commit?.message || "");
+    if (!p) return null;   // 非 admin commit 跳过
+    return { sha: String(x.sha).slice(0, 7), date: x.commit?.committer?.date || null, url: x.html_url || null, operator: p.operator, operation: p.operation, opType: p.opType };
+  }).filter(Boolean) as any[];
+  // 服务端筛选 operator/type
+  const fOp = c.req.query("operator") || "", fType = c.req.query("type") || "";
+  const entries = all.filter((e) => (!fOp || e.operator === fOp) && (!fType || e.opType === fType));
+  return c.json({ entries, page, hasMore: arr.length === 100, operators: [...new Set(all.map((e) => e.operator))], scanned: arr.length, adminCount: all.length });
 });
 
 // ================= Team A：访问状态（只读；权限真源=Cloudflare Access，此处只展示不控制）=================

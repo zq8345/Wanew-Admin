@@ -347,6 +347,18 @@ export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, payload: { e
   return { ...r, files: files.map((f) => f.path) };
 }
 
+// ================= 审计日志：从 admin commit message 抽结构（纯函数·可 node 单测）=================
+// admin 所有写都以 `admin: <操作> (<operator email>)` 提交官网仓 → 审计源=commit 历史里 admin: 那些。
+export function parseAuditMessage(msg: string): { operator: string; operation: string; opType: string } | null {
+  const line = String(msg || "").split("\n")[0];
+  const m = line.match(/^admin:\s*(.+?)\s*\(([^)]*@[^)]*)\)/);   // admin: <op> (<email>)
+  if (!m) return null;   // 非 admin 前缀(官网窗 commit)不进审计
+  const operation = m[1].trim(), operator = m[2].trim();
+  const l = operation.toLowerCase();
+  const opType = /product/.test(l) ? "产品" : /homepage/.test(l) ? "首页" : /contact/.test(l) ? "联系" : /(guides|service)/.test(l) ? "攻略" : /seo meta/.test(l) ? "SEO" : /(catalog|categor|model_display)/.test(l) ? "分类" : "其它";
+  return { operator, operation, opType };
+}
+
 // ================= 阶段B：联系方式（data/contact-info.json 语言无关值）=================
 // 编辑 11 个语言无关值 → renderPage(config=contact-info) 重烘焙 /contact/ 页×locales + 双步 applyChrome
 // → 一个原子 commit（contact-info.json + contact/index.html×RENDER_SET）。镜像 regen.mjs 的 page 循环

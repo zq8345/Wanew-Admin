@@ -163,6 +163,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">⇄</span> 翻译 <span class="soon-tag">SOON</span></div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">✉</span> 询盘 <span class="soon-tag">SOON</span></div>
     <div class="dz-side-foot">
+      <div class="dz-nav-item" data-view="audit" onclick="showAudit()"><span class="ic">▤</span> 审计日志</div>
       <div class="dz-nav-item" data-view="settings" onclick="showSettings()"><span class="ic">⚙</span> 设置</div>
       <div class="dz-nav-item" data-view="team" onclick="showTeam()"><span class="ic">◑</span> 团队</div>
       <div class="dz-user-foot"><span class="av">◐</span> <span class="who" id="who"></span></div>
@@ -378,6 +379,20 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div id="team-body"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
+  <div id="v-audit" style="display:none">
+    <div class="dz-pagehead"><h1>审计日志</h1><span class="meta">后台操作记录（只读·来自官网仓 commit 历史）</span></div>
+    <div class="dz-toolbar">
+      <select id="audit-f-op" onchange="loadAudit()"><option value="">全部操作人</option></select>
+      <select id="audit-f-type" onchange="loadAudit()"><option value="">全部类型</option><option>产品</option><option>首页</option><option>联系</option><option>攻略</option><option>SEO</option><option>分类</option><option>其它</option></select>
+      <span class="muted" id="audit-count"></span>
+    </div>
+    <table>
+      <thead><tr><th style="width:150px">时间</th><th style="width:180px">操作人</th><th style="width:70px">类型</th><th>操作</th><th style="width:90px">commit</th></tr></thead>
+      <tbody id="audit-rows"><tr><td colspan="5" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
+    </table>
+    <div style="margin-top:12px;text-align:center"><button id="audit-more" onclick="auditMore()" style="display:none">加载更早…</button></div>
+  </div>
+
   </main>
 </div>
 <div class="msg" id="msg"></div>
@@ -479,7 +494,7 @@ async function bulkDelete() {
 
 // ---------- 编辑 ----------
 const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
-function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-contact").style.display = v === "contact" ? "" : "none"; $("#v-guides").style.display = v === "guides" ? "" : "none"; $("#v-seo").style.display = v === "seo" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#v-team").style.display = v === "team" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "contact" ? "› 联系方式" : (v === "guides" ? "› 攻略" : (v === "seo" ? "› SEO" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : (v === "team" ? "› 团队" : "")))))))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-contact").style.display = v === "contact" ? "" : "none"; $("#v-guides").style.display = v === "guides" ? "" : "none"; $("#v-seo").style.display = v === "seo" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#v-team").style.display = v === "team" ? "" : "none"; $("#v-audit").style.display = v === "audit" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "contact" ? "› 联系方式" : (v === "guides" ? "› 攻略" : (v === "seo" ? "› SEO" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : (v === "team" ? "› 团队" : (v === "audit" ? "› 审计日志" : ""))))))))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
 function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
@@ -1098,6 +1113,39 @@ function paintTeam(d) {
       <p style="margin-top:6px"><a class="editbar-link" href="https://one.dash.cloudflare.com/?to=/:account/access/apps" target="_blank" style="display:inline-flex">🔐 打开 Cloudflare Access</a></p>
     </div>
     <p class="muted" style="font-size:12px">本页数据=Worker 从 Cloudflare Access header 与环境变量读取（无写路径、不碰仓）。名册若要记「谁负责什么」的备注功能，属可选二期（Joe 提再做）。</p>`;
+}
+
+// ---------- 审计日志（P0-1·只读·官网仓 commit 历史里 admin: 那些）----------
+let auditEntries = [], auditPage = 1, auditOpsLoaded = false;
+async function showAudit() { showView("audit"); auditPage = 1; auditEntries = []; await loadAudit(); }
+async function loadAudit() {   // 重载(筛选变或首开)：page=1、清空累积
+  auditPage = 1; auditEntries = [];
+  $("#audit-rows").innerHTML = `<tr><td colspan="5" class="muted">加载中… <span class="spin"></span></td></tr>`;
+  await fetchAudit();
+}
+async function auditMore() { auditPage++; await fetchAudit(true); }
+async function fetchAudit(append) {
+  const op = $("#audit-f-op").value, type = $("#audit-f-type").value;
+  const qs = `?page=${auditPage}` + (op ? `&operator=${encodeURIComponent(op)}` : "") + (type ? `&type=${encodeURIComponent(type)}` : "");
+  let r;
+  try { r = await api("/audit" + qs); }
+  catch (e) { if (!append) $("#audit-rows").innerHTML = `<tr><td colspan="5" class="muted">加载失败：${esc(e.message)} <button onclick="loadAudit()">重试</button></td></tr>`; return; }
+  auditEntries = append ? auditEntries.concat(r.entries || []) : (r.entries || []);
+  // 操作人下拉（首次填充；服务端只返回当前页出现的，累积去重）
+  if (!auditOpsLoaded || !append) { const sel = $("#audit-f-op"); const cur = sel.value; const set = new Set([...[...sel.options].map((o) => o.value), ...(r.operators || [])].filter(Boolean)); sel.innerHTML = `<option value="">全部操作人</option>` + [...set].map((o) => `<option${o === cur ? " selected" : ""}>${esc(o)}</option>`).join(""); auditOpsLoaded = true; }
+  paintAudit(r);
+}
+function paintAudit(r) {
+  $("#audit-count").textContent = `本页扫 ${r.scanned || 0} 提交 · 后台操作 ${auditEntries.length} 条`;
+  $("#audit-rows").innerHTML = auditEntries.map((e) => `
+    <tr>
+      <td class="muted tnum" style="font-size:12px">${e.date ? esc(new Date(e.date).toLocaleString()) : "—"}</td>
+      <td class="tnum" style="font-size:12px">${esc(e.operator)}</td>
+      <td><span class="pill pf">${esc(e.opType)}</span></td>
+      <td style="font-size:12.5px">${esc(e.operation)}</td>
+      <td>${e.url ? `<a class="ttl-link" href="${esc(e.url)}" target="_blank"><span class="tnum">${esc(e.sha)}</span> <span class="ext">↗</span></a>` : `<span class="tnum muted">${esc(e.sha)}</span>`}</td>
+    </tr>`).join("") || `<tr><td colspan="5" class="muted">无匹配的后台操作记录</td></tr>`;
+  $("#audit-more").style.display = r.hasMore ? "" : "none";
 }
 
 async function openEdit(id) {
