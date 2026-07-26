@@ -498,3 +498,79 @@ export async function publishService(env: Env, cfg: any, ctx: Ctx, edits: Servic
   const r = await commitFiles(env, cfg, files, `admin: guides(/service/) copy update (${opts.email})`);
   return { ...r, files: files.map((f) => f.path) };
 }
+
+// ================= SEO A：信息页 meta title/desc 四语编辑（每页 data/pages/{slug}.json 的 {slug}.meta.*）=================
+// ⚠️ 收窄安全页：排除 service（Guides A 已管其 meta）+ about 系（官网重排 about.json 撞车）。
+// 每页字段=模板【实际渲染】的（faq 模板只有 title slot，写 desc 不渲染=不放）。类目页(mounts/power/…)是 renderPage hub 页
+// （无产品 category=mounts，故非产品列表页、无 grid 顾虑）。contact 页有 {{cfg}} token→renderPage 必须带 config(contact-info)。
+export const SEO_PAGES: { slug: string; fields: ("title" | "desc")[]; label: string }[] = [
+  { slug: "contact", fields: ["title", "desc"], label: "联系" },
+  { slug: "faq", fields: ["title"], label: "FAQ" },
+  { slug: "mounts", fields: ["title", "desc"], label: "支架 Mounts" },
+  { slug: "power", fields: ["title", "desc"], label: "电源 Power" },
+  { slug: "marine", fields: ["title", "desc"], label: "船用 Marine" },
+  { slug: "rv-off-grid", fields: ["title", "desc"], label: "房车/离网 RV" },
+  { slug: "industrial", fields: ["title", "desc"], label: "工业 Industrial" },
+  { slug: "compatibility", fields: ["title", "desc"], label: "兼容 Compatibility" },
+];
+export interface SeoEdit { field: string; locale: string; value: string; }   // slug 由端点参数定，不在 edit 里
+
+// 纯函数：白名单校验 + merge（可 node 单测"越界字段/非法 slug 被拒"）
+export function mergePageMeta(slug: string, pcatJson: any, edits: SeoEdit[]): { merged?: any; error?: string } {
+  const page = SEO_PAGES.find((p) => p.slug === slug);
+  if (!page) return { error: `页不在 SEO 白名单：${slug}（只允许 ${SEO_PAGES.map((p) => p.slug).join("/")}；service 归攻略编辑器、about 系等官网重排）` };
+  const merged = JSON.parse(JSON.stringify(pcatJson || {}));
+  for (const e of edits) {
+    if (!e || typeof e.field !== "string" || !page.fields.includes(e.field as any)) return { error: `${slug} 不允许字段：${e && e.field}（仅 ${page.fields.join("/")}）` };
+    if (typeof e.value !== "string" || typeof e.locale !== "string") return { error: "编辑项类型错" };
+    const key = `${slug}.meta.${e.field}`;
+    if (!merged[key] || typeof merged[key] !== "object") return { error: `键不存在/结构异常：${key}` };
+    if (!(e.locale in merged[key])) return { error: `未知 locale：${e.locale}（${key} 无此语言）` };
+    merged[key][e.locale] = e.value;
+  }
+  return { merged };
+}
+
+export async function publishPageMeta(env: Env, cfg: any, ctx: Ctx, slug: string, edits: SeoEdit[], opts: { email: string; dryRun?: boolean }) {
+  if (!SEO_PAGES.some((p) => p.slug === slug)) return { error: `页不在 SEO 白名单：${slug}` };
+  if (!edits.length) return { error: "没有改动" };
+  const { locales, catalog, chrome, locDir } = ctx;
+  const [pcatRaw, tpl, sharedRaw, cfgRaw] = await Promise.all([
+    readFile(env, cfg, `data/pages/${slug}.json`),
+    readFile(env, cfg, `data/templates/page-${slug}.html`),
+    readFile(env, cfg, "data/pages/shared.json"),
+    readFile(env, cfg, "data/contact-info.json"),   // contact 页 {{cfg}} 需要；其它页忽略（镜像 regen 传给每页）
+  ]);
+  const miss = [!pcatRaw && `data/pages/${slug}.json`, !tpl && `data/templates/page-${slug}.html`].filter(Boolean);
+  if (miss.length) return { error: "页源缺失", missing: miss };
+  const pcat = JSON.parse(pcatRaw as string);
+  const shared = sharedRaw ? JSON.parse(sharedRaw) : {};
+  const contactCfg = cfgRaw ? JSON.parse(cfgRaw) : {};
+  const mv = mergePageMeta(slug, pcat, edits);
+  if (mv.error) return { error: mv.error };
+
+  const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
+  const dirOf = (loc: string) => locDir[loc] ?? "";
+  const RENDER_SET: string[] = [...(locales.enabled || []), ...(locales.render_extra || [])];
+  const INTERNAL: string[] = locales.internal_noindex || [];
+  const catBase = { ...catalog, ...shared, ...mv.merged };
+
+  const files: any[] = [{ path: `data/pages/${slug}.json`, content: matchJson(pcatRaw, mv.merged) }];
+  const chromeErrors: string[] = [];
+  for (const locale of RENDER_SET) {
+    const dir = dirOf(locale);
+    const rel = dir ? `${dir}/${slug}/index.html` : `${slug}/index.html`;
+    const isExtra = (locales.render_extra || []).includes(locale);
+    if (!ctx.pagesList.has(rel) && !isExtra) continue;
+    const h0 = renderPage(tpl, { locale, catalog: catBase, urlOf, path: `/${slug}/`, dirOf, enabled: locales.enabled, internal_noindex: INTERNAL, config: contactCfg } as any);
+    const { html, errors } = chrome.applyChrome((h0 as string).replace(/\r/g, ""), rel);
+    chromeErrors.push(...errors);
+    const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;
+    files.push({ path: rel, content: matchEol(prevRaw, html) });
+  }
+  if (chromeErrors.length) return { error: "chrome 注入报错（未提交）", detail: chromeErrors.slice(0, 5) };
+  const enPage = files.find((f) => f.path === `${slug}/index.html`);
+  if (opts.dryRun) return { dry: true, previewHtml: enPage ? enPage.content : null, files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })), locales: RENDER_SET };
+  const r = await commitFiles(env, cfg, files, `admin: SEO meta update ${slug} (${opts.email})`);
+  return { ...r, files: files.map((f) => f.path) };
+}

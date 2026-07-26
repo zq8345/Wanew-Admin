@@ -44,8 +44,8 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // ================= 批2-2：产品 CRUD（双步三语，继承 [[path]].js 骨架） =================
 // 写路径全部走 loadCtx（GitHub 读真源）→ validate(merge) → publish/unpublish（原子 commit）。
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
-import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishService, SERVICE_META_KEYS, SERVICE_CARDS } from "./publish";
-import type { HomeEdit, ContactEdit, ServiceEdit } from "./publish";
+import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishService, SERVICE_META_KEYS, SERVICE_CARDS, publishPageMeta, SEO_PAGES } from "./publish";
+import type { HomeEdit, ContactEdit, ServiceEdit, SeoEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
 // @ts-ignore js 模块 —— FORM_KEY = 形态/品类轴 slug 真源（render.js，守卫盯字节；本仓只读镜像）
@@ -311,6 +311,39 @@ app.put("/api/admin/guides", async (c) => {
     const r: any = await publishService(c.env, cfg, ctx, body.edits as ServiceEdit[], { email: operator(c), dryRun: !!body.dryRun });
     if (r.error) return c.json(r, 502);
     return c.json({ ok: true, ...r, note: r.dry ? "dry preview" : "guides updated; Pages deploys in ~1 min" });
+  } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
+});
+
+// ================= SEO A：信息页 meta title/desc 四语编辑器（收窄安全页，硬白名单）=================
+// GET 回填各安全页 meta；PUT /seo/:slug → publishPageMeta(白名单 merge {slug}.meta.*→renderPage /{slug}/→commit)。
+// service 归攻略编辑器、about 系等官网重排——不在此。canonical/OG/hreflang 派生、不暴露编辑。
+app.get("/api/admin/seo", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const raws = await Promise.all(SEO_PAGES.map((p) => readFile(c.env, cfg, `data/pages/${p.slug}.json`)));
+  const pages = SEO_PAGES.map((p, i) => {
+    const j = raws[i] ? JSON.parse(raws[i] as string) : {};
+    const meta: Record<string, any> = {};
+    for (const f of p.fields) meta[f] = j[`${p.slug}.meta.${f}`] || {};
+    return { slug: p.slug, label: p.label, fields: p.fields, meta };
+  });
+  const first = pages.map((p) => p.meta[p.fields[0]]).find((v) => v && typeof v === "object");
+  const locales = first ? Object.keys(first).filter((l) => !l.startsWith("reason")) : [];
+  return c.json({ pages, locales });
+});
+
+app.put("/api/admin/seo/:slug", async (c) => {
+  const slug = c.req.param("slug");
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  if (!Array.isArray(body?.edits)) return c.json({ error: "edits must be an array" }, 400);
+  const ctx = await loadCtx(c.env, cfg);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
+  try {
+    const r: any = await publishPageMeta(c.env, cfg, ctx, slug, body.edits as SeoEdit[], { email: operator(c), dryRun: !!body.dryRun });
+    if (r.error) return c.json(r, 502);
+    return c.json({ ok: true, ...r, note: r.dry ? "dry preview" : `SEO ${slug} updated; Pages deploys in ~1 min` });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 

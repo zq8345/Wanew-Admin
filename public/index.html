@@ -159,7 +159,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">▭</span> 页面 <span class="soon-tag">SOON</span></div>
     <div class="dz-nav-item" data-view="guides" onclick="showGuides()"><span class="ic">≣</span> 攻略</div>
     <div class="dz-eyebrow">增长 Growth</div>
-    <div class="dz-nav-item soon" title="即将上线"><span class="ic">◔</span> SEO <span class="soon-tag">SOON</span></div>
+    <div class="dz-nav-item" data-view="seo" onclick="showSeo()"><span class="ic">◔</span> SEO</div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">⇄</span> 翻译 <span class="soon-tag">SOON</span></div>
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">✉</span> 询盘 <span class="soon-tag">SOON</span></div>
     <div class="dz-side-foot">
@@ -323,6 +323,21 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div id="guides-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
+  <!-- ============ SEO A·信息页 meta title/desc 四语编辑器（收窄安全页）============ -->
+  <div id="v-seo" style="display:none">
+    <div class="edit-bar">
+      <button onclick="backToList()">← 返回列表</button>
+      <span class="idtag muted">SEO · 信息页 meta（title / description）</span>
+      <div class="spacer"></div>
+      <a class="editbar-link" id="seo-site-link" href="https://wanew.com/" target="_blank">🌐 官网此页</a>
+      <button id="btn-seo-preview" onclick="previewSeo()" title="渲染此页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
+      <button class="primary" id="btn-seo-save" onclick="saveSeo()">🚀 保存此页 SEO</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">编辑信息页的 <b>meta 标题 / 描述</b>（四语）。⚠️ 仅这些安全页（<b>service 归「攻略」编辑器、About 系等官网重排定型后解锁</b>）；<b>canonical / OG / hreflang 由系统派生、不可手改</b>（改了破坏多语规范）。保存=重烘焙该页四语提交官网仓，≈1分钟上线。</p>
+    <div class="dz-tabs" id="seo-tabs"></div>
+    <div id="seo-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
+  </div>
+
   <!-- ============ 媒体库（W5 P4·R2 浏览/标签/删除）============ -->
   <div id="v-media" style="display:none">
     <div class="edit-bar">
@@ -459,7 +474,7 @@ async function bulkDelete() {
 
 // ---------- 编辑 ----------
 const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
-function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-contact").style.display = v === "contact" ? "" : "none"; $("#v-guides").style.display = v === "guides" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "contact" ? "› 联系方式" : (v === "guides" ? "› 攻略" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : "")))))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-contact").style.display = v === "contact" ? "" : "none"; $("#v-guides").style.display = v === "guides" ? "" : "none"; $("#v-seo").style.display = v === "seo" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "contact" ? "› 联系方式" : (v === "guides" ? "› 攻略" : (v === "seo" ? "› SEO" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : ""))))))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
 function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
@@ -773,6 +788,64 @@ async function saveGuides() {
     await loadGuides();
   } catch (e) { msg("保存失败：" + e.message, 1); }
   btn.disabled = false; btn.textContent = "🚀 保存攻略页";
+}
+
+// ---------- SEO A·信息页 meta 四语编辑器 ----------
+const SEO_FIELD_LABEL = { title: "meta 标题 (title)", desc: "meta 描述 (description)" };
+let seoPages = [], seoLocales = [], seoActive = "", seoOrig = {};
+async function showSeo() { showView("seo"); await loadSeo(); }
+async function loadSeo() {
+  $("#seo-fields").innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
+  try { const r = await api("/seo"); seoPages = r.pages || []; seoLocales = r.locales || []; }
+  catch (e) { $("#seo-fields").innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadSeo()">重试</button></div>`; return; }
+  seoOrig = {};
+  seoPages.forEach((p) => { seoOrig[p.slug] = {}; p.fields.forEach((f) => { seoOrig[p.slug][f] = { ...(p.meta[f] || {}) }; }); });
+  if (!seoPages.some((p) => p.slug === seoActive)) seoActive = seoPages.length ? seoPages[0].slug : "";
+  paintSeoTabs(); paintSeo();
+}
+function paintSeoTabs() {
+  $("#seo-tabs").innerHTML = seoPages.map((p) => `<button class="dz-tab${p.slug === seoActive ? " active" : ""}" onclick="seoTab('${esc(p.slug)}')">${esc(p.label)}</button>`).join("");
+}
+function seoTab(slug) { seoActive = slug; paintSeoTabs(); paintSeo(); const l = $("#seo-site-link"); if (l) l.href = "https://wanew.com/" + slug + "/"; }
+function paintSeo() {
+  const p = seoPages.find((x) => x.slug === seoActive);
+  if (!p) { $("#seo-fields").innerHTML = `<div class="card muted">无页</div>`; return; }
+  const l = $("#seo-site-link"); if (l) l.href = "https://wanew.com/" + p.slug + "/";
+  $("#seo-fields").innerHTML = p.fields.map((f) => `<div class="card"><h3>${esc(SEO_FIELD_LABEL[f] || f)} <span class="muted" style="font-weight:400;font-size:11px">${esc(p.slug)}.meta.${esc(f)}</span></h3>` +
+    seoLocales.map((loc) => `<div class="field"><label>${esc(loc)}</label><textarea data-sf="${esc(f)}" data-sl="${esc(loc)}" style="min-height:48px">${esc((p.meta[f] || {})[loc] || "")}</textarea></div>`).join("") +
+    `</div>`).join("") + `<p class="muted" style="font-size:12px">${p.fields.includes("desc") ? "" : "⚠️ 此页模板只渲染 meta 标题（无 description 位）——只可改标题。"}</p>`;
+}
+function collectSeoEdits() {
+  const edits = [];
+  document.querySelectorAll("#seo-fields textarea[data-sf]").forEach((t) => {
+    const field = t.dataset.sf, loc = t.dataset.sl, v = t.value;
+    const orig = ((seoOrig[seoActive] || {})[field] || {})[loc] || "";
+    if (v !== orig) edits.push({ field, locale: loc, value: v });
+  });
+  return edits;
+}
+async function previewSeo() {
+  const edits = collectSeoEdits();
+  const w = window.open("", "_blank");
+  if (w) w.document.write('<!doctype html><meta charset="utf-8"><title>SEO 预览渲染中…</title><body style="font:14px sans-serif;padding:24px;color:#333">渲染页面预览中…</body>');
+  try {
+    const r = await api("/seo/" + encodeURIComponent(seoActive), { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits, dryRun: true }) });
+    if (r.previewHtml && w) { const html = r.previewHtml.replace(/<head([^>]*)>/i, '<head$1><base href="https://wanew.com/">'); w.document.open(); w.document.write(html); w.document.close(); msg("已在新标签打开该页渲染预览（未提交）— 看 <title> 与 meta"); }
+    else { if (w) w.close(); msg((r.error || "预览无渲染 HTML"), 1); }
+  } catch (e) { if (w) w.close(); msg("预览失败：" + e.message, 1); }
+}
+async function saveSeo() {
+  const edits = collectSeoEdits();
+  if (!edits.length) return msg("没有改动");
+  const p = seoPages.find((x) => x.slug === seoActive);
+  if (!confirm(`将保存「${p ? p.label : seoActive}」页的 ${edits.length} 处 meta 到官网仓（重烘焙该页四语、≈1分钟上线）。\n此操作直接修改生产官网仓。确定？`)) return;
+  const btn = $("#btn-seo-save"); btn.disabled = true; btn.textContent = "保存中…";
+  try {
+    const r = await api("/seo/" + encodeURIComponent(seoActive), { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits }) });
+    msg(`✅ 已保存 ${seoActive} SEO（commit ${(r.commit || "").slice(0, 7)}）· 写 ${(r.files || []).length} 文件 · ≈1分钟官网可见`);
+    await loadSeo();
+  } catch (e) { msg("保存失败：" + e.message, 1); }
+  btn.disabled = false; btn.textContent = "🚀 保存此页 SEO";
 }
 
 // ---------- 媒体库（W5 P4·R2 浏览/标签/删除 + P5+ 文件夹归类）----------
