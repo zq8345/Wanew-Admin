@@ -59,6 +59,20 @@ tr:hover td{background:var(--w3-panel2)}
 .mtile-sel{position:absolute;top:6px;left:6px;z-index:2;background:var(--w3-glass);border-radius:4px;padding:2px 4px;display:inline-flex;cursor:pointer}
 .mtile-sel input{cursor:pointer;margin:0}
 .mtile img,.mtile video{width:100%;height:110px;object-fit:contain;background:var(--w3-tile);border-radius:5px;display:block}
+/* 文件夹卡片（主内容区·点进入）+ 面包屑 */
+.fcrumb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--w3-text2);flex-wrap:wrap}
+.fcrumb-link{cursor:pointer;color:var(--w3-accent)}
+.fcrumb-sep{color:var(--w3-text3)}
+.fcrumb-cur{font-weight:600;color:var(--w3-text)}
+.fbk{font-size:11px;padding:2px 8px;height:auto}
+.fcards{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:12px;margin-bottom:2px}
+.fcard{position:relative;width:118px;border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);background:var(--w3-panel2);padding:14px 8px 9px;cursor:pointer;text-align:center;transition:border-color .12s}
+.fcard:hover{border-color:var(--w3-accent)}
+.fcard-ic{font-size:32px;line-height:1}
+.fcard-name{font-size:12px;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--w3-text)}
+.fcard-n{font-size:10px;color:var(--w3-text3);margin-top:2px}
+.fcard-del{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);border:none;color:#fff;border-radius:4px;font-size:11px;padding:0 5px;height:auto;min-width:0;cursor:pointer}
+.fcard-del:hover{background:#e5484d}
 /* 从视频库插入·弹层 */
 .vp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;align-items:center;justify-content:center;display:none}
 .vp-box{background:var(--w3-panel);border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);width:min(760px,92vw);max-height:82vh;display:flex;flex-direction:column;padding:14px}
@@ -413,6 +427,16 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     </div>
     <p class="muted" style="font-size:12px;margin:0 0 12px">R2 图床（对外 img.wanew.com）。文件夹是内部归类（纯元数据，不移动 R2 对象、可随时改）。勾选多张可一次性批量归类。标签(干净/营销)与文件夹独立、可叠加筛选。⚠️ 删除图片=直接删 R2、不可撤销；删文件夹只清归类、图片保留退回未归类。</p>
     <div id="media-grid" class="mgrid"><div class="card muted">加载中… <span class="spin"></span></div></div>
+    <div id="folder-modal" class="vp-overlay" style="display:none">
+      <div class="vp-box" style="width:min(360px,90vw)">
+        <div class="vp-head"><b>新建文件夹</b><button onclick="closeFolderModal()">✕</button></div>
+        <input id="folder-name-input" class="dz-field" placeholder="文件夹名称（≤40，不含斜杠）" style="width:100%;margin:2px 0 12px" onkeydown="if(event.key==='Enter')confirmFolderCreate();if(event.key==='Escape')closeFolderModal()">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="closeFolderModal()">取消</button>
+          <button class="primary" onclick="confirmFolderCreate()">确定</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ============ 仪表盘（W5 P5·只读概览·默认落地页）============ -->
@@ -1014,33 +1038,41 @@ async function loadMedia() {
   box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
   try { const r = await api("/media"); mediaItems = r.media || []; mediaFolders = r.folders || []; }
   catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadMedia()">重试</button></div>`; return; }
-  if (folderFilter && folderFilter !== "__none__" && !mediaFolders.includes(folderFilter)) folderFilter = "";   // 文件夹被删则复位
+  if (folderFilter && !mediaFolders.includes(folderFilter)) folderFilter = "";   // 文件夹被删则复位到根
   paintFolderbar(); paintMedia();
 }
 function mediaSetFilter(f) { mediaFilter = f; paintMedia(); }
 function folderSetFilter(f) { folderFilter = f; paintFolderbar(); paintMedia(); }
 function paintFolderbar() {
-  const count = (f) => mediaItems.filter((m) => mediaKindMatch(m) && (f === "__none__" ? !m.folder : m.folder === f)).length;
-  const chip = (val, label, n, extra = "") => `<button class="fchip${folderFilter === val ? " active" : ""}" onclick="folderSetFilter('${esc(val)}')">${esc(label)}<span class="fcount">${n}</span>${extra}</button>`;
-  let h = `<button class="fchip${folderFilter === "" ? " active" : ""}" onclick="folderSetFilter('')">全部<span class="fcount">${mediaItems.filter(mediaKindMatch).length}</span></button>`;
-  h += chip("__none__", "未归类", count("__none__"));
-  h += mediaFolders.map((f) => chip(f, f, count(f), ` <span class="fdel" title="删除文件夹（图片保留）" onclick="event.stopPropagation();folderDelete('${esc(f)}')">×</span>`)).join("");
-  $("#media-folderbar").innerHTML = h;
+  const atRoot = !folderFilter;   // 面包屑：根 或 根 › 当前文件夹（正常文件管理习惯）
+  const crumb = atRoot
+    ? `<span class="fcrumb-cur">📁 全部文件</span>`
+    : `<a class="fcrumb-link" onclick="folderSetFilter('')">📁 全部文件</a> <span class="fcrumb-sep">›</span> <span class="fcrumb-cur">${esc(folderFilter)}</span>`;
+  $("#media-folderbar").innerHTML = `<div class="fcrumb">${crumb}${atRoot ? "" : ` <button class="fbk" onclick="folderSetFilter('')">← 返回全部</button>`}</div>`;
 }
 let mediaSel = new Set();
 function mediaKindMatch(m) { return mediaKind === "video" ? isVid(m.key) : (!isVid(m.key) && !isPoster(m.key)); }
 function mediaFiltered() {
   const f = mediaFilter, ff = folderFilter;
-  return mediaItems.filter((m) => mediaKindMatch(m) && (!f || (f === "untagged" ? !m.tag : m.tag === f)) && (!ff || (ff === "__none__" ? !m.folder : m.folder === ff)));
+  return mediaItems.filter((m) => mediaKindMatch(m) && (!f || (f === "untagged" ? !m.tag : m.tag === f)) && (ff ? m.folder === ff : !m.folder));   // 根(ff="")=未归类松散项；否则=该文件夹内
 }
 function paintMedia() {
   const list = mediaFiltered();
   const vis = new Set(list.map((m) => m.key));
   [...mediaSel].forEach((k) => { if (!vis.has(k)) mediaSel.delete(k); });   // 选中集只留当前可见项
-  $("#media-count").textContent = `${list.length} / ${mediaItems.filter(mediaKindMatch).length} ${mediaKind === "video" ? "个" : "张"}`;
+  const isV = mediaKind === "video", unit = isV ? "个" : "张", atRoot = !folderFilter;
+  const kindItems = mediaItems.filter(mediaKindMatch);
+  // 根视图：文件夹以卡片出现在主内容区（点进入·符合文件管理习惯）——图片/视频库同构
+  const cardsHtml = (atRoot && mediaFolders.length) ? `<div class="fcards">` + mediaFolders.map((fd) => {
+    const n = kindItems.filter((m) => m.folder === fd).length;
+    return `<div class="fcard" onclick="folderSetFilter('${esc(fd)}')" title="进入「${esc(fd)}」">
+      <button class="fcard-del" title="删除文件夹（内容退回未归类，不删文件）" onclick="event.stopPropagation();folderDelete('${esc(fd)}')">×</button>
+      <div class="fcard-ic">📁</div><div class="fcard-name" title="${esc(fd)}">${esc(fd)}</div><div class="fcard-n">${n} ${unit}</div>
+    </div>`;
+  }).join("") + `</div>` : "";
+  $("#media-count").textContent = atRoot ? `${mediaFolders.length} 夹 · ${list.length} 未归类${unit}` : `${list.length} ${unit}`;
   const folderOpts = (cur) => `<option value=""${!cur ? " selected" : ""}>未归类</option>` + mediaFolders.map((fd) => `<option value="${esc(fd)}"${cur === fd ? " selected" : ""}>${esc(fd)}</option>`).join("");
-  const isV = mediaKind === "video";
-  $("#media-grid").innerHTML = list.map((m) => `
+  const tilesHtml = list.map((m) => `
     <div class="mtile${mediaSel.has(m.key) ? " sel" : ""}">
       <label class="mtile-sel"><input type="checkbox" ${mediaSel.has(m.key) ? "checked" : ""} onchange="mediaToggleSel('${esc(m.key)}',this)"></label>
       ${isV ? `<video src="${esc(m.url)}#t=0.1" preload="metadata" muted playsinline title="${esc(m.key)}"></video>` : `<img src="${esc(m.url)}" loading="lazy" title="${esc(m.key)}">`}
@@ -1053,7 +1085,8 @@ function paintMedia() {
         <button onclick="mediaTag('${esc(m.key)}','')">清标</button>`}
         <button class="danger" onclick="mediaDelete('${esc(m.key)}')">删</button>
       </div>
-    </div>`).join("") || `<div class="card muted">无${isV ? "视频" : "媒体"}${(mediaFilter || folderFilter) ? "（此筛选下）" : ""}</div>`;
+    </div>`).join("");
+  $("#media-grid").innerHTML = (cardsHtml + tilesHtml) || `<div class="card muted">${atRoot ? (isV ? "视频库为空——点右上「上传」添加，或「新建文件夹」归类" : "图片库为空") : `此文件夹暂无${isV ? "视频" : "图片"}`}${mediaFilter ? "（此标签筛选下）" : ""}</div>`;
   mediaSyncBulk();
 }
 function mediaToggleSel(key, cb) { if (cb.checked) mediaSel.add(key); else mediaSel.delete(key); cb.closest(".mtile").classList.toggle("sel", cb.checked); mediaSyncBulk(); }
@@ -1083,9 +1116,13 @@ async function mediaBulkMove() {
     msg(`✅ 已批量归类 ${r.count || keys.length} 张${folder ? "→「" + folder + "」" : "→未归类"}`);
   } catch (e) { msg("批量归类失败：" + e.message, 1); }
 }
-async function folderCreate() {
-  const name = (prompt("新建文件夹名称（≤40，不含斜杠）：") || "").trim();
-  if (!name) return;
+function folderCreate() { $("#folder-name-input").value = ""; $("#folder-modal").style.display = "flex"; setTimeout(() => $("#folder-name-input").focus(), 40); }
+function closeFolderModal() { $("#folder-modal").style.display = "none"; }
+async function confirmFolderCreate() {
+  const name = ($("#folder-name-input").value || "").trim();
+  if (!name) { $("#folder-name-input").focus(); return; }
+  if (name.length > 40 || name.includes("/")) { msg("名称需 ≤40 且不含斜杠", 1); return; }
+  closeFolderModal();
   try { const r = await api("/media/folders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) }); mediaFolders = r.folders || []; paintFolderbar(); paintMedia(); msg("已建文件夹：" + name); }
   catch (e) { msg("建文件夹失败：" + e.message, 1); }
 }
