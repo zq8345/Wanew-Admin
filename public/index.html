@@ -918,8 +918,11 @@ async function showGuides() { showView("guides"); await loadGuides(); }
 async function loadGuides() {
   const box = $("#guides-fields");
   box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
-  try { const r = await api("/guides"); guidesMeta = r.meta || {}; guidesCards = r.cards || []; guidesLocales = r.locales || []; }
+  let r;
+  try { r = await api("/guides"); }
   catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadGuides()">重试</button></div>`; return; }
+  if (r.retired) { box.innerHTML = `<div class="card"><h3>攻略模块重构中</h3><p style="font-size:13px;line-height:1.7;color:var(--w3-text2)">${esc(r.note || "")}</p><p style="font-size:13px;line-height:1.7;color:var(--w3-text2)">当前如需改攻略内容，可在 GitHub 直接编辑 <code>data/pages/guides.json</code>；编辑器将在新 /guides/ 结构定稿后对齐（不再报错崩溃）。</p></div>`; return; }
+  guidesMeta = r.meta || {}; guidesCards = r.cards || []; guidesLocales = r.locales || [];
   guidesOrig = {};
   Object.entries(guidesMeta).forEach(([k, v]) => { guidesOrig[k] = { ...v }; });
   guidesCards.forEach((c) => { guidesOrig[c.titleKey] = { ...c.title }; guidesOrig[c.excerptKey] = { ...c.excerpt }; });

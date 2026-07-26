@@ -381,7 +381,9 @@ app.get("/api/admin/guides", async (c) => {
     readFile(c.env, cfg, "data/pages/service.json"),
     readFile(c.env, cfg, "data/pages/shared.json"),
   ]);
-  if (!svcRaw || !sharedRaw) return c.json({ error: "service.json / shared.json missing" }, 404);
+  // /service/ 页已随官网 Guides 重构下线（迁往统一 /guides/ 库）→ 优雅降级(200)，编辑器提示重构中，不再 404 崩。
+  if (!svcRaw) return c.json({ retired: true, note: "攻略 /service/ 页已随官网 Guides 重构下线（内容迁往统一 /guides/ 库）。此编辑器针对已下线的 /service/ 页，将在新 /guides/ 结构定稿后对齐。" });
+  if (!sharedRaw) return c.json({ error: "shared.json missing" }, 404);
   const svc = JSON.parse(svcRaw), shared = JSON.parse(sharedRaw);
   const meta: Record<string, any> = {};
   for (const k of SERVICE_META_KEYS) meta[k] = svc[k] || {};
