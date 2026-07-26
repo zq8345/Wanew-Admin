@@ -414,7 +414,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
   <div id="v-gsc" style="display:none">
     <div class="dz-pagehead"><h1>搜索表现</h1><span class="meta">Google Search Console（只读·sc-domain:wanew.com）</span></div>
     <div class="dz-toolbar">
-      <select id="gsc-days" onchange="loadGsc()"><option value="7">近 7 天</option><option value="28" selected>近 28 天</option><option value="90">近 90 天</option></select>
+      <select id="gsc-days" onchange="loadGsc()"><option value="7">近 7 天</option><option value="28" selected>近 28 天</option><option value="90">近 90 天</option><option value="180">近 180 天</option></select>
       <select id="gsc-dim" onchange="loadGsc()"><option value="query">热门查询</option><option value="page">热门落地页</option><option value="country">国家/地区</option><option value="device">设备</option></select>
       <span class="muted" id="gsc-range"></span>
     </div>
@@ -1355,10 +1355,27 @@ function paintGsc(d) {
       ${stat("◕", pct(t.ctr), "CTR")}
       ${stat("◎", t.position != null ? t.position.toFixed(1) : "—", "平均排名")}
     </div>
+    ${gscSpark(d.trend)}
     <div class="card"><h3>${esc(GSC_DIM_LABEL[d.dim] || d.dim)} Top ${(d.rows || []).length}</h3>
       <table><thead><tr><th style="width:44px">#</th><th>${esc(GSC_DIM_LABEL[d.dim] || d.dim)}</th><th style="width:80px;text-align:right">点击</th><th style="width:90px;text-align:right">曝光</th><th style="width:70px;text-align:right">CTR</th><th style="width:70px;text-align:right">排名</th></tr></thead>
       <tbody>${rows}</tbody></table>
     </div>`;
+}
+// GSC 趋势小图：曝光/点击日序列双线（各自比例，纯 SVG）
+function gscSpark(trend) {
+  if (!Array.isArray(trend) || trend.length < 2) return `<div class="card muted" style="font-size:12px">趋势：数据点不足（近期曝光很少，新站正常）</div>`;
+  const W = 680, H = 130, pad = 10, n = trend.length;
+  const xs = (i) => pad + i * (W - 2 * pad) / (n - 1);
+  const maxImp = Math.max(1, ...trend.map((t) => t.impressions)), maxClk = Math.max(1, ...trend.map((t) => t.clicks));
+  const path = (acc, max) => trend.map((t, i) => `${i ? "L" : "M"}${xs(i).toFixed(1)} ${(H - pad - (acc(t) / max) * (H - 2 * pad)).toFixed(1)}`).join(" ");
+  return `<div class="card">
+    <div class="lbl" style="margin-bottom:8px">趋势 · ${n} 天　<span style="color:var(--w3-accent)">━ 曝光</span>（峰 ${Math.round(maxImp).toLocaleString()}）　<span style="color:#3fb950">━ 点击</span>（峰 ${Math.round(maxClk).toLocaleString()}）<span class="muted" style="font-size:11px">· 双线各自比例</span></div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:130px;display:block" preserveAspectRatio="none">
+      <path d="${path((t) => t.impressions, maxImp)}" fill="none" stroke="var(--w3-accent)" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="${path((t) => t.clicks, maxClk)}" fill="none" stroke="#3fb950" stroke-width="1.6" stroke-linejoin="round"/>
+    </svg>
+    <div class="muted tnum" style="font-size:11px;display:flex;justify-content:space-between;margin-top:2px"><span>${esc(trend[0].date)}</span><span>${esc(trend[n - 1].date)}</span></div>
+  </div>`;
 }
 
 // ---------- 团队（Team A·访问状态只读）----------

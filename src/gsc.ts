@@ -55,21 +55,23 @@ export async function gscQuery(saKeyJson: string, dim: string, days: number, row
   const end = new Date(Date.now() - 3 * 86400000);   // GSC ~2-3 天延迟
   const start = new Date(end.getTime() - (days - 1) * 86400000);
   const api = `https://searchconsole.googleapis.com/webmasters/v3/sites/${siteUrl}/searchAnalytics/query`;
-  const call = async (dimensions: string[]) => {
+  const call = async (dimensions: string[], lim?: number) => {
     const res = await fetch(api, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ startDate: ymd(start), endDate: ymd(end), dimensions, rowLimit: dimensions.length ? rowLimit : 1 }),
+      body: JSON.stringify({ startDate: ymd(start), endDate: ymd(end), dimensions, rowLimit: dimensions.length ? (lim || rowLimit) : 1 }),
     });
     if (!res.ok) throw new Error(`searchAnalytics ${res.status}: ${(await res.text()).slice(0, 140)}`);
     return (await res.json()) as any;
   };
-  const [totalsResp, dimResp] = await Promise.all([call([]), call([dim])]);
+  // totals + 选定维度 top + date 维度日序列(趋势小图)——一趟并行
+  const [totalsResp, dimResp, dateResp] = await Promise.all([call([]), call([dim]), call(["date"], days)]);
   const t = (totalsResp.rows && totalsResp.rows[0]) || { clicks: 0, impressions: 0, ctr: 0, position: 0 };
   const rows = (dimResp.rows || []).map((r: any) => ({ key: (r.keys && r.keys[0]) || "", clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
+  const trend = (dateResp.rows || []).map((r: any) => ({ date: (r.keys && r.keys[0]) || "", clicks: r.clicks || 0, impressions: r.impressions || 0 }));
   return {
     range: { start: ymd(start), end: ymd(end), days },
     totals: { clicks: t.clicks || 0, impressions: t.impressions || 0, ctr: t.ctr || 0, position: t.position || 0 },
-    dim, rows,
+    dim, rows, trend,
   };
 }

@@ -445,7 +445,7 @@ app.get("/api/admin/gsc", async (c) => {
   if (!c.env.GSC_SA_KEY) return c.json({ notConfigured: true, note: "GSC 未接入（GSC_SA_KEY 未配置）" });   // 优雅降级(200)
   const dim = c.req.query("dim") || "query";
   if (!["query", "page", "country", "device"].includes(dim)) return c.json({ error: "dim must be query|page|country|device" }, 400);
-  const days = Math.min(90, Math.max(1, parseInt(c.req.query("days") || "28", 10) || 28));
+  const days = Math.min(180, Math.max(1, parseInt(c.req.query("days") || "28", 10) || 28));
   try {
     const r: any = await gscQuery(c.env.GSC_SA_KEY, dim, days);
     if (r.error) return c.json({ error: r.error }, 502);
