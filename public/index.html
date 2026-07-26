@@ -108,6 +108,11 @@ tr:hover td{background:var(--w3-panel2)}
 .chip{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--w3-tile);border:1px solid var(--w3-line);font-size:12px;font-variant-numeric:tabular-nums;line-height:1.6}
 .dz-pagenav{margin:0 0 12px}
 .dz-tabs{display:flex;gap:4px;border-bottom:1px solid var(--w3-line);margin-bottom:14px}
+/* 共享语言 Tab（切一次全表跟着切；友好语言名，禁露原始码）*/
+.langtabs{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--w3-line)}
+.langtab{height:30px;padding:0 14px;font-size:13px;border:1px solid transparent;border-radius:999px;background:var(--w3-bg2);color:var(--w3-text3);cursor:pointer}
+.langtab:hover{color:var(--w3-text)}
+.langtab.active{background:rgba(125,177,255,.14);border-color:var(--w3-accent);color:var(--w3-text);font-weight:600}
 .dz-tab{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;padding:8px 14px;font-size:13px;color:var(--w3-text3);cursor:pointer;margin-bottom:-1px}
 .dz-tab:hover{color:var(--w3-text)}
 .dz-tab.active{color:var(--w3-text);border-bottom-color:var(--w3-accent)}
@@ -163,8 +168,8 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="dz-nav-item" data-view="guides" onclick="showGuides()"><span class="ic">≣</span> 攻略</div>
     <div class="dz-eyebrow">增长 Growth</div>
     <div class="dz-nav-item" data-view="seo" onclick="showSeo()"><span class="ic">◔</span> SEO</div>
-    <div class="dz-nav-item soon" title="即将上线"><span class="ic">⇄</span> 翻译 <span class="soon-tag">SOON</span></div>
-    <div class="dz-nav-item soon" title="即将上线"><span class="ic">✉</span> 询盘 <span class="soon-tag">SOON</span></div>
+    <div class="dz-nav-item soon" title="未来加语种(fr/de)时再做"><span class="ic">⇄</span> 翻译 <span class="soon-tag">未来</span></div>
+    <a class="dz-nav-item" href="https://crm.wanew.com" target="_blank" title="询盘/线索归 CRM 管理（新标签打开）" style="text-decoration:none;color:inherit"><span class="ic">✉</span> 询盘 <span class="ext" style="color:var(--w3-text3);font-size:11px;margin-left:auto">↗ CRM</span></a>
     <div class="dz-side-foot">
       <div class="dz-nav-item" data-view="audit" onclick="showAudit()"><span class="ic">▤</span> 审计日志</div>
       <div class="dz-nav-item" data-view="settings" onclick="showSettings()"><span class="ic">⚙</span> 设置</div>
@@ -623,6 +628,23 @@ async function loadForms() {
   } catch (e) { rows.innerHTML = `<tr><td colspan="4" class="muted">加载失败：${esc(e.message)} <button onclick="loadForms()">重试</button></td></tr>`; }
 }
 
+// ---------- 共享语言 Tab（Joe P0：切一次全表跟着切；友好语言名，全站禁露 en/pt-BR/es-MX/zh 原始码）----------
+const LANG_LABEL = { "en": "English", "pt-BR": "Português", "es-MX": "Español", "zh": "简体中文" };
+const langName = (loc) => LANG_LABEL[loc] || loc;
+// 渲染语言 tab 栏；scopeSel=字段容器选择器（切换只 toggle 该容器内 .lf[data-lang] 的可见性，不重渲染=零丢失编辑）
+function langTabBar(locales, scopeSel) {
+  return `<div class="langtabs">` + locales.map((l, i) => `<button class="langtab${i === 0 ? " active" : ""}" data-lang="${esc(l)}" onclick="setLang(this,'${scopeSel}')">${esc(langName(l))}</button>`).join("") + `</div>`;
+}
+function setLang(btn, scopeSel) {
+  btn.parentElement.querySelectorAll(".langtab").forEach((b) => b.classList.toggle("active", b === btn));
+  const loc = btn.dataset.lang;
+  document.querySelectorAll(`${scopeSel} .lf[data-lang]`).forEach((el) => { el.hidden = el.dataset.lang !== loc; });
+}
+// 字段块：一个 key 的所有语言各渲一个 .lf（非首语言 hidden）；切 tab 只 toggle 可见=DOM 都在=编辑不丢
+function langFields(key, vals, locales, dataAttr, extraStyle) {
+  return locales.map((loc, i) => `<div class="field lf" data-lang="${esc(loc)}"${i === 0 ? "" : " hidden"}><textarea ${dataAttr}="${esc(key)}" data-l="${esc(loc)}" style="${extraStyle || "min-height:52px"}">${esc(vals[loc] || "")}</textarea></div>`).join("");
+}
+
 // ---------- 首页内容 CMS（W5 P1·第一刀=Hero）----------
 const HOME_HERO_KEYS = [
   { key: "home.hero.eyebrow", label: "眉题 (eyebrow)" },
@@ -644,22 +666,21 @@ async function loadHomeView() {
   }
   catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadHomeView()">重试</button></div>`; return; }
   const first = HOME_HERO_KEYS.map((k) => homeData[k.key]).find((v) => v && typeof v === "object");
-  homeLocales = first ? Object.keys(first) : ["en"];
+  homeLocales = first ? Object.keys(first).filter((l) => LANG_LABEL[l]) : ["en"];   // 只留真语言（滤 reason.dupe 等注解）
   paintHome();
   paintFeatured();
 }
 function paintHome() {
-  $("#home-fields").innerHTML = HOME_HERO_KEYS.map((k) => {
-    const vals = homeData[k.key] || {};
-    return `<div class="card"><h3>${esc(k.label)} <span class="muted" style="font-weight:400;font-size:11px">${esc(k.key)}</span></h3>` +
-      homeLocales.map((loc) => `<div class="field"><label>${esc(loc)}</label><textarea data-hk="${esc(k.key)}" data-hl="${esc(loc)}" style="min-height:52px">${esc(vals[loc] || "")}</textarea></div>`).join("") +
-      `</div>`;
-  }).join("");
+  $("#home-fields").innerHTML = langTabBar(homeLocales, "#home-fields") +
+    HOME_HERO_KEYS.map((k) => {
+      const vals = homeData[k.key] || {};
+      return `<div class="card"><h3>${esc(k.label)}</h3>` + langFields(k.key, vals, homeLocales, "data-hk", "min-height:52px") + `</div>`;
+    }).join("");
 }
 function collectHomeEdits() {
   const edits = [];
   document.querySelectorAll("#home-fields textarea[data-hk]").forEach((t) => {
-    const key = t.dataset.hk, loc = t.dataset.hl, v = t.value;
+    const key = t.dataset.hk, loc = t.dataset.l, v = t.value;
     const orig = (homeData[key] || {})[loc] || "";
     if (v !== orig) edits.push({ key, locale: loc, value: v });
   });
@@ -825,11 +846,12 @@ async function loadGuides() {
   paintGuides();
 }
 function guidesFieldBlock(key, vals) {
-  return guidesLocales.map((loc) => `<div class="field"><label>${esc(loc)}</label><textarea data-gk="${esc(key)}" data-gl="${esc(loc)}" style="min-height:48px">${esc(vals[loc] || "")}</textarea></div>`).join("");
+  return langFields(key, vals, guidesLocales, "data-gk", "min-height:48px");
 }
 function paintGuides() {
-  let h = `<div class="card"><h3>页头 / SEO <span class="muted" style="font-weight:400;font-size:11px">data/pages/service.json</span></h3>`;
-  for (const k of Object.keys(guidesMeta)) h += `<div style="margin-bottom:8px"><div class="muted" style="font-size:12px;margin-bottom:3px">${esc(GUIDES_META_LABEL[k] || k)} <span style="font-size:11px">${esc(k)}</span></div>${guidesFieldBlock(k, guidesMeta[k])}</div>`;
+  let h = langTabBar(guidesLocales, "#guides-fields");
+  h += `<div class="card"><h3>页头 / SEO</h3>`;
+  for (const k of Object.keys(guidesMeta)) h += `<div style="margin-bottom:8px"><div class="muted" style="font-size:12px;margin-bottom:3px">${esc(GUIDES_META_LABEL[k] || k)}</div>${guidesFieldBlock(k, guidesMeta[k])}</div>`;
   h += `</div>`;
   h += `<div class="card"><h3>攻略卡片文案 <span class="muted" style="font-weight:400;font-size:11px">${guidesCards.length} 张 · shared.json（仅这些键可写）</span></h3>`;
   guidesCards.forEach((c, i) => {
@@ -846,7 +868,7 @@ function paintGuides() {
 function collectGuidesEdits() {
   const edits = [];
   document.querySelectorAll("#guides-fields textarea[data-gk]").forEach((t) => {
-    const key = t.dataset.gk, loc = t.dataset.gl, v = t.value;
+    const key = t.dataset.gk, loc = t.dataset.l, v = t.value;
     const orig = (guidesOrig[key] || {})[loc] || "";
     if (v !== orig) edits.push({ key, locale: loc, value: v });
   });
@@ -896,14 +918,15 @@ function paintSeo() {
   const p = seoPages.find((x) => x.slug === seoActive);
   if (!p) { $("#seo-fields").innerHTML = `<div class="card muted">无页</div>`; return; }
   const l = $("#seo-site-link"); if (l) l.href = "https://wanew.com/" + p.slug + "/";
-  $("#seo-fields").innerHTML = p.fields.map((f) => `<div class="card"><h3>${esc(SEO_FIELD_LABEL[f] || f)} <span class="muted" style="font-weight:400;font-size:11px">${esc(p.slug)}.meta.${esc(f)}</span></h3>` +
-    seoLocales.map((loc) => `<div class="field"><label>${esc(loc)}</label><textarea data-sf="${esc(f)}" data-sl="${esc(loc)}" style="min-height:48px">${esc((p.meta[f] || {})[loc] || "")}</textarea></div>`).join("") +
-    `</div>`).join("") + `<p class="muted" style="font-size:12px">${p.fields.includes("desc") ? "" : "⚠️ 此页模板只渲染 meta 标题（无 description 位）——只可改标题。"}</p>`;
+  $("#seo-fields").innerHTML = langTabBar(seoLocales, "#seo-fields") +
+    p.fields.map((f) => `<div class="card"><h3>${esc(SEO_FIELD_LABEL[f] || f)}</h3>` +
+      langFields(f, p.meta[f] || {}, seoLocales, "data-sf", "min-height:48px") +
+      `</div>`).join("") + `<p class="muted" style="font-size:12px">${p.fields.includes("desc") ? "" : "⚠️ 此页模板只渲染 meta 标题（无 description 位）——只可改标题。"}</p>`;
 }
 function collectSeoEdits() {
   const edits = [];
   document.querySelectorAll("#seo-fields textarea[data-sf]").forEach((t) => {
-    const field = t.dataset.sf, loc = t.dataset.sl, v = t.value;
+    const field = t.dataset.sf, loc = t.dataset.l, v = t.value;
     const orig = ((seoOrig[seoActive] || {})[field] || {})[loc] || "";
     if (v !== orig) edits.push({ field, locale: loc, value: v });
   });
