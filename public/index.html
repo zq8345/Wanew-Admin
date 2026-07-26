@@ -403,13 +403,13 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
   <div id="v-guides" style="display:none">
     <div class="edit-bar">
       <button onclick="backToList()">← 返回列表</button>
-      <span class="idtag muted">攻略 · /service/ 落地页文案</span>
+      <span class="idtag muted" id="guides-idtag">攻略 · /service/ 落地页文案</span>
       <div class="spacer"></div>
-      <a class="editbar-link" href="https://wanew.com/service/" target="_blank">🌐 官网攻略页</a>
+      <a class="editbar-link" id="guides-service-link" href="https://wanew.com/service/" target="_blank">🌐 官网攻略页</a>
       <button id="btn-guides-preview" onclick="previewGuides()" title="渲染攻略页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
       <button class="primary" id="btn-guides-save" onclick="saveGuides()">🚀 保存攻略页</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:0 0 12px">编辑 /service/ 攻略落地页的<b>页头文案 + 10 张攻略卡片的标题/摘要</b>（四语）。⚠️ 本编辑器<b>只能改这些文案</b>——攻略文章正文、卡片增删属二期（需数据模型）。保存=重烘焙 /service/（四语）提交官网仓，≈1分钟上线；保存前可「预览」。</p>
+    <p class="muted" style="font-size:12px;margin:0 0 12px" id="guides-help">编辑 /service/ 攻略落地页的<b>页头文案 + 10 张攻略卡片的标题/摘要</b>（四语）。⚠️ 本编辑器<b>只能改这些文案</b>——攻略文章正文、卡片增删属二期（需数据模型）。保存=重烘焙 /service/（四语）提交官网仓，≈1分钟上线；保存前可「预览」。</p>
     <div id="guides-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
@@ -948,6 +948,9 @@ async function loadGuides() {
   try { r = await api("/guides"); }
   catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadGuides()">重试</button></div>`; return; }
   if (r.retired) {
+    // 退休态：把针对已下线 /service/ 的误导控件收干净（保存/预览按钮、官网攻略页 404 链、重烘焙文案）
+    ["btn-guides-preview", "btn-guides-save", "guides-service-link", "guides-help"].forEach((id) => { const el = document.getElementById(id); if (el) el.style.display = "none"; });
+    const _tag = document.getElementById("guides-idtag"); if (_tag) _tag.textContent = "攻略 · /guides/ 内容库（只读）";
     const arts = r.articles || [], byTopic = {};
     arts.forEach((a) => { (byTopic[a.topic || "其它"] = byTopic[a.topic || "其它"] || []).push(a); });
     const groups = Object.keys(byTopic).sort().map((t) => `<div class="card"><h3>${esc(t)} <span class="muted" style="font-weight:400;font-size:12px">· ${byTopic[t].length} 篇</span></h3>${byTopic[t].map((a) => `<div style="padding:5px 0;border-bottom:1px solid var(--w3-line);font-size:13px"><a class="ttl-link" href="${SITE}/guides/${esc(a.slug)}" target="_blank">${esc(a.title)} <span class="ext">↗</span></a></div>`).join("")}</div>`).join("");
