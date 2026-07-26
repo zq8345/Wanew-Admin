@@ -81,8 +81,11 @@ export function validateProduct(body: any, id: number, categories: any, existing
     ...(en.meta_title && en.meta_title !== en.title ? { meta_title: en.meta_title } : {}),
     meta_description: en.meta_description || "",
   };
+  // 状态机：draft/published/archived。body.status 合法则用；否则沿用旧值；再否则 published
+  // （新建走 POST 端点会显式置 draft；缺省 published=零迁移，现有无 status 产品视为已发布）。
+  const status = (["draft", "published", "archived"].includes(body.status) ? body.status : (existing?.status ?? "published"));
   const prod = {
-    id, category: body.category, form, robots: body.robots ?? (existing?.robots ?? null),
+    id, category: body.category, form, status, robots: body.robots ?? (existing?.robots ?? null),
     i18n,
     images: body.images.map((im: any) => (im.key !== undefined ? { key: im.key, alt: im.alt || "" } : { src: im.src, alt: im.alt || "" })),
     jsonld_product: body.jsonld_product ?? (existing?.jsonld_product ?? null),
@@ -119,29 +122,49 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
     const x = excerptOf(prod, loc);
     if (t || x !== entry.excerpt) (entry.i18n ??= {})[loc] = { ...(t ? { title: t } : {}), ...(x ? { excerpt: x } : {}) };
   }
-  const manifest = man0.filter((e: any) => e.id !== prod.id).concat(entry)
+  // ⭐ 状态机：published=进 index+渲染页；draft/archived=不进 index、删已存在的线上页（保留 {id}.json）。
+  //   （prod.status 缺省 published=零迁移。官网只渲 products-index.json→draft/archived 天然不渲染/不被爬。）
+  const isLive = (prod.status || "published") === "published";
+  const base = man0.filter((e: any) => e.id !== prod.id);
+  const manifest = (isLive ? base.concat(entry) : base)
     .sort((a: any, b: any) => a.category.localeCompare(b.category) || a.id - b.id);
   const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
-  // 编辑时多读一次旧 json 对齐其行尾/尾换行（同 133 行页面读原文的既定代价）；新品无原文=标准 LF
+  // 编辑时多读一次旧 json 对齐其行尾/尾换行（同页面读原文的既定代价）；新品无原文=标准 LF
   const prodRaw = opts.isNew ? null : await readFile(env, cfg, `data/products/${prod.id}.json`);
   const files: any[] = [
     { path: `data/products/${prod.id}.json`, content: matchJson(prodRaw, prod) },
     { path: `data/products-index.json`, content: matchJson(ctx.manifestRaw, manifest) },
   ];
   const chromeErrors: string[] = [];
+  let previewContent: string | null = null;   // 默认 locale 详情页渲染（dryRun 预览用；draft 也能预览"若发布长啥样"）
 
-  // 详情页 × enabled locales（默认 locale 恒建；其它 locale：已存在才重渲染——渲染内容不决定 site map）
+  // 详情页 × enabled locales（默认 locale 恒渲染[供预览]；其它 locale：已存在才处理——渲染内容不决定 site map）
   for (const locale of locales.enabled) {
     const dir = locDir[locale];
     const rel = dir ? `${dir}/${prod.category}/${prod.id}.html` : `${prod.category}/${prod.id}.html`;
-    if (locale !== locales.default && !ctx.pagesList.has(rel) ) continue;
-    const related = genRelated(entry, manifest, locale, catalog, urlOf);
-    const raw = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap });
-    const { html, errors } = chrome.applyChrome(raw.replace(/\r/g, ""), rel);   // ⭐ 双步第二段
-    chromeErrors.push(...errors);
-    // 行尾保留：编辑已有页读原文判行尾（多一次 read，编辑场景可接受）；新页=LF
-    const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;
-    files.push({ path: rel, content: matchEol(prevRaw, html) });
+    const exists = ctx.pagesList.has(rel);
+    const isDefault = locale === locales.default;
+    if (isLive) {
+      if (!isDefault && !exists) continue;
+      const related = genRelated(entry, manifest, locale, catalog, urlOf);
+      const raw = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap });
+      const { html, errors } = chrome.applyChrome(raw.replace(/\r/g, ""), rel);   // ⭐ 双步第二段
+      chromeErrors.push(...errors);
+      const prevRaw = exists ? await readFile(env, cfg, rel) : null;
+      const out = matchEol(prevRaw, html);
+      if (isDefault) previewContent = out;
+      files.push({ path: rel, content: out });
+    } else {
+      // draft/archived：删已存在的线上页；默认 locale 仍渲染一份供 dryRun 预览（不进 files=不提交）
+      if (isDefault) {
+        const related = genRelated(entry, manifest, locale, catalog, urlOf);
+        const raw = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap });
+        const { html, errors } = chrome.applyChrome(raw.replace(/\r/g, ""), rel);
+        chromeErrors.push(...errors);
+        previewContent = matchEol(exists ? await readFile(env, cfg, rel) : null, html);
+      }
+      if (exists) files.push({ path: rel, delete: true });   // 线上页存在则删（下架/存草稿）
+    }
   }
 
   // 受影响列表页 × locales（已存在才 regen；regenListPage 带 opts——修旧调用缺 locale/urlOf 的化石）
@@ -160,10 +183,10 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
   if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
   // 批3：dryRun=preview 单真源化——同一条管线跑到 commit 前一步返回摘要（消内联第二实现，字节必同源）
   // W5「存草稿箱·预览」：附带默认 locale 详情页渲染 HTML（前端注 <base href> 新标签打开=所见即所得，不提交）。
-  const previewPage = files.find((f: any) => f.path === `${prod.category}/${prod.id}.html`);
   if (opts.dryRun) return {
     dry: true,
-    previewHtml: previewPage ? previewPage.content : null,   // 默认 locale 详情页（新品/编辑均建默认 locale）
+    previewHtml: previewContent,   // 默认 locale 详情页渲染（live 及 draft 均渲染供预览；draft 不进 files 不提交）
+    status: prod.status,
     // bytes=真字节数（TextEncoder）——.length 是 UTF-16 码元数，与磁盘字节对照会差出多字节字符数
     // （批3-1 的"361B 行尾差"定性就是这么错的：字符数 vs 字节数、单位不一致的对照）。
     files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0,

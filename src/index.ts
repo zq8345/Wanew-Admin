@@ -49,7 +49,7 @@ import type { HomeEdit, ContactEdit, ServiceEdit, SeoEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
 // @ts-ignore js 模块 —— FORM_KEY = 形态/品类轴 slug 真源（render.js，守卫盯字节；本仓只读镜像）
-import { FORM_KEY } from "../vendor/render.js";
+import { FORM_KEY, resolveImg } from "../vendor/render.js";
 
 const operator = (c: any) => c.req.header("cf-access-authenticated-user-email") || "dev-bypass";
 
@@ -59,6 +59,33 @@ app.get("/api/admin/products", async (c) => {
   const raw = await readFile(c.env, cfg, "data/products-index.json");
   const list = raw ? JSON.parse(raw) : [];
   return c.json({ products: list, count: list.length, admin: operator(c) });
+});
+
+// ⚠️ 必须在 /products/:id 之前定义，否则 "drafts" 被 :id 捕获（Hono 按序匹配）。
+// 非发布产品列表（draft/archived）：Contents API 列 data/products/ → 不在 index 的 → 读 status/标题。
+app.get("/api/admin/products/drafts", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const ctx = await loadCtx(c.env, cfg);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
+  const published = new Set<number>(ctx.manifest.map((e: any) => e.id));
+  let ids: number[] = [];
+  try {
+    const res = await fetch(`https://api.github.com/repos/${c.env.GITHUB_REPO}/contents/data/products`, {
+      headers: { Authorization: `Bearer ${c.env.GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return c.json({ error: "github contents failed", status: res.status }, 502);
+    const arr: any = await res.json();
+    if (Array.isArray(arr)) ids = arr.filter((f: any) => /^\d+\.json$/.test(f.name)).map((f: any) => Number(f.name.replace(".json", "")));
+  } catch (e: any) { return c.json({ error: "github fetch error", detail: String(e).slice(0, 200) }, 502); }
+  const nonPub = ids.filter((id) => !published.has(id)).slice(0, 300);
+  const drafts = (await Promise.all(nonPub.map(async (id) => {
+    const raw = await readFile(c.env, cfg, `data/products/${id}.json`);
+    if (!raw) return null;
+    let p: any; try { p = JSON.parse(raw); } catch { return null; }
+    return { id, status: p.status || "draft", category: p.category, form: p.form || null, title: (p.i18n?.en?.title) || `#${id}`, thumb: p.images?.[0] ? resolveImg(p.images[0], ctx.site.img_base) : "" };
+  }))).filter(Boolean);
+  return c.json({ drafts, count: drafts.length });
 });
 
 app.get("/api/admin/products/:id", async (c) => {
@@ -92,6 +119,7 @@ app.post("/api/admin/products", async (c) => {
   const ctx = await loadCtx(c.env, cfg);
   if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
   const newId = ctx.manifest.reduce((m: number, e: any) => Math.max(m, e.id), 0) + 1;
+  if (!body.status) body.status = "draft";   // 状态机决策①：新建默认草稿（先编辑完再上线，避免半成品泄漏生产）
   const v = validateProduct(body, newId, ctx.categories, null);
   if (v.error) return c.json({ error: v.error }, 400);
   try {
@@ -122,7 +150,30 @@ app.put("/api/admin/products/:id", async (c) => {
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
-// 删除（三语详情一并删 + 列表 regen）
+// 状态流转（draft/published/archived）：读现有 prod→改 status→publishProduct（进/出 index+渲染/删页）。
+// 归档=软下架(保留 {id}.json、可恢复)；区别于 DELETE=硬删除(彻底删数据)。
+app.put("/api/admin/products/:id/status", async (c) => {
+  const id = Number(c.req.param("id").replace(/\D/g, ""));
+  if (!id) return c.json({ error: "bad id" }, 400);
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const status = body?.status;
+  if (!["draft", "published", "archived"].includes(status)) return c.json({ error: "status must be draft|published|archived" }, 400);
+  const ctx = await loadCtx(c.env, cfg);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
+  const oldRaw = await readFile(c.env, cfg, `data/products/${id}.json`);
+  const existing = oldRaw ? JSON.parse(oldRaw) : null;
+  if (!existing) return c.json({ error: "not found" }, 404);
+  const prod = { ...existing, status };   // existing 已是合法结构（存时校验过）；只翻 status
+  try {
+    const r = await publishProduct(c.env, cfg, ctx, prod, { isNew: false, oldCategory: existing.category, email: operator(c) });
+    if ((r as any).error) return c.json(r as any, 502);
+    return c.json({ ok: true, id, status, ...r, note: `status→${status}; Pages deploys in ~1 min` });
+  } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
+});
+
+// 删除（硬删除·彻底：三语详情+json 一并删 + 列表 regen）
 app.delete("/api/admin/products/:id", async (c) => {
   const id = Number(c.req.param("id").replace(/\D/g, ""));
   if (!id) return c.json({ error: "bad id" }, 400);
