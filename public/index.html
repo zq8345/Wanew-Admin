@@ -1075,7 +1075,7 @@ async function mediaDelete(key) {
   catch (e) { msg("删除失败：" + e.message, 1); }
 }
 // #66-2 上传前把 jpg/png 转 webp（主图 q0.82·原分辨率，纯浏览器 canvas）——真样实测省 33~94% 字节。
-// gif(动图会丢帧)/webp/svg 原样放行；转换失败或反而更大都回退原文件，绝不挡上传。
+// gif(动图会丢帧)/webp 原样放行（svg 等非白名单类型在 /upload 端已按 allowlist 400 拒、到不了这里；产品图是照片、不需要 svg）；转换失败或反而更大都回退原文件，绝不挡上传。
 // ⚠️ 联系 QR 口(contactQrUpload)故意不调此函数：QR/线稿有损 webp 会在码块边缘生伪影→可能扫不出（总工拍：保原质）。
 async function toWebp(file, quality = 0.82) {
   const t = (file.type || "").toLowerCase();
