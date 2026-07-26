@@ -10,6 +10,7 @@ export interface Env {
   GITHUB_REPO: string;
   GITHUB_BRANCH: string;
   GITHUB_TOKEN?: string;      // secret（Joe 的 fine-grained PAT，Contents RW 限 zq8345/Wanew）
+  GSC_SA_KEY?: string;        // secret（GSC 服务账号 JSON，Joe 已存；只读、绝不回显）
   DEV_BYPASS_AUTH?: string;   // 仅 .dev.vars：本地免 Access（生产无此变量）
 }
 
@@ -50,6 +51,7 @@ import type { HomeEdit, ContactEdit, ServiceEdit, SeoEdit } from "./publish";
 import { ghConfig, readFile } from "../vendor/github.js";
 // @ts-ignore js 模块 —— FORM_KEY = 形态/品类轴 slug 真源（render.js，守卫盯字节；本仓只读镜像）
 import { FORM_KEY, resolveImg } from "../vendor/render.js";
+import { gscQuery } from "./gsc";
 
 const operator = (c: any) => c.req.header("cf-access-authenticated-user-email") || "dev-bypass";
 
@@ -415,6 +417,20 @@ app.put("/api/admin/seo/:slug", async (c) => {
     if (r.error) return c.json(r, 502);
     return c.json({ ok: true, ...r, note: r.dry ? "dry preview" : `SEO ${slug} updated; Pages deploys in ~1 min` });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
+});
+
+// ================= P2 GSC 看板（只读；服务账号 JWT→token→searchAnalytics.query）=================
+// 密钥=Secret GSC_SA_KEY(Joe 已存);缺失/失败优雅降级"未接入"、绝不白屏、绝不回显 key。
+app.get("/api/admin/gsc", async (c) => {
+  if (!c.env.GSC_SA_KEY) return c.json({ notConfigured: true, note: "GSC 未接入（GSC_SA_KEY 未配置）" });   // 优雅降级(200)
+  const dim = c.req.query("dim") || "query";
+  if (!["query", "page", "country", "device"].includes(dim)) return c.json({ error: "dim must be query|page|country|device" }, 400);
+  const days = Math.min(90, Math.max(1, parseInt(c.req.query("days") || "28", 10) || 28));
+  try {
+    const r: any = await gscQuery(c.env.GSC_SA_KEY, dim, days);
+    if (r.error) return c.json({ error: r.error }, 502);
+    return c.json({ ok: true, ...r });
+  } catch (e: any) { return c.json({ error: "GSC 查询失败", detail: String(e.message || e).slice(0, 200) }, 502); }
 });
 
 // ================= P0-1 审计日志：官网仓 commit 历史里 admin: 那些（只读，零写路径）=================
