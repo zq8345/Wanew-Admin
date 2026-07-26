@@ -44,7 +44,7 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // ================= 批2-2：产品 CRUD（双步三语，继承 [[path]].js 骨架） =================
 // 写路径全部走 loadCtx（GitHub 读真源）→ validate(merge) → publish/unpublish（原子 commit）。
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
-import { loadCtx, validateProduct, publishProduct, unpublishProduct, validateCategories, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishService, SERVICE_META_KEYS, SERVICE_CARDS, publishPageMeta, SEO_PAGES, parseAuditMessage } from "./publish";
+import { loadCtx, validateProduct, publishProduct, unpublishProduct, publishBulk, validateCategories, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishService, SERVICE_META_KEYS, SERVICE_CARDS, publishPageMeta, SEO_PAGES, parseAuditMessage } from "./publish";
 import type { HomeEdit, ContactEdit, ServiceEdit, SeoEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
@@ -61,7 +61,26 @@ app.get("/api/admin/products", async (c) => {
   return c.json({ products: list, count: list.length, admin: operator(c) });
 });
 
-// ⚠️ 必须在 /products/:id 之前定义，否则 "drafts" 被 :id 捕获（Hono 按序匹配）。
+// ⚠️ 必须在 /products/:id 之前定义（否则 "bulk"/"drafts" 被 :id 捕获，Hono 按序匹配）。
+// P0-3 批量编辑：一次 commit 改多产品的 status/category/form（publishBulk 累积 files）。
+app.put("/api/admin/products/bulk", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const ids = Array.isArray(body?.ids) ? body.ids.map(Number).filter((n: number) => Number.isFinite(n)) : [];
+  const op = body?.op, value = body?.value;
+  if (!ids.length) return c.json({ error: "ids 不能为空" }, 400);
+  if (!["status", "category", "form"].includes(op)) return c.json({ error: "op must be status|category|form" }, 400);
+  if (ids.length > 200) return c.json({ error: "单次批量上限 200" }, 400);
+  const ctx = await loadCtx(c.env, cfg);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
+  try {
+    const r: any = await publishBulk(c.env, cfg, ctx, ids, op, value ?? "", { email: operator(c) });
+    if (r.error) return c.json(r, 502);
+    return c.json({ ok: true, ...r, note: `bulk ${op} ${r.count} products; Pages deploys in ~1 min` });
+  } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
+});
+
 // 非发布产品列表（draft/archived）：Contents API 列 data/products/ → 不在 index 的 → 读 status/标题。
 app.get("/api/admin/products/drafts", async (c) => {
   const cfg = ghConfig(c.env);

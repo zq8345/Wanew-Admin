@@ -8,7 +8,7 @@
 //     locale/urlOf → 列表卡片 URL 不本地化）。
 // 单真源铁律：render/chrome/github 全部跨目录 import，零复制。
 // @ts-ignore js 模块
-import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf, renderHome, renderPage } from "../vendor/render.js";
+import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf, renderHome, renderPage, FORM_KEY } from "../vendor/render.js";
 // @ts-ignore js 模块
 import { makeChrome } from "../vendor/chrome.js";
 // @ts-ignore js 模块
@@ -227,6 +227,104 @@ export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number,
   }
   const r = await commitFiles(env, cfg, files, `admin: delete product ${id} (${opts.email})`);
   return { ...r, files: files.map((f) => f.path) };
+}
+
+// ================= P0-3 批量编辑（一次 commit 的多产品原子 publish）=================
+// ⭐ 一致性核心：批量改 category 涉页面路径重算（旧 cat/id.html 删、新 cat/id.html 建）。
+// bulkPagePlan=纯函数（可 node 单测）：给一个产品的路径变更，算出该删哪些旧路径页、该渲染哪些新路径页。
+export function bulkPagePlan(
+  id: number, oldCat: string, newCat: string, isLive: boolean,
+  enabledLocales: string[], defaultLoc: string, locDir: Record<string, string>, pagesList: Set<string>,
+): { deletes: string[]; renders: string[] } {
+  const deletes: string[] = [], renders: string[] = [];
+  const catChanged = oldCat !== newCat;
+  for (const locale of enabledLocales) {
+    const dir = locDir[locale] || "";
+    const oldRel = dir ? `${dir}/${oldCat}/${id}.html` : `${oldCat}/${id}.html`;
+    const newRel = dir ? `${dir}/${newCat}/${id}.html` : `${newCat}/${id}.html`;
+    if (catChanged && pagesList.has(oldRel)) deletes.push(oldRel);   // 类目变→删旧路径页（防残留）
+    if (isLive) {
+      // 渲染新路径页：默认 locale 恒；其它 locale 在新路径已存在、或旧路径存在(迁移过来)才渲
+      if (locale === defaultLoc || pagesList.has(newRel) || (catChanged && pagesList.has(oldRel))) renders.push(newRel);
+    } else {
+      if (pagesList.has(newRel)) deletes.push(newRel);   // 下架/草稿：删新路径页（若存在）
+    }
+  }
+  return { deletes: [...new Set(deletes)], renders: [...new Set(renders)] };
+}
+
+// 批量端点：对 ids 逐个应用 op(status/category/form) → 累积所有变更进一个 files[] → 一次 commitFiles。
+export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], op: string, value: string, opts: { email: string }) {
+  if (!["status", "category", "form"].includes(op)) return { error: `未知批量操作：${op}` };
+  const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome } = ctx;
+  const CATS: string[] = (ctx.categories?.categories || []).map((c: any) => c.slug);
+  const FORMS = Object.keys(FORM_KEY as Record<string, string>);
+  if (op === "status" && !["draft", "published", "archived"].includes(value)) return { error: "status 非法" };
+  if (op === "category" && !CATS.includes(value)) return { error: `机型非法：${value}` };
+  if (op === "form" && value && !FORMS.includes(value)) return { error: `形态非法：${value}` };
+  const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
+  const idset = new Set(ids.map(Number).filter((n) => Number.isFinite(n)));
+  if (!idset.size) return { error: "ids 为空" };
+
+  let manifest: any[] = [...man0];
+  const affectedCats = new Set<string | null>([null]);   // products/ 总列表恒受影响
+  const files: any[] = [];
+  const chromeErrors: string[] = [];
+  let touched = 0;
+
+  for (const id of idset) {
+    const raw = await readFile(env, cfg, `data/products/${id}.json`);
+    if (!raw) continue;   // 跳过缺失
+    const prod: any = JSON.parse(raw);
+    const oldCat = prod.category;
+    if (op === "status") prod.status = value;
+    else if (op === "category") prod.category = value;
+    else if (op === "form") prod.form = value || null;
+    const isLive = (prod.status || "published") === "published";
+    files.push({ path: `data/products/${id}.json`, content: matchJson(raw, prod) });
+    // manifest：移旧条目；live 则加新条目（entry 抄 publishProduct 逻辑）
+    manifest = manifest.filter((e: any) => e.id !== id);
+    const thumb = prod.images?.[0] ? resolveImg(prod.images[0], site.img_base) : "";
+    const entry: any = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, thumb, excerpt: excerptOf(prod) };
+    for (const loc of locales.enabled) {
+      if (loc === locales.default) continue;
+      const t = prod.i18n[loc] && prod.i18n[loc].title; const x = excerptOf(prod, loc);
+      if (t || x !== entry.excerpt) (entry.i18n ??= {})[loc] = { ...(t ? { title: t } : {}), ...(x ? { excerpt: x } : {}) };
+    }
+    if (isLive) manifest.push(entry);
+    affectedCats.add(oldCat); affectedCats.add(prod.category);
+    // 页面计划（一致性核心，纯函数算）
+    const plan = bulkPagePlan(id, oldCat, prod.category, isLive, locales.enabled, locales.default, locDir, ctx.pagesList);
+    for (const rel of plan.deletes) files.push({ path: rel, delete: true });
+    for (const rel of plan.renders) {
+      // 从 rel 反推 locale（dir 前缀→locale）：按 enabled 找匹配的 locale
+      const loc = locales.enabled.find((L: string) => { const d = locDir[L] || ""; return (d ? `${d}/${prod.category}/${id}.html` : `${prod.category}/${id}.html`) === rel; }) || locales.default;
+      const related = genRelated(entry, manifest, loc, catalog, urlOf);
+      const rawHtml = render(prod, { template, imgBase: site.img_base, related, locale: loc, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap });
+      const { html, errors } = chrome.applyChrome(rawHtml.replace(/\r/g, ""), rel);
+      chromeErrors.push(...errors);
+      const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;
+      files.push({ path: rel, content: matchEol(prevRaw, html) });
+    }
+    touched++;
+  }
+  if (!touched) return { error: "无有效产品（ids 都不存在）" };
+  if (chromeErrors.length) return { error: "chrome 注入报错（未提交）", detail: chromeErrors.slice(0, 5) };
+  manifest.sort((a: any, b: any) => a.category.localeCompare(b.category) || a.id - b.id);
+  files.push({ path: "data/products-index.json", content: matchJson(ctx.manifestRaw, manifest) });
+  // 受影响列表页 × locales regen 一次（用最终 manifest）
+  for (const cat of affectedCats) {
+    for (const locale of locales.enabled) {
+      const dir = locDir[locale] || "";
+      const base = cat ? `${cat}/index.html` : "products/index.html";
+      const rel = dir ? `${dir}/${base}` : base;
+      if (!ctx.pagesList.has(rel)) continue;
+      const h = await readFile(env, cfg, rel);
+      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf } as any)) });
+    }
+  }
+  const r = await commitFiles(env, cfg, files, `admin: bulk ${op}=${value} ${touched} products (${opts.email})`);
+  return { ...r, count: touched, files: files.map((f) => f.path) };
 }
 
 

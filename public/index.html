@@ -186,10 +186,15 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     </div>
     <div class="bulkbar" id="bulkbar">
       <span>已选 <b id="selN">0</b> 项</span>
-      <button class="danger" onclick="bulkDelete()">删除选中</button>
+      <button class="primary" onclick="bulkStatus('published','批量发布')">发布</button>
+      <button onclick="bulkStatus('archived','批量归档')">归档</button>
+      <select id="bulk-cat" onchange="if(this.value){bulkAttr('category',this.value);this.value='';}"><option value="">批量改机型…</option></select>
+      <select id="bulk-form" onchange="if(this.value!=='__'){bulkAttr('form',this.value==='__none'?'':this.value);this.value='__';}"><option value="__">批量改形态…</option></select>
+      <span style="flex:1"></span>
+      <button class="danger" onclick="bulkDelete()">彻底删除</button>
       <button onclick="clearSel()">取消选择</button>
-      <span class="muted">删除=从官网下架（三语详情+列表联动，走原子 commit）</span>
     </div>
+    <p class="muted" style="font-size:12px;margin:0 0 8px">批量操作走一次原子 commit（一次 Pages 重建、审计一条）。归档=软下架可恢复；彻底删除不可恢复。</p>
     <table>
       <thead><tr>
         <th style="width:30px"><input type="checkbox" id="selAll" onchange="toggleAll(this.checked)"></th>
@@ -436,17 +441,18 @@ function msg(t, err) { const m = $("#msg"); m.textContent = t; m.className = "ms
   } catch {}
   await Promise.all([loadCats(), loadList()]);
   // 🔴终审修复：#e-form 之前从未填充（只填了列表的 #f-form）→ 编辑页回填必空 → 保存抹 form 字段
-  const fs = $("#f-form"), ef = $("#e-form");
-  FORMS.forEach((f) => { fs.append(new Option(f, f)); ef.append(new Option(f, f)); });
+  const fs = $("#f-form"), ef = $("#e-form"), bf = $("#bulk-form");
+  FORMS.forEach((f) => { fs.append(new Option(f, f)); ef.append(new Option(f, f)); if (bf) bf.append(new Option(f, f)); });
+  if (bf) bf.append(new Option("（清空形态）", "__none"));
   ["#q", "#f-cat", "#f-form"].forEach((s) => $(s).addEventListener("input", renderRows));
   showDash();   // 默认落地=仪表盘（比落在"产品"更像后台首页）
 })();
 
 async function loadCats() {
   try { cats = (await api("/categories")).categories || []; } catch (e) { msg("类目加载失败：" + e.message, 1); cats = []; }
-  const fc = $("#f-cat"), ec = $("#e-cat");
-  fc.length = 1; ec.length = 0;
-  for (const c of cats) { fc.append(new Option(c.display, c.slug)); ec.append(new Option(c.display, c.slug)); }
+  const fc = $("#f-cat"), ec = $("#e-cat"), bc = $("#bulk-cat");
+  fc.length = 1; ec.length = 0; if (bc) bc.length = 1;
+  for (const c of cats) { fc.append(new Option(c.display, c.slug)); ec.append(new Option(c.display, c.slug)); if (bc) bc.append(new Option(c.display, c.slug)); }
 }
 async function loadList() {
   try {
@@ -527,6 +533,28 @@ async function bulkDelete() {
     catch (e) { msg(`#${id} 删除失败：` + e.message, 1); break; }
   }
   sel.clear(); await loadList();
+}
+// 批量状态流转（发布/归档）——一次 commit
+async function bulkStatus(status, label) {
+  const ids = [...sel];
+  if (!ids.length) return;
+  if (!confirm(`将 ${ids.length} 个选中产品「${label}」（一次原子 commit、≈1分钟上线）。\n${status === "published" ? "→ 全部发布到官网" : "→ 全部软下架（数据保留、可恢复）"}。\n直接修改生产官网仓。确定？`)) return;
+  await bulkRun({ ids, op: "status", value: status }, label);
+}
+// 批量改机型/形态——一次 commit（改机型涉页面路径重算，后端 bulkPagePlan 处理）
+async function bulkAttr(op, value) {
+  const ids = [...sel];
+  if (!ids.length) return msg("未选中产品", 1);
+  const label = op === "category" ? `改机型为「${catName(value)}」` : (value ? `改形态为「${value}」` : "清空形态");
+  if (!confirm(`将 ${ids.length} 个选中产品${label}（一次原子 commit、≈1分钟上线）。${op === "category" ? "\n⚠️改机型会重算详情页路径（旧路径页删、新路径页建）。" : ""}\n直接修改生产官网仓。确定？`)) return;
+  await bulkRun({ ids, op, value }, label);
+}
+async function bulkRun(payload, label) {
+  try {
+    const r = await api("/products/bulk", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+    msg(`✅ 已批量${label}：${r.count || payload.ids.length} 个（commit ${(r.commit || "").slice(0, 7)}）· ≈1分钟官网可见`);
+    sel.clear(); await loadList();
+  } catch (e) { msg(`批量${label}失败：` + e.message, 1); }
 }
 
 // ---------- 编辑 ----------
