@@ -245,6 +245,25 @@ export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, e
     }).join("\n          ");
     out = out.split("{{PRODUCT_STRIP}}").join(strip);
   }
+  // W3 "browse by type" 卡片:专属 /type/X/ 页目前只有 en。对没有本地化 /type/ 页的语种,
+  // 原来是「链英文 /type/ + 挂 en inglés 标注」—— 对母语用户像"站没做完"。但同一批产品在
+  // 本地化 /products/ 页的「Tipo」筛选里【存在】(w3.js 的 hash 深链会激活对应 chip)。
+  // 规则(存在性派生,零特例,和机型卡/badge 同一条):typecard 目标 = 该语种【有】本地化
+  //   /type/X/ 就用它;【没有】则回落到本地化 /products/#X(而不是英文页+标注)。
+  //   en 天然有 /type/X/ → 永远走 /type/(它们是 en 自己的收录落地页、且是首页给它们的唯一
+  //   内链,绝不能改成 /products/ 把它们变孤儿);es/pt 无 /type/ 但有 /products/ → 走筛选视图。
+  //   /type/ 将来若本地化,`dedicated!==` 自动改回本地化 /type/ 页,无需再动这里。
+  const typeRedirect = {};
+  out = out.replace(/\{\{url\.\/type\/([a-z-]+)\/\}\}/g, (m, slug) => {
+    const dedicated = urlOf(`/type/${slug}/`, locale);        // 本地化 /type/ 存在则返回它,否则原样
+    if (dedicated !== `/type/${slug}/`) return dedicated;     // 该语种有专属页 → 用它
+    // urlOf 不处理 hash(查 `es/products/#x.html` 必不存在),所以对 /products/ 本身查存在性再拼 #slug。
+    const base = urlOf(`/products/`, locale);                 // "/es/products/" | "/pt/products/" | "/products/"
+    if (base !== `/products/`) { typeRedirect[slug] = true; return `${base}#${slug}`; }
+    return dedicated;                                         // en / 无本地化替代 → 英文 /type/
+  });
+  // 改走本地化 products 视图的卡不再需要语言标注;其余(en)交给通用 badge 处理(它对 en 返回空)。
+  out = out.replace(/\{\{badge\.\/type\/([a-z-]+)\/\}\}/g, (m, slug) => (typeRedirect[slug] ? "" : m));
   return renderPage(out, { locale, catalog, urlOf, dirOf, enabled, internal_noindex });
 }
 
@@ -434,9 +453,26 @@ export function setListLabels(html, { locale, catalog, model }) {
   let n = 0;
   out = out.replace(/(<span class="product-chiprow__label">)[^<]*(<\/span>)/g,
     (m, a, b) => a + t(n++ === 0 ? "list.filter.model" : "list.filter.type") + b);
-  // 两条轴各有一个 "All" chip,同一个词。只认 href 指向该轴全集的那一个,
-  // 不按文本 "All" 认 —— 型号 chip 里将来若出现同名值,按文本认会误伤。
+  // 形态轴类目名(Mounts&Brackets…)+ 两轴的 "All" 一起本地化,全走 catalog 且与 nav/首页类目卡
+  // 【同一套 chrome 键】—— 保证全站 es/pt/zh 类目名单一口径。此前 setListLabels 假设"形态 chip 在
+  // chrome 里已经有主了"、根本不碰它们 —— 但 chip 标签是【就地烘进 list 页 body 的】,该假设不成立:
+  // /es/products/ 的 Tipo chip 全留了英文(审计 M-a),/zh/ 同样留英文;pt 恰好持久化对了、掩盖了根。
+  // 机型 chip(Mini/Standard…)是 model_display 型号名,不在下表 → 不翻。
+  // chip 有两种载体:<button>(就地筛选,data-filter) 与 <a>(机型导航跳转,href,无 data-filter)。
   const ALL = t("list.chip.all");
+  const FORM_LABEL_KEY = {
+    mounts: "header.mounts_brackets", power: "header.power_charging", cables: "header.cables",
+    networking: "header.networking", cases: "header.cases_protection",
+  };
+  // (1) <button> 筛选 chip:两轴 All → 本地化;形态类目 → 本地化;机型名(不在表)原样。
+  out = out.replace(
+    /(<button\b[^>]*\bdata-filter="([a-z-]+)"[^>]*>)([^<]*?)( <span class="product-chip__n">)/g,
+    (m, open, filter, label, tail) => {
+      if (filter === "all") return open + ALL + tail;
+      const key = FORM_LABEL_KEY[filter];
+      return key ? open + t(key) + tail : m;
+    });
+  // (2) 机型导航行里的 <a> "All" 锚(href 指向全集):只认 "All"/已本地化值,型号名锚不动。
   out = out.replace(/(<a class="product-chip[^"]*" href="[^"]*"(?: data-filter="all")?>)([^<]*?)( <span class="product-chip__n">)/g,
     (m, a, label, b) => (label === "All" || label === ALL ? a + ALL + b : m));
   return out;
