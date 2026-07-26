@@ -377,21 +377,14 @@ app.put("/api/admin/contact", async (c) => {
 app.get("/api/admin/guides", async (c) => {
   const cfg = ghConfig(c.env);
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
-  const [svcRaw, sharedRaw] = await Promise.all([
-    readFile(c.env, cfg, "data/pages/service.json"),
-    readFile(c.env, cfg, "data/pages/shared.json"),
-  ]);
-  // /service/ 页已随官网 Guides 重构下线（迁往统一 /guides/ 库）→ 优雅降级(200)，编辑器提示重构中，不再 404 崩。
-  if (!svcRaw) return c.json({ retired: true, note: "攻略 /service/ 页已随官网 Guides 重构下线（内容迁往统一 /guides/ 库）。此编辑器针对已下线的 /service/ 页，将在新 /guides/ 结构定稿后对齐。" });
-  if (!sharedRaw) return c.json({ error: "shared.json missing" }, 404);
-  const svc = JSON.parse(svcRaw), shared = JSON.parse(sharedRaw);
-  const meta: Record<string, any> = {};
-  for (const k of SERVICE_META_KEYS) meta[k] = svc[k] || {};
-  const cards = SERVICE_CARDS.map(([tk, ek]: [string, string]) => ({ titleKey: tk, title: shared[tk] || {}, excerptKey: ek, excerpt: shared[ek] || {} }));
-  // locale 集从页头键取（与实际存储一致）
-  const first = meta[SERVICE_META_KEYS[0]];
-  const locales = first && typeof first === "object" ? Object.keys(first).filter((l) => !l.startsWith("reason")) : [];
-  return c.json({ meta, cards, locales });
+  // /service/ 已随官网 G1 迁移下线（commit 5d9ca924 git rm service.json+page-service.html）。
+  // 攻略内容迁往统一 /guides/ 库 → 此处指向新 guides-manifest.json 做【只读清单展示】(Joe 能看
+  // Guides 里有哪些文章)。完整内容管理编辑器待 Guides②③结构定稿后一次做对(见 roadmap 内容运营)。
+  const manRaw = await readFile(c.env, cfg, "data/pages/guides-manifest.json");
+  if (!manRaw) return c.json({ retired: true, articles: [], note: "攻略内容库重构中（/service/ 已下线、/guides/ 迁移进行中），暂无清单可读。" });
+  let articles: any[] = [];
+  try { articles = (JSON.parse(manRaw).articles || []).map((a: any) => ({ id: a.id, topic: a.topic || "其它", slug: a.slug, title: a.title || a.slug, old: a.old || "" })); } catch {}
+  return c.json({ retired: true, readonly: true, articles, count: articles.length, note: "攻略已迁到统一 /guides/ 库（内容层重构中）。此处只读展示文章清单；完整内容管理编辑器待 Guides 结构定稿后对齐。" });
 });
 
 app.put("/api/admin/guides", async (c) => {
