@@ -73,6 +73,22 @@ tr:hover td{background:var(--w3-panel2)}
 .fcard-n{font-size:10px;color:var(--w3-text3);margin-top:2px}
 .fcard-del{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);border:none;color:#fff;border-radius:4px;font-size:11px;padding:0 5px;height:auto;min-width:0;cursor:pointer}
 .fcard-del:hover{background:#e5484d}
+/* 审计二期·commit 变更详情 */
+.af-toggle{font-size:10px;padding:1px 6px;height:auto;margin-left:6px;background:var(--w3-panel);border:1px solid var(--w3-line);border-radius:4px;color:var(--w3-text2);cursor:pointer}
+.af-toggle:hover{border-color:var(--w3-accent);color:var(--w3-accent)}
+.audit-detail>td{background:var(--w3-panel2);padding:0}
+.audit-detail-box{padding:10px 14px}
+.af-head{font-size:12px;color:var(--w3-text2);margin-bottom:8px;font-weight:600}
+.af-row{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;flex-wrap:wrap}
+.af-st{font-size:10px;padding:1px 6px;border-radius:4px;background:var(--w3-tile);color:var(--w3-text2);white-space:nowrap}
+.af-added{background:rgba(46,160,67,.18);color:#3fb950}
+.af-removed{background:rgba(229,72,77,.18);color:#e5484d}
+.af-name{font-family:ui-monospace,monospace;color:var(--w3-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:120px}
+.af-stat{font-family:ui-monospace,monospace;font-size:11px;white-space:nowrap}
+.af-add{color:#3fb950}
+.af-del{color:#e5484d}
+.af-diff-btn{font-size:10px;padding:1px 6px;height:auto;background:var(--w3-panel);border:1px solid var(--w3-line);border-radius:4px;color:var(--w3-text2);cursor:pointer}
+.af-patch{width:100%;max-height:320px;overflow:auto;background:var(--w3-tile);border:1px solid var(--w3-line);border-radius:5px;padding:8px;font-size:11px;font-family:ui-monospace,monospace;white-space:pre;margin:6px 0 2px}
 /* 从视频库插入·弹层 */
 .vp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;align-items:center;justify-content:center;display:none}
 .vp-box{background:var(--w3-panel);border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);width:min(760px,92vw);max-height:82vh;display:flex;flex-direction:column;padding:14px}
@@ -1398,9 +1414,32 @@ function paintAudit(r) {
       <td class="tnum" style="font-size:12px">${esc(e.operator)}</td>
       <td><span class="pill pf">${esc(e.opType)}</span></td>
       <td style="font-size:12.5px">${esc(e.operation)}</td>
-      <td>${e.url ? `<a class="ttl-link" href="${esc(e.url)}" target="_blank"><span class="tnum">${esc(e.sha)}</span> <span class="ext">↗</span></a>` : `<span class="tnum muted">${esc(e.sha)}</span>`}</td>
+      <td>${e.url ? `<a class="ttl-link" href="${esc(e.url)}" target="_blank"><span class="tnum">${esc(e.sha)}</span> <span class="ext">↗</span></a>` : `<span class="tnum muted">${esc(e.sha)}</span>`} <button class="af-toggle" onclick="auditDetail('${esc(e.sha)}',this)">▸ 详情</button></td>
     </tr>`).join("") || `<tr><td colspan="5" class="muted">无匹配的后台操作记录</td></tr>`;
   $("#audit-more").style.display = r.hasMore ? "" : "none";
+}
+// 审计二期：展开一条 commit 看改了哪些文件 + diff 摘要
+async function auditDetail(sha, btn) {
+  const tr = btn.closest("tr"), nx = tr.nextElementSibling;
+  if (nx && nx.classList.contains("audit-detail")) { nx.remove(); btn.textContent = "▸ 详情"; return; }
+  document.querySelectorAll(".audit-detail").forEach((el) => el.remove());   // 一次只展开一条
+  document.querySelectorAll(".af-toggle").forEach((b) => { if (b !== btn) b.textContent = "▸ 详情"; });
+  btn.textContent = "▾ 收起";
+  const dr = document.createElement("tr"); dr.className = "audit-detail";
+  dr.innerHTML = `<td colspan="5" class="muted">加载变更… <span class="spin"></span></td>`;
+  tr.after(dr);
+  let d;
+  try { d = await api("/audit/" + encodeURIComponent(sha)); }
+  catch (e) { dr.innerHTML = `<td colspan="5" class="muted">加载失败：${esc(e.message)}</td>`; return; }
+  const st = (s) => ({ added: "新增", modified: "改", removed: "删", renamed: "改名" }[s] || s);
+  const files = (d.files || []).map((f) => `
+    <div class="af-row">
+      <span class="af-st af-${esc(f.status)}">${esc(st(f.status))}</span>
+      <span class="af-name" title="${esc(f.filename)}">${esc(f.filename)}</span>
+      <span class="af-stat"><span class="af-add">+${f.additions}</span> <span class="af-del">−${f.deletions}</span></span>
+      ${f.patch ? `<button class="af-diff-btn" onclick="const p=this.nextElementSibling;p.style.display=p.style.display==='none'?'block':'none'">diff</button><pre class="af-patch" style="display:none">${esc(f.patch)}</pre>` : `<span class="muted" style="font-size:11px">（二进制/无 diff）</span>`}
+    </div>`).join("");
+  dr.innerHTML = `<td colspan="5"><div class="audit-detail-box"><div class="af-head">${d.fileCount} 个文件变更 · <span class="af-add">+${d.stats?.additions || 0}</span> <span class="af-del">−${d.stats?.deletions || 0}</span>${d.fileCount > 60 ? " · 仅列前 60" : ""}</div>${files || `<span class="muted">无文件变更</span>`}</div></td>`;
 }
 
 async function openEdit(id) {

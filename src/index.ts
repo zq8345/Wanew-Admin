@@ -484,6 +484,27 @@ app.get("/api/admin/audit", async (c) => {
   return c.json({ entries, page, hasMore: arr.length === 100, operators: [...new Set(all.map((e) => e.operator))], scanned: arr.length, adminCount: all.length });
 });
 
+// 审计二期：单 commit 变更详情（改了哪些文件 + diff 摘要）——GitHub Commits API。只读。
+app.get("/api/admin/audit/:sha", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const sha = (c.req.param("sha") || "").replace(/[^a-f0-9]/gi, "").slice(0, 40);
+  if (!sha) return c.json({ error: "bad sha" }, 400);
+  try {
+    const res = await fetch(`https://api.github.com/repos/${c.env.GITHUB_REPO}/commits/${sha}`, {
+      headers: { Authorization: `Bearer ${c.env.GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return c.json({ error: "github commit failed", status: res.status }, 502);
+    const j: any = await res.json();
+    const files = (j.files || []).slice(0, 60).map((f: any) => ({
+      filename: f.filename, status: f.status,
+      additions: f.additions || 0, deletions: f.deletions || 0,
+      patch: (f.patch || "").slice(0, 4000),   // 每文件 diff 截断防超大
+    }));
+    return c.json({ sha: String(j.sha).slice(0, 7), stats: j.stats || { additions: 0, deletions: 0 }, fileCount: (j.files || []).length, files });
+  } catch (e: any) { return c.json({ error: "github fetch error", detail: String(e).slice(0, 200) }, 502); }
+});
+
 // ================= Team A：访问状态（只读；权限真源=Cloudflare Access，此处只展示不控制）=================
 // ⚠️ 名册不控制登录权限——加/删成员去 CF Access（wanew-admin 应用）。此端点纯读 env+header，无 GitHub、无写。
 app.get("/api/admin/team", (c) => c.json({
