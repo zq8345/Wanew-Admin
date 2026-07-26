@@ -76,6 +76,15 @@ tr:hover td{background:var(--w3-panel2)}
 .fcard{position:relative;width:118px;border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);background:var(--w3-panel2);padding:14px 8px 9px;cursor:pointer;text-align:center;transition:border-color .12s}
 .fcard:hover{border-color:var(--w3-accent)}
 #media-manage-btn.on{background:var(--w3-accent);color:#08111f;border-color:var(--w3-accent);font-weight:600}
+/* 文件夹引导（治"0 夹 N 未归类"·dense） */
+.fguide{grid-column:1/-1;background:var(--w3-bg2);border:1px dashed var(--w3-line2);border-radius:var(--dz-radius-s);padding:12px 14px;margin-bottom:2px}
+.fguide-t{font-size:13px;color:var(--w3-text);font-weight:600;margin-bottom:8px}
+.fguide-n{font-weight:400;color:var(--w3-accent);font-size:12px;margin-left:8px}
+.fguide-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:7px}
+.fguide-chips button{font-size:12px;padding:4px 11px;height:auto;background:var(--w3-panel);border:1px solid var(--w3-line);border-radius:999px;color:var(--w3-text2);cursor:pointer}
+.fguide-chips button:hover{border-color:var(--w3-accent);color:var(--w3-accent)}
+.fguide-custom{border-style:dashed!important}
+.fguide-hint{font-size:11px;color:var(--w3-text3)}
 .fcard-ic{font-size:32px;line-height:1}
 .fcard-name{font-size:12px;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--w3-text)}
 .fcard-n{font-size:10px;color:var(--w3-text3);margin-top:2px}
@@ -1133,7 +1142,15 @@ function paintMedia() {
         ${manageMode ? `<button class="danger" onclick="mediaDelete('${esc(m.key)}')">删</button>` : ""}
       </div>
     </div>`).join("");
-  $("#media-grid").innerHTML = (cardsHtml + tilesHtml) || `<div class="card muted">${atRoot ? (isV ? "视频库为空——点右上「上传」添加，或「新建文件夹」归类" : "图片库为空") : `此文件夹暂无${isV ? "视频" : "图片"}`}${mediaFilter ? "（此标签筛选下）" : ""}</div>`;
+  // 文件夹引导（治"0 夹 N 未归类"）：根视图 + 未归类多 + 文件夹少 时，提示 + 建议文件夹一键建
+  const suggest = ({ image: ["产品图", "营销图", "场景图", "证书图"], video: ["安装视频", "使用演示", "场景视频"] })[mediaKind] || [];
+  const nUn = kindItems.filter((m) => !m.folder).length;
+  const guideHtml = (atRoot && nUn >= 3 && kindFolders.length < 2) ? `<div class="fguide">
+    <div class="fguide-t">📁 把${isV ? "视频" : "图片"}归类到文件夹更好找<span class="fguide-n">当前 ${nUn} 个未归类</span></div>
+    <div class="fguide-chips">${suggest.map((s) => `<button onclick="quickFolder('${esc(s)}')">＋ ${esc(s)}</button>`).join("")}<button class="fguide-custom" onclick="folderCreate()">＋ 自定义…</button></div>
+    <div class="fguide-hint">建好后：勾选素材 → 底部「移入所选文件夹」批量归类，或用每张卡的下拉逐个归入。</div>
+  </div>` : "";
+  $("#media-grid").innerHTML = (guideHtml + cardsHtml + tilesHtml) || `<div class="card muted">${atRoot ? (isV ? "视频库为空——点右上「上传」添加，或「新建文件夹」归类" : "图片库为空") : `此文件夹暂无${isV ? "视频" : "图片"}`}${mediaFilter ? "（此标签筛选下）" : ""}</div>`;
   mediaSyncBulk();
 }
 function mediaToggleSel(key, cb) { if (cb.checked) mediaSel.add(key); else mediaSel.delete(key); cb.closest(".mtile").classList.toggle("sel", cb.checked); mediaSyncBulk(); }
@@ -1165,6 +1182,11 @@ async function mediaBulkMove() {
 }
 // 管理态开关：默认关（删除入口全隐藏防误删）；开了才在文件夹卡/文件卡露出删除。
 function toggleManage() { manageMode = !manageMode; const b = $("#media-manage-btn"); if (b) { b.classList.toggle("on", manageMode); b.textContent = manageMode ? "✓ 管理中" : "🔧 管理"; } paintMedia(); }
+// 一键建建议文件夹（按当前 kind 归属）——文件夹引导用
+async function quickFolder(name) {
+  try { const r = await api("/media/folders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, kind: mediaKind }) }); mediaFolders = r.folders || []; folderKinds = r.kinds || folderKinds; paintFolderbar(); paintMedia(); msg(`已建${mediaKind === "video" ? "视频" : "图片"}文件夹：${name}`); }
+  catch (e) { msg("建文件夹失败：" + e.message + (/已存在/.test(e.message) ? "（已有同名，直接用即可）" : ""), 1); }
+}
 function folderCreate() { $("#folder-name-input").value = ""; $("#folder-modal").style.display = "flex"; setTimeout(() => $("#folder-name-input").focus(), 40); }
 function closeFolderModal() { $("#folder-modal").style.display = "none"; }
 async function confirmFolderCreate() {
