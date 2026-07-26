@@ -1145,10 +1145,11 @@ async function mediaTag(key, tag) {
   catch (e) { msg("标记失败：" + e.message, 1); }
 }
 async function mediaDelete(key) {
-  if (!confirm(`删除这张图？\n${key}\n\n⚠️ 直接删 R2、不可撤销。若有产品详情页引用它，页面会裂图。`)) return;
+  const v = isVid(key);
+  if (!confirm(`删除这${v ? "个视频（连同自动封面）" : "张图"}？\n${key}\n\n⚠️ 直接删 R2、不可撤销。若有产品${v ? "视频区引用它，会失效" : "详情页引用它，页面会裂图"}。`)) return;
   const typed = prompt(`危险操作二次确认：输入「删除」继续`);
   if (typed !== "删除") return msg("已取消");
-  try { await api("/media?key=" + encodeURIComponent(key), { method: "DELETE" }); mediaItems = mediaItems.filter((x) => x.key !== key); paintFolderbar(); paintMedia(); msg("已删除 " + key.split("/").pop()); }
+  try { await api("/media?key=" + encodeURIComponent(key), { method: "DELETE" }); const pk = key.replace(/\.mp4$/i, ".poster.webp"); mediaItems = mediaItems.filter((x) => x.key !== key && x.key !== pk); paintFolderbar(); paintMedia(); msg("已删除 " + key.split("/").pop()); }
   catch (e) { msg("删除失败：" + e.message, 1); }
 }
 // #66-2 上传前把 jpg/png 转 webp（主图 q0.82·原分辨率，纯浏览器 canvas）——真样实测省 33~94% 字节。

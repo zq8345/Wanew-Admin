@@ -541,6 +541,8 @@ app.delete("/api/admin/media", async (c) => {
   const key = c.req.query("key") || "";
   if (!key || key === MEDIA_META) return c.json({ error: "bad key" }, 400);
   await c.env.IMAGES.delete(key);
+  // 删视频顺带删其封面(命名约定 <base>.poster.webp)——防孤儿 poster 死重
+  if (/\.mp4$/i.test(key)) await c.env.IMAGES.delete(key.replace(/\.mp4$/i, ".poster.webp"));
   const tags = await loadMediaTags(c.env);
   if (tags[key] !== undefined) { delete tags[key]; await saveMediaTags(c.env, tags); }
   // 顺手清文件夹归属（图没了归属也该没）
