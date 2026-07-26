@@ -35,6 +35,13 @@ tr:hover td{background:var(--w3-panel2)}
 .pill.st-pub{border-color:rgba(127,216,162,.4);background:rgba(127,216,162,.12);color:var(--w3-ok)}
 .pill.st-draft{border-color:var(--w3-line2);background:var(--w3-panel2);color:var(--w3-text3)}
 .pill.st-arch{border-color:rgba(255,190,120,.4);background:rgba(255,190,120,.12);color:#ffc078}
+/* 产品三态分区 tab（在线/下架/草稿箱·dense） */
+.stabs{display:inline-flex;gap:2px;background:var(--w3-bg2);border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);padding:2px}
+.stab{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:4px 11px;border:none;background:transparent;color:var(--w3-text2);border-radius:calc(var(--dz-radius-s) - 2px);cursor:pointer;height:auto}
+.stab:hover{color:var(--w3-text)}
+.stab.on{background:var(--w3-panel);color:var(--w3-text);box-shadow:0 0 0 1px var(--w3-line)}
+.stab-n{font-size:11px;color:var(--w3-text3);font-variant-numeric:tabular-nums}
+.stab.on .stab-n{color:var(--w3-accent)}
 .pill.pf{border-color:var(--w3-line);background:var(--w3-bg2);color:var(--w3-text2)}
 /* 列表标题=官网详情页链接（"看官网"走标题、"编辑"走按钮，两动作分开防误点）*/
 .ttl-link{color:var(--w3-text);text-decoration:none}
@@ -229,7 +236,8 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
   <!-- ============ 列表视图 ============ -->
   <div id="v-list">
     <div class="toolbar">
-      <select id="f-status" onchange="renderRows()"><option value="">全部状态</option><option value="published">已发布</option><option value="draft">草稿</option><option value="archived">已归档</option></select>
+      <div class="stabs" id="status-tabs"></div>
+      <select id="f-status" style="display:none"><option value=""></option><option value="published"></option><option value="draft"></option><option value="archived"></option></select>
       <select id="f-cat"><option value="">全部机型</option></select>
       <select id="f-form"><option value="">全部形态</option></select>
       <span class="muted" id="count"></span>
@@ -239,14 +247,14 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="bulkbar" id="bulkbar">
       <span>已选 <b id="selN">0</b> 项</span>
       <button class="primary" onclick="bulkStatus('published','批量发布')">发布</button>
-      <button onclick="bulkStatus('archived','批量归档')">归档</button>
+      <button onclick="bulkStatus('archived','批量下架')">下架</button>
       <select id="bulk-cat" onchange="if(this.value){bulkAttr('category',this.value);this.value='';}"><option value="">批量改机型…</option></select>
       <select id="bulk-form" onchange="if(this.value!=='__'){bulkAttr('form',this.value==='__none'?'':this.value);this.value='__';}"><option value="__">批量改形态…</option></select>
       <span style="flex:1"></span>
       <button class="danger" onclick="bulkDelete()">彻底删除</button>
       <button onclick="clearSel()">取消选择</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:0 0 8px">批量操作走一次原子 commit（一次 Pages 重建、审计一条）。归档=软下架可恢复；彻底删除不可恢复。</p>
+    <p class="muted" style="font-size:12px;margin:0 0 8px">批量操作走一次原子 commit（一次 Pages 重建、审计一条）。下架=软下架可恢复；彻底删除不可恢复。</p>
     <table>
       <thead><tr>
         <th style="width:30px"><input type="checkbox" id="selAll" onchange="toggleAll(this.checked)"></th>
@@ -559,17 +567,26 @@ function filtered() {
     (!q || String(p.id) === q || (p.title || "").toLowerCase().includes(q)) &&
     (!fc || p.category === fc) && (!ff || p.form === ff) && (!fst || (p.status || "published") === fst));
 }
-const STATUS_BADGE = { published: '<span class="pill st-pub">已发布</span>', draft: '<span class="pill st-draft">草稿</span>', archived: '<span class="pill st-arch">已归档</span>' };
-function statusActions(p) {   // 情境化流转按钮（归档=软下架主路径；硬删除进危险区）
+const STATUS_BADGE = { published: '<span class="pill st-pub">在线</span>', draft: '<span class="pill st-draft">草稿</span>', archived: '<span class="pill st-arch">已下架</span>' };
+function statusActions(p) {   // 情境化流转按钮（下架=软下架主路径；硬删除进危险区）
   const s = p.status || "published";
-  if (s === "published") return `<button onclick="setStatus(${p.id},'archived','归档下架')" title="软下架·从官网撤下但保留数据、可恢复">归档</button>`;
+  if (s === "published") return `<button onclick="setStatus(${p.id},'archived','下架')" title="软下架·从官网撤下但保留数据、可恢复">下架</button>`;
   if (s === "draft") return `<button class="primary" onclick="setStatus(${p.id},'published','发布上线')" title="发布到官网">发布</button> <button class="danger" onclick="hardDelete(${p.id})" title="彻底删除·不可恢复">删</button>`;
   return `<button class="primary" onclick="setStatus(${p.id},'published','恢复上线')" title="重新发布到官网">恢复</button> <button class="danger" onclick="hardDelete(${p.id})" title="彻底删除·不可恢复">删</button>`;   // archived
 }
+// 产品三态分区 tab（在线/下架/草稿箱）——驱动隐藏的 #f-status，filtered() 无改
+function setStatusTab(v) { const s = $("#f-status"); if (s) s.value = v; renderRows(); }
+function paintStatusTabs() {
+  const cur = ($("#f-status") || {}).value || "";
+  const cnt = (st) => st ? products.filter((p) => (p.status || "published") === st).length : products.length;
+  const tab = (v, label) => `<button class="stab${cur === v ? " on" : ""}" onclick="setStatusTab('${v}')">${label}<span class="stab-n">${cnt(v)}</span></button>`;
+  const box = $("#status-tabs"); if (box) box.innerHTML = tab("", "全部") + tab("published", "在线") + tab("archived", "下架") + tab("draft", "草稿箱");
+}
 function renderRows() {
+  paintStatusTabs();
   const list = filtered();
   const nPub = products.filter((p) => (p.status || "published") === "published").length;
-  $("#count").textContent = `${list.length} 条 · 共 ${products.length}（已发布 ${nPub}）`;
+  $("#count").textContent = `${list.length} 条 · 共 ${products.length}（在线 ${nPub}）`;
   $("#rows").innerHTML = list.map((p) => {
     const live = (p.status || "published") === "published";
     const title = live
@@ -595,7 +612,7 @@ async function setStatus(id, status, label) {
   catch (e) { msg(`#${id} ${label}失败：` + e.message, 1); }
 }
 async function hardDelete(id) {
-  if (!confirm(`⚠️ 彻底删除产品 #${id}？\n\n这会删除产品数据 + 三语详情页，**不可恢复**（要下架但保留数据请用「归档」）。\n直接修改生产官网仓。确定彻底删除？`)) return;
+  if (!confirm(`⚠️ 彻底删除产品 #${id}？\n\n这会删除产品数据 + 三语详情页，**不可恢复**（要下架但保留数据请用「下架」）。\n直接修改生产官网仓。确定彻底删除？`)) return;
   const typed = prompt(`危险操作二次确认：输入产品 id「${id}」继续彻底删除`);
   if (typed !== String(id)) return msg("已取消（id 不符）");
   try { await api("/products/" + id, { method: "DELETE" }); msg(`已彻底删除 #${id}`); await loadList(); }
@@ -619,7 +636,7 @@ async function bulkDelete() {
   }
   sel.clear(); await loadList();
 }
-// 批量状态流转（发布/归档）——一次 commit
+// 批量状态流转（发布/下架）——一次 commit
 async function bulkStatus(status, label) {
   const ids = [...sel];
   if (!ids.length) return;
