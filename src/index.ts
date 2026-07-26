@@ -132,6 +132,22 @@ app.post("/api/admin/upload", async (c) => {
   return c.json({ ok: true, key, url: c.env.IMG_BASE + key });
 });
 
+// 视频上传（v1）：仅 mp4 · 流式直灌 R2(不 buffer arrayBuffer→避免几十 MB 撑爆 Worker 128MB 内存) · ≤50MB。
+// 大小闸走 Content-Length 头，超限先 413 拒再不流。>100MB 直传 R2 通道=v2、暂不做。
+app.post("/api/admin/upload-video", async (c) => {
+  const name = c.req.query("name") || "video";
+  const ext = (name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (ext !== "mp4") return c.json({ error: "only mp4 supported (v1)" }, 400);
+  const len = Number(c.req.header("content-length") || "0");
+  if (!len) return c.json({ error: "content-length required" }, 411);
+  if (len > 50 * 1024 * 1024) return c.json({ error: "video exceeds 50MB" }, 413);
+  const body = c.req.raw.body;
+  if (!body) return c.json({ error: "empty body" }, 400);
+  const key = `u_file/uploads/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.mp4`;
+  await c.env.IMAGES.put(key, body, { httpMetadata: { contentType: "video/mp4" } });
+  return c.json({ ok: true, key, url: c.env.IMG_BASE + key });
+});
+
 // 创建（新 id=max+1；新品只建默认 locale——渲染内容不决定 site map）
 app.post("/api/admin/products", async (c) => {
   const cfg = ghConfig(c.env);

@@ -83,6 +83,12 @@ export function validateProduct(body: any, id: number, categories: any, existing
   for (const im of body.images) {
     if (!im || (typeof im.key !== "string" && typeof im.src !== "string")) return { error: "each image needs key or src" };
   }
+  // 视频（可选·v1）：每条需 key|src(R2 mp4)；poster/title/alt 可选。缺省字段=零迁移（现有产品无 videos → 渲染不变）。
+  if (body.videos !== undefined && !Array.isArray(body.videos)) return { error: "videos must be an array" };
+  for (const v of body.videos || []) {
+    if (!v || (typeof v.key !== "string" && typeof v.src !== "string")) return { error: "each video needs key or src" };
+    if (v.poster && typeof v.poster.key !== "string" && typeof v.poster.src !== "string") return { error: "video poster needs key or src" };
+  }
   const i18n: any = { ...(existing?.i18n || {}) };   // ⭐ 旧翻译打底（es/pt 等原样保留）
   i18n.en = {
     title: en.title, summary_html: demoteBodyH1(en.summary_html || ""), description_html: demoteBodyH1(en.description_html),
@@ -98,6 +104,13 @@ export function validateProduct(body: any, id: number, categories: any, existing
     id, category: body.category, form, status, robots: body.robots ?? (existing?.robots ?? null),
     i18n,
     images: body.images.map((im: any) => (im.key !== undefined ? { key: im.key, alt: im.alt || "" } : { src: im.src, alt: im.alt || "" })),
+    // 视频（非空才落盘=零迁移）：key|src + poster(可选) + title(可选单值,v1 非 i18n) + alt
+    ...((body.videos && body.videos.length) ? { videos: body.videos.map((v: any) => ({
+      ...(v.key !== undefined ? { key: v.key } : { src: v.src }),
+      ...(v.poster ? { poster: v.poster.key !== undefined ? { key: v.poster.key } : { src: v.poster.src } } : {}),
+      ...(v.title ? { title: String(v.title) } : {}),
+      alt: v.alt || "",
+    })) } : {}),
     jsonld_product: body.jsonld_product ?? (existing?.jsonld_product ?? null),
     jsonld_breadcrumb: body.jsonld_breadcrumb ?? (existing?.jsonld_breadcrumb ?? null),
   };

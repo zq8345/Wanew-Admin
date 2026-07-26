@@ -135,6 +135,11 @@ textarea.desc{min-height:220px;font-family:ui-monospace,Consolas,monospace;font-
 .gitem .cover{position:absolute;top:2px;left:2px;background:var(--w3-accent);color:#08111f;font-size:10px;border-radius:4px;padding:1px 5px;font-weight:600}
 .gadd{width:110px;height:132px;border:1px dashed var(--w3-line2);border-radius:var(--dz-radius-s);display:grid;place-items:center;color:var(--w3-text3);cursor:pointer;font-size:12px;text-align:center}
 .gadd.drag{border-color:var(--w3-accent);color:var(--w3-accent)}
+.vitem{cursor:default}
+.vitem .vph{width:100%;height:78px;display:grid;place-items:center;background:var(--w3-tile);border-radius:5px;color:var(--w3-text3);font-size:11px}
+.vitem .vtag{position:absolute;top:2px;left:2px;background:rgba(0,0,0,.65);color:#fff;font-size:10px;border-radius:4px;padding:1px 5px}
+.vitem .vpb{width:100%;margin-top:4px;font-size:10px;padding:2px 4px;height:auto;background:var(--w3-panel);border:1px solid var(--w3-line);border-radius:4px;color:var(--w3-text2);cursor:pointer}
+.vitem .vpb:hover{border-color:var(--w3-accent);color:var(--w3-accent)}
 details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-select:none;margin-bottom:8px}
 .banner{padding:9px 13px;border-radius:var(--dz-radius-s);border:1px solid rgba(201,130,10,.5);background:rgba(201,130,10,.12);margin-bottom:12px;font-size:13px;display:none}
 .banner.on{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
@@ -243,6 +248,11 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
       <h3>图库（第一张=封面；拖拽排序）</h3>
       <div class="gallery" id="gallery"></div>
       <p class="muted" style="margin:8px 0 0;font-size:12px">支持拖拽图片文件到 ➕ 上传（≤8MB，jpg/png/webp/gif）；新图 URL 走 img.wanew.com。</p>
+    </div>
+    <div class="card">
+      <h3>产品视频（安装 / 使用 / 场景）</h3>
+      <div class="gallery" id="videos"></div>
+      <p class="muted" style="margin:8px 0 0;font-size:12px">仅 mp4、≤50MB；上传时自动从首帧生成封面（可点「换封面」替换）。视频走 img.wanew.com；官网详情页渲染视频区（排期中）。</p>
     </div>
     <details class="seo card" id="seo">
       <summary>SEO（meta，可选——留空自动派生）</summary>
@@ -1334,6 +1344,7 @@ function fillForm(p) {
   $("#e-mdesc").value = en.meta_description || "";
   $("#e-cat").value = p.category || ""; $("#e-form").value = p.form || "";
   renderGallery(p.images || []);
+  renderVideos(p.videos || []);
   // 🔴终审要求②：编辑页回填自检——「数据有值 → 控件必须回填成功」，断链当场吼（防 e-form 类回归）。
   //   select.value 赋不存在的 option 会静默变空——正是这次 form 被抹的机制，自检直击它。
   for (const [field, want, got] of [["category", p.category, $("#e-cat").value], ["form", p.form, $("#e-form").value]]) {
@@ -1350,7 +1361,7 @@ function collectForm() {
       title: $("#e-title").value.trim(), summary_html: $("#e-summary").value,
       description_html: $("#e-desc").value, meta_title: $("#e-mtitle").value.trim(), meta_description: $("#e-mdesc").value.trim(),
     } },
-    images: galleryData(),
+    images: galleryData(), videos: videoData(),
     robots: cur?.robots ?? null, jsonld_product: cur?.jsonld_product ?? null, jsonld_breadcrumb: cur?.jsonld_breadcrumb ?? null,
   };
 }
@@ -1397,6 +1408,67 @@ async function uploadFiles(files) {
       gitems.push({ key: j.key, alt: "" }); paintGallery(); msg("已上传 " + f.name);
     } catch (e) { msg(f.name + " 上传失败：" + e.message, 1); }
   }
+}
+
+// ---------- 产品视频（v1：mp4 + 自动首帧封面）----------
+let vitems = [];
+function renderVideos(videos) { vitems = videos.map((v) => ({ ...v })); paintVideos(); }
+function paintVideos() {
+  const g = $("#videos");
+  g.innerHTML = vitems.map((v, i) => `
+    <div class="gitem vitem" data-i="${i}">
+      <button class="gx" onclick="vDel(${i})">✕</button>
+      ${v.poster ? `<img src="${esc(imgUrl(v.poster))}" loading="lazy">` : `<div class="vph">无封面</div>`}
+      <span class="vtag">▶ 视频</span>
+      <input placeholder="标题（可选）" value="${esc(v.title || "")}" onchange="vitems[${i}].title=this.value">
+      <button class="vpb" onclick="changePoster(${i})">换封面</button>
+    </div>`).join("") + `<div class="gadd" id="vadd">➕<br>上传视频(mp4)</div>`;
+  $("#vadd").onclick = () => { const f = document.createElement("input"); f.type = "file"; f.accept = "video/mp4"; f.onchange = () => uploadVideos([...f.files]); f.click(); };
+}
+function vDel(i) { vitems.splice(i, 1); paintVideos(); }
+function videoData() { return vitems.map((v) => ({ ...(v.key !== undefined ? { key: v.key } : { src: v.src }), ...(v.poster ? { poster: v.poster } : {}), title: v.title || "", alt: v.alt || "" })); }
+// 从视频首帧抽 webp 封面（纯客户端 canvas，同源无 CORS；失败返回 null → 用户可手动换）
+function extractPoster(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file), vid = document.createElement("video");
+    vid.preload = "auto"; vid.muted = true; vid.playsInline = true; vid.src = url;
+    const done = (blob) => { URL.revokeObjectURL(url); resolve(blob); };
+    vid.onloadeddata = () => { try { vid.currentTime = Math.min(0.1, (vid.duration || 1) / 2); } catch { done(null); } };
+    vid.onseeked = async () => {
+      try {
+        if (!vid.videoWidth) return done(null);
+        const cv = document.createElement("canvas"); cv.width = vid.videoWidth; cv.height = vid.videoHeight;
+        cv.getContext("2d").drawImage(vid, 0, 0);
+        done(await new Promise((r) => cv.toBlob(r, "image/webp", 0.82)));
+      } catch { done(null); }
+    };
+    vid.onerror = () => done(null);
+  });
+}
+async function uploadVideos(files) {
+  for (const f of files) {
+    if (f.type !== "video/mp4" && !/\.mp4$/i.test(f.name)) { msg("只支持 mp4", 1); continue; }
+    if (f.size > 50 * 1024 * 1024) { msg(f.name + " 超 50MB（v1 上限）", 1); continue; }
+    try {
+      msg("生成封面 " + f.name + "…");
+      let poster = null; const frame = await extractPoster(f);
+      if (frame) { const pr = await fetch("/api/admin/upload?name=poster.webp", { method: "POST", headers: { "content-type": "image/webp" }, body: frame }); const pj = await pr.json(); if (pr.ok && !pj.error) poster = { key: pj.key }; }
+      msg("上传视频 " + f.name + "…");
+      const r = await fetch("/api/admin/upload-video?name=" + encodeURIComponent(f.name), { method: "POST", headers: { "content-type": "video/mp4" }, body: f });
+      const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status);
+      vitems.push({ key: j.key, poster, title: "", alt: "" }); paintVideos();
+      msg("已上传视频 " + f.name + (poster ? "" : "（未能自动生成封面，点「换封面」手动传）"));
+    } catch (e) { msg(f.name + " 视频上传失败：" + e.message, 1); }
+  }
+}
+function changePoster(i) {
+  const f = document.createElement("input"); f.type = "file"; f.accept = "image/*";
+  f.onchange = async () => {
+    const file = f.files && f.files[0]; if (!file) return;
+    try { const w = await toWebp(file); const r = await fetch("/api/admin/upload?name=" + encodeURIComponent(w.name), { method: "POST", headers: { "content-type": w.type }, body: w.blob }); const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status); vitems[i].poster = { key: j.key }; paintVideos(); msg("封面已更新"); }
+    catch (e) { msg("封面上传失败：" + e.message, 1); }
+  };
+  f.click();
 }
 
 // ---------- 草稿（诚实语义：仅本机 localStorage，绝不写仓库） ----------
