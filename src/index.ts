@@ -347,6 +347,16 @@ app.put("/api/admin/seo/:slug", async (c) => {
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
+// ================= Team A：访问状态（只读；权限真源=Cloudflare Access，此处只展示不控制）=================
+// ⚠️ 名册不控制登录权限——加/删成员去 CF Access（wanew-admin 应用）。此端点纯读 env+header，无 GitHub、无写。
+app.get("/api/admin/team", (c) => c.json({
+  operator: c.req.header("cf-access-authenticated-user-email") || "dev-bypass",
+  repo: c.env.GITHUB_REPO,
+  imgBase: c.env.IMG_BASE,
+  ghTokenConfigured: !!c.env.GITHUB_TOKEN,   // 只报有无，绝不报值
+  accessApp: "wanew-admin",
+}));
+
 // ================= W5 P4：媒体库（R2 浏览/标签/删除；走 R2 域、不碰 data/pages/=与官网信息页迁移零撞车）=================
 // 标签(clean 干净产品图 / marketing 营销拼图)存 R2 内 _meta/media-index.json(键→tag)——不加 D1、不写官网仓。
 const MEDIA_META = "_meta/media-index.json";

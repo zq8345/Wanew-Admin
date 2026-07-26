@@ -164,7 +164,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="dz-nav-item soon" title="即将上线"><span class="ic">✉</span> 询盘 <span class="soon-tag">SOON</span></div>
     <div class="dz-side-foot">
       <div class="dz-nav-item" data-view="settings" onclick="showSettings()"><span class="ic">⚙</span> 设置</div>
-      <div class="dz-nav-item soon" title="即将上线"><span class="ic">◑</span> 团队 <span class="soon-tag">SOON</span></div>
+      <div class="dz-nav-item" data-view="team" onclick="showTeam()"><span class="ic">◑</span> 团队</div>
       <div class="dz-user-foot"><span class="av">◐</span> <span class="who" id="who"></span></div>
     </div>
   </nav>
@@ -373,6 +373,11 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div id="settings-body"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
+  <div id="v-team" style="display:none">
+    <div class="dz-pagehead"><h1>团队</h1><span class="meta">访问状态（只读）</span></div>
+    <div id="team-body"><div class="card muted">加载中… <span class="spin"></span></div></div>
+  </div>
+
   </main>
 </div>
 <div class="msg" id="msg"></div>
@@ -474,7 +479,7 @@ async function bulkDelete() {
 
 // ---------- 编辑 ----------
 const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
-function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-contact").style.display = v === "contact" ? "" : "none"; $("#v-guides").style.display = v === "guides" ? "" : "none"; $("#v-seo").style.display = v === "seo" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "contact" ? "› 联系方式" : (v === "guides" ? "› 攻略" : (v === "seo" ? "› SEO" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : ""))))))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-contact").style.display = v === "contact" ? "" : "none"; $("#v-guides").style.display = v === "guides" ? "" : "none"; $("#v-seo").style.display = v === "seo" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#v-team").style.display = v === "team" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "contact" ? "› 联系方式" : (v === "guides" ? "› 攻略" : (v === "seo" ? "› SEO" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : (v === "team" ? "› 团队" : "")))))))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
 function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
@@ -1068,6 +1073,31 @@ function paintSettings(d) {
       </div>
     </div>
     <p class="muted" style="margin-top:12px;font-size:12px">以上口径为 Worker 环境变量与 <span class="tnum">data/locales.json</span> 真源，只读展示。改这些是 i18n / 部署命脉——请改仓库配置，后台不开写口。</p>`;
+}
+
+// ---------- 团队（Team A·访问状态只读）----------
+async function showTeam() { showView("team"); await loadTeam(); }
+async function loadTeam() {
+  const box = $("#team-body");
+  box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
+  try { const d = await api("/team"); paintTeam(d); }
+  catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadTeam()">重试</button></div>`; }
+}
+function paintTeam(d) {
+  const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:16px;padding:5px 0;border-bottom:1px solid var(--w3-line)"><span class="muted">${k}</span><span style="text-align:right">${v}</span></div>`;
+  $("#team-body").innerHTML = `
+    <div class="card">
+      <h3>当前会话</h3>
+      ${row("当前操作人", `<span class="tnum">${esc(d.operator || "—")}</span>`)}
+      ${row("Cloudflare Access 应用", `<span class="tnum">${esc(d.accessApp || "wanew-admin")}</span>`)}
+    </div>
+    <div class="card">
+      <h3>访问权限 = Cloudflare Access 管</h3>
+      <p style="font-size:13px;line-height:1.6;margin:0 0 8px">本后台能 commit 代码仓、发布生产内容——<b>登录权限由 Cloudflare Access（<span class="tnum">${esc(d.accessApp || "wanew-admin")}</span> 应用）严格管控</b>：只有 Access allowlist 里的邮箱能进；未登录请求在边缘就被拦（无 Basic Auth 兜底=故意的，兜底口就是后门）。</p>
+      <p style="font-size:13px;line-height:1.6;margin:0 0 8px"><b>⚠️ 加/删成员（谁能登录）请去 Cloudflare 后台的 Access 应用改</b>——本页只读、不控制权限（后台自己管登录=把钥匙交给后台=安全面放大，故意不做）。</p>
+      <p style="margin-top:6px"><a class="editbar-link" href="https://one.dash.cloudflare.com/?to=/:account/access/apps" target="_blank" style="display:inline-flex">🔐 打开 Cloudflare Access</a></p>
+    </div>
+    <p class="muted" style="font-size:12px">本页数据=Worker 从 Cloudflare Access header 与环境变量读取（无写路径、不碰仓）。名册若要记「谁负责什么」的备注功能，属可选二期（Joe 提再做）。</p>`;
 }
 
 async function openEdit(id) {
