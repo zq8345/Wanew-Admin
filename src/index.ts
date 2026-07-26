@@ -542,7 +542,7 @@ app.get("/api/admin/media", async (c) => {
     cursor = res.truncated ? res.cursor : undefined;
   } while (cursor && items.length < 5000);
   items.sort((a, b) => ((b.uploaded && b.uploaded.getTime ? b.uploaded.getTime() : 0) - (a.uploaded && a.uploaded.getTime ? a.uploaded.getTime() : 0)));
-  return c.json({ media: items, count: items.length, folders: fm.folders });
+  return c.json({ media: items, count: items.length, folders: fm.folders, folderKinds: fm.kinds });
 });
 
 // 打标签(clean|marketing|空=清标签)——写 _meta/media-index.json
@@ -575,12 +575,12 @@ app.delete("/api/admin/media", async (c) => {
 // ---- 文件夹（W5 P5+·Joe 反馈③）：纯元数据，不移动 R2 对象、不删图 ----
 // _meta/media-folders.json = { folders:[名称], assign:{ key: 文件夹名 } }。key 无归属=未归类。
 const MEDIA_FOLDERS = "_meta/media-folders.json";
-type FoldersMeta = { folders: string[]; assign: Record<string, string> };
+type FoldersMeta = { folders: string[]; assign: Record<string, string>; kinds: Record<string, string> };
 async function loadFolders(env: Env): Promise<FoldersMeta> {
   const obj = await env.IMAGES.get(MEDIA_FOLDERS);
-  if (!obj) return { folders: [], assign: {} };
-  try { const j: any = JSON.parse(await obj.text()); return { folders: Array.isArray(j.folders) ? j.folders : [], assign: (j.assign && typeof j.assign === "object") ? j.assign : {} }; }
-  catch { return { folders: [], assign: {} }; }
+  if (!obj) return { folders: [], assign: {}, kinds: {} };
+  try { const j: any = JSON.parse(await obj.text()); return { folders: Array.isArray(j.folders) ? j.folders : [], assign: (j.assign && typeof j.assign === "object") ? j.assign : {}, kinds: (j.kinds && typeof j.kinds === "object") ? j.kinds : {} }; }
+  catch { return { folders: [], assign: {}, kinds: {} }; }
 }
 async function saveFolders(env: Env, m: FoldersMeta) {
   await env.IMAGES.put(MEDIA_FOLDERS, JSON.stringify(m), { httpMetadata: { contentType: "application/json" } });
@@ -590,13 +590,14 @@ async function saveFolders(env: Env, m: FoldersMeta) {
 app.post("/api/admin/media/folders", async (c) => {
   let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
   const name = String(body?.name || "").trim();
+  const kind = body?.kind === "video" ? "video" : "image";   // 文件夹按 kind 归属（视频夹只在视频库、图片夹只在图片库）
   if (!name) return c.json({ error: "文件夹名不能为空" }, 400);
   if (name.length > 40) return c.json({ error: "文件夹名过长（≤40）" }, 400);
   if (/[\/\\]/.test(name)) return c.json({ error: "文件夹名不能含斜杠" }, 400);
   const m = await loadFolders(c.env);
   if (m.folders.includes(name)) return c.json({ error: "同名文件夹已存在" }, 400);
-  m.folders.push(name); await saveFolders(c.env, m);
-  return c.json({ ok: true, folders: m.folders });
+  m.folders.push(name); m.kinds[name] = kind; await saveFolders(c.env, m);
+  return c.json({ ok: true, folders: m.folders, kinds: m.kinds });
 });
 
 // 删除文件夹（只删归类元数据，图片一律保留、退回未归类）
@@ -605,10 +606,11 @@ app.delete("/api/admin/media/folders", async (c) => {
   if (!name) return c.json({ error: "bad name" }, 400);
   const m = await loadFolders(c.env);
   m.folders = m.folders.filter((f) => f !== name);
+  delete m.kinds[name];
   let unassigned = 0;
   for (const k of Object.keys(m.assign)) if (m.assign[k] === name) { delete m.assign[k]; unassigned++; }
   await saveFolders(c.env, m);
-  return c.json({ ok: true, folders: m.folders, unassigned });
+  return c.json({ ok: true, folders: m.folders, kinds: m.kinds, unassigned });
 });
 
 // 把图片归入文件夹（folder=空=退回未归类）——纯元数据，不动 R2 对象

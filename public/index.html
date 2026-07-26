@@ -68,6 +68,7 @@ tr:hover td{background:var(--w3-panel2)}
 .fcards{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:12px;margin-bottom:2px}
 .fcard{position:relative;width:118px;border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);background:var(--w3-panel2);padding:14px 8px 9px;cursor:pointer;text-align:center;transition:border-color .12s}
 .fcard:hover{border-color:var(--w3-accent)}
+#media-manage-btn.on{background:var(--w3-accent);color:#08111f;border-color:var(--w3-accent);font-weight:600}
 .fcard-ic{font-size:32px;line-height:1}
 .fcard-name{font-size:12px;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--w3-text)}
 .fcard-n{font-size:10px;color:var(--w3-text3);margin-top:2px}
@@ -428,6 +429,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
       <span class="idtag muted" id="media-count">媒体库</span>
       <div class="spacer"></div>
       <select class="dz-field" onchange="mediaSetFilter(this.value)"><option value="">全部标签</option><option value="clean">干净产品图</option><option value="marketing">营销拼图</option><option value="untagged">未标</option></select>
+      <button id="media-manage-btn" onclick="toggleManage()" title="进入管理态才能删除文件夹/文件（防误删）">🔧 管理</button>
       <button onclick="folderCreate()">📁 新建文件夹</button>
       <button class="primary" onclick="document.getElementById('media-upload').click()">⬆ 上传</button>
       <input type="file" id="media-upload" accept="image/*" multiple style="display:none" onchange="mediaUploadRouter([...this.files]);this.value=''">
@@ -1035,8 +1037,10 @@ async function saveSeo() {
 }
 
 // ---------- 媒体库（W5 P4·R2 浏览/标签/删除 + P5+ 文件夹归类）----------
-let mediaItems = [], mediaFilter = "", mediaFolders = [], folderFilter = "", mediaKind = "image";   // folderFilter: ""=全部, "__none__"=未归类；mediaKind: image|video(同构一套库,按扩展名分)
+let mediaItems = [], mediaFilter = "", mediaFolders = [], folderFilter = "", mediaKind = "image", folderKinds = {}, manageMode = false;   // mediaKind: image|video(同构一套库)；manageMode: 管理态才露删除按钮(防误删)
 const isVid = (k) => /\.mp4$/i.test(k);
+// 文件夹按 kind 归属：显式 kind 优先，缺省(旧文件夹)按名字启发式(含"视频/video/影片"=视频)——修 Joe 报的视频夹串进图片库
+function folderKind(name) { return folderKinds[name] || (/视频|video|影片/i.test(name) ? "video" : "image"); }
 const isPoster = (k) => /\.poster\.webp$/i.test(k);   // 视频封面(命名约定 <base>.poster.webp)——图片库里过滤掉
 async function showLib(kind) {
   mediaKind = kind;
@@ -1052,7 +1056,7 @@ async function showMedia() { await showLib("image"); }   // 兼容旧调用（�
 async function loadMedia() {
   const box = $("#media-grid");
   box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
-  try { const r = await api("/media"); mediaItems = r.media || []; mediaFolders = r.folders || []; }
+  try { const r = await api("/media"); mediaItems = r.media || []; mediaFolders = r.folders || []; folderKinds = r.folderKinds || {}; }
   catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadMedia()">重试</button></div>`; return; }
   if (folderFilter && !mediaFolders.includes(folderFilter)) folderFilter = "";   // 文件夹被删则复位到根
   paintFolderbar(); paintMedia();
@@ -1078,16 +1082,17 @@ function paintMedia() {
   [...mediaSel].forEach((k) => { if (!vis.has(k)) mediaSel.delete(k); });   // 选中集只留当前可见项
   const isV = mediaKind === "video", unit = isV ? "个" : "张", atRoot = !folderFilter;
   const kindItems = mediaItems.filter(mediaKindMatch);
-  // 根视图：文件夹以卡片出现在主内容区（点进入·符合文件管理习惯）——图片/视频库同构
-  const cardsHtml = (atRoot && mediaFolders.length) ? `<div class="fcards">` + mediaFolders.map((fd) => {
+  const kindFolders = mediaFolders.filter((fd) => folderKind(fd) === mediaKind);   // 只显当前库 kind 的文件夹(修视频夹串图片库)
+  // 根视图：文件夹以卡片出现在主内容区（点进入）——删除入口仅管理态露出(防误删)
+  const cardsHtml = (atRoot && kindFolders.length) ? `<div class="fcards">` + kindFolders.map((fd) => {
     const n = kindItems.filter((m) => m.folder === fd).length;
     return `<div class="fcard" onclick="folderSetFilter('${esc(fd)}')" title="进入「${esc(fd)}」">
-      <button class="fcard-del" title="删除文件夹（内容退回未归类，不删文件）" onclick="event.stopPropagation();folderDelete('${esc(fd)}')">×</button>
+      ${manageMode ? `<button class="fcard-del" title="删除文件夹（内容退回未归类，不删文件）" onclick="event.stopPropagation();folderDelete('${esc(fd)}')">×</button>` : ""}
       <div class="fcard-ic">📁</div><div class="fcard-name" title="${esc(fd)}">${esc(fd)}</div><div class="fcard-n">${n} ${unit}</div>
     </div>`;
   }).join("") + `</div>` : "";
-  $("#media-count").textContent = atRoot ? `${mediaFolders.length} 夹 · ${list.length} 未归类${unit}` : `${list.length} ${unit}`;
-  const folderOpts = (cur) => `<option value=""${!cur ? " selected" : ""}>未归类</option>` + mediaFolders.map((fd) => `<option value="${esc(fd)}"${cur === fd ? " selected" : ""}>${esc(fd)}</option>`).join("");
+  $("#media-count").textContent = atRoot ? `${kindFolders.length} 夹 · ${list.length} 未归类${unit}` : `${list.length} ${unit}`;
+  const folderOpts = (cur) => `<option value=""${!cur ? " selected" : ""}>未归类</option>` + kindFolders.map((fd) => `<option value="${esc(fd)}"${cur === fd ? " selected" : ""}>${esc(fd)}</option>`).join("");
   const tilesHtml = list.map((m) => `
     <div class="mtile${mediaSel.has(m.key) ? " sel" : ""}">
       <label class="mtile-sel"><input type="checkbox" ${mediaSel.has(m.key) ? "checked" : ""} onchange="mediaToggleSel('${esc(m.key)}',this)"></label>
@@ -1099,7 +1104,7 @@ function paintMedia() {
         ${isV ? "" : `<button onclick="mediaTag('${esc(m.key)}','clean')">干净</button>
         <button onclick="mediaTag('${esc(m.key)}','marketing')">营销</button>
         <button onclick="mediaTag('${esc(m.key)}','')">清标</button>`}
-        <button class="danger" onclick="mediaDelete('${esc(m.key)}')">删</button>
+        ${manageMode ? `<button class="danger" onclick="mediaDelete('${esc(m.key)}')">删</button>` : ""}
       </div>
     </div>`).join("");
   $("#media-grid").innerHTML = (cardsHtml + tilesHtml) || `<div class="card muted">${atRoot ? (isV ? "视频库为空——点右上「上传」添加，或「新建文件夹」归类" : "图片库为空") : `此文件夹暂无${isV ? "视频" : "图片"}`}${mediaFilter ? "（此标签筛选下）" : ""}</div>`;
@@ -1132,6 +1137,8 @@ async function mediaBulkMove() {
     msg(`✅ 已批量归类 ${r.count || keys.length} 张${folder ? "→「" + folder + "」" : "→未归类"}`);
   } catch (e) { msg("批量归类失败：" + e.message, 1); }
 }
+// 管理态开关：默认关（删除入口全隐藏防误删）；开了才在文件夹卡/文件卡露出删除。
+function toggleManage() { manageMode = !manageMode; const b = $("#media-manage-btn"); if (b) { b.classList.toggle("on", manageMode); b.textContent = manageMode ? "✓ 管理中" : "🔧 管理"; } paintMedia(); }
 function folderCreate() { $("#folder-name-input").value = ""; $("#folder-modal").style.display = "flex"; setTimeout(() => $("#folder-name-input").focus(), 40); }
 function closeFolderModal() { $("#folder-modal").style.display = "none"; }
 async function confirmFolderCreate() {
@@ -1139,7 +1146,7 @@ async function confirmFolderCreate() {
   if (!name) { $("#folder-name-input").focus(); return; }
   if (name.length > 40 || name.includes("/")) { msg("名称需 ≤40 且不含斜杠", 1); return; }
   closeFolderModal();
-  try { const r = await api("/media/folders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) }); mediaFolders = r.folders || []; paintFolderbar(); paintMedia(); msg("已建文件夹：" + name); }
+  try { const r = await api("/media/folders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, kind: mediaKind }) }); mediaFolders = r.folders || []; folderKinds = r.kinds || folderKinds; paintFolderbar(); paintMedia(); msg(`已建${mediaKind === "video" ? "视频" : "图片"}文件夹：` + name); }
   catch (e) { msg("建文件夹失败：" + e.message, 1); }
 }
 async function folderDelete(name) {
