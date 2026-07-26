@@ -58,6 +58,16 @@ export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
   return { template, site, locales, catalog, categories, manifest, manifestRaw: manRaw ?? null, partial, pagesList, locDir, catmap: catmapOf(categories), chrome };
 }
 
+// body h1 消毒：模板已把产品标题渲成 canonical <h1>（render.js {{TITLE}}），body 正文里再出现 <h1>
+// 会与它抢 h1（652 实测 4 个）——降级为 <h2>，属性/内容原样保留，只换标签名。⚠️ 只作用于正文 html
+// 字符串（description_html/summary_html），不碰模板 {{TITLE}}。每次保存都过一遍 = durable，非一次性。
+export function demoteBodyH1(html: string): string {
+  if (typeof html !== "string" || !html) return html;
+  return html
+    .replace(/<h1(?=[\s/>])/gi, "<h2")   // <h1 …> / <h1> / <h1/> → <h2…（保留属性与后续）
+    .replace(/<\/h1(\s*)>/gi, "</h2$1>");
+}
+
 // 校验 + 白名单 + ⭐merge：编辑时以旧 json 为底，en 从表单、其它 locale 原样保留（防翻译擦除）。
 export function validateProduct(body: any, id: number, categories: any, existing: any | null): { prod?: any; error?: string } {
   const CATEGORIES: string[] = (categories?.categories || []).map((c: any) => c.slug);
@@ -75,7 +85,7 @@ export function validateProduct(body: any, id: number, categories: any, existing
   }
   const i18n: any = { ...(existing?.i18n || {}) };   // ⭐ 旧翻译打底（es/pt 等原样保留）
   i18n.en = {
-    title: en.title, summary_html: en.summary_html || "", description_html: en.description_html,
+    title: en.title, summary_html: demoteBodyH1(en.summary_html || ""), description_html: demoteBodyH1(en.description_html),
     // meta_title 是派生字段（render.js:20 "deliberately NOT read from data — DERIVED"）——
     // 只在用户显式自定义(≠title)时落盘；否则不存（🟡终审 diff 抓出旧白名单把派生值显式化 +166B）
     ...(en.meta_title && en.meta_title !== en.title ? { meta_title: en.meta_title } : {}),
