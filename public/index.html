@@ -58,7 +58,16 @@ tr:hover td{background:var(--w3-panel2)}
 .mtile.sel{border-color:var(--w3-accent);box-shadow:0 0 0 1px var(--w3-accent) inset}
 .mtile-sel{position:absolute;top:6px;left:6px;z-index:2;background:var(--w3-glass);border-radius:4px;padding:2px 4px;display:inline-flex;cursor:pointer}
 .mtile-sel input{cursor:pointer;margin:0}
-.mtile img{width:100%;height:110px;object-fit:contain;background:var(--w3-tile);border-radius:5px;display:block}
+.mtile img,.mtile video{width:100%;height:110px;object-fit:contain;background:var(--w3-tile);border-radius:5px;display:block}
+/* 从视频库插入·弹层 */
+.vp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;align-items:center;justify-content:center;display:none}
+.vp-box{background:var(--w3-panel);border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);width:min(760px,92vw);max-height:82vh;display:flex;flex-direction:column;padding:14px}
+.vp-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:14px}
+.vp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;overflow:auto}
+.vp-item{border:1px solid var(--w3-line);border-radius:5px;padding:6px;text-align:center}
+.vp-item video{width:100%;height:90px;object-fit:contain;background:var(--w3-tile);border-radius:4px;display:block}
+.vp-name{font-size:10px;color:var(--w3-text3);margin:4px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vp-item button{width:100%;font-size:11px}
 .mtile-key{color:var(--w3-text3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mtile-tag{margin:4px 0}
 .mtile-folder{width:100%;height:26px;padding:0 6px;font-size:11px;margin:4px 0}
@@ -165,7 +174,8 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="dz-nav-item active" data-view="dash" onclick="showDash()"><span class="ic">◧</span> 仪表盘</div>
     <div class="dz-nav-item" data-view="list" onclick="backToList()"><span class="ic">▤</span> 产品</div>
     <div class="dz-nav-item" data-view="cats" onclick="showCats()"><span class="ic">⊞</span> 分类</div>
-    <div class="dz-nav-item" data-view="media" onclick="showMedia()"><span class="ic">▦</span> 媒体</div>
+    <div class="dz-nav-item" data-view="media" id="nav-images" onclick="showLib('image')"><span class="ic">▦</span> 图片</div>
+    <div class="dz-nav-item" data-view="media" id="nav-videos" onclick="showLib('video')"><span class="ic">▶</span> 视频</div>
     <div class="dz-eyebrow">内容 Content</div>
     <div class="dz-nav-item" data-view="home" onclick="showHome()"><span class="ic">⌂</span> 首页</div>
     <div class="dz-nav-item" data-view="contact" onclick="showContact()"><span class="ic">✆</span> 联系方式</div>
@@ -252,7 +262,13 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
     <div class="card">
       <h3>产品视频（安装 / 使用 / 场景）</h3>
       <div class="gallery" id="videos"></div>
-      <p class="muted" style="margin:8px 0 0;font-size:12px">仅 mp4、≤50MB；上传时自动从首帧生成封面（可点「换封面」替换）。视频走 img.wanew.com；官网详情页渲染视频区（排期中）。</p>
+      <p class="muted" style="margin:8px 0 0;font-size:12px">仅 mp4、≤50MB；「从视频库插入」复用库中已存封面，「现场上传」自动从首帧生成封面（可「换封面」替换）。视频走 img.wanew.com；官网详情页渲染视频区（排期中）。</p>
+    </div>
+    <div id="video-picker" class="vp-overlay" style="display:none">
+      <div class="vp-box">
+        <div class="vp-head"><b>从视频库插入</b><button onclick="closeVideoPicker()">✕</button></div>
+        <div class="vp-grid" id="vp-grid"></div>
+      </div>
     </div>
     <details class="seo card" id="seo">
       <summary>SEO（meta，可选——留空自动派生）</summary>
@@ -384,7 +400,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
       <select class="dz-field" onchange="mediaSetFilter(this.value)"><option value="">全部标签</option><option value="clean">干净产品图</option><option value="marketing">营销拼图</option><option value="untagged">未标</option></select>
       <button onclick="folderCreate()">📁 新建文件夹</button>
       <button class="primary" onclick="document.getElementById('media-upload').click()">⬆ 上传</button>
-      <input type="file" id="media-upload" accept="image/*" multiple style="display:none" onchange="mediaUpload([...this.files]);this.value=''">
+      <input type="file" id="media-upload" accept="image/*" multiple style="display:none" onchange="mediaUploadRouter([...this.files]);this.value=''">
     </div>
     <div id="media-folderbar" class="folderbar"></div>
     <div class="bulkbar" id="media-bulkbar">
@@ -979,8 +995,20 @@ async function saveSeo() {
 }
 
 // ---------- 媒体库（W5 P4·R2 浏览/标签/删除 + P5+ 文件夹归类）----------
-let mediaItems = [], mediaFilter = "", mediaFolders = [], folderFilter = "";   // folderFilter: ""=全部, "__none__"=未归类, 否则文件夹名
-async function showMedia() { showView("media"); await loadMedia(); }
+let mediaItems = [], mediaFilter = "", mediaFolders = [], folderFilter = "", mediaKind = "image";   // folderFilter: ""=全部, "__none__"=未归类；mediaKind: image|video(同构一套库,按扩展名分)
+const isVid = (k) => /\.mp4$/i.test(k);
+const isPoster = (k) => /\.poster\.webp$/i.test(k);   // 视频封面(命名约定 <base>.poster.webp)——图片库里过滤掉
+async function showLib(kind) {
+  mediaKind = kind;
+  showView("media");
+  // showView 按 data-view=media 把「图片」「视频」都点亮，去掉非当前那个 + 纠正面包屑
+  document.getElementById(kind === "video" ? "nav-images" : "nav-videos").classList.remove("active");
+  $("#crumb").textContent = kind === "video" ? "› 视频库" : "› 图片库";
+  $("#media-upload").accept = kind === "video" ? "video/mp4" : "image/*";
+  mediaFilter = ""; folderFilter = ""; mediaSel.clear();
+  await loadMedia();
+}
+async function showMedia() { await showLib("image"); }   // 兼容旧调用（仪表盘等）
 async function loadMedia() {
   const box = $("#media-grid");
   box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
@@ -992,38 +1020,40 @@ async function loadMedia() {
 function mediaSetFilter(f) { mediaFilter = f; paintMedia(); }
 function folderSetFilter(f) { folderFilter = f; paintFolderbar(); paintMedia(); }
 function paintFolderbar() {
-  const count = (f) => mediaItems.filter((m) => f === "__none__" ? !m.folder : m.folder === f).length;
+  const count = (f) => mediaItems.filter((m) => mediaKindMatch(m) && (f === "__none__" ? !m.folder : m.folder === f)).length;
   const chip = (val, label, n, extra = "") => `<button class="fchip${folderFilter === val ? " active" : ""}" onclick="folderSetFilter('${esc(val)}')">${esc(label)}<span class="fcount">${n}</span>${extra}</button>`;
-  let h = `<button class="fchip${folderFilter === "" ? " active" : ""}" onclick="folderSetFilter('')">全部<span class="fcount">${mediaItems.length}</span></button>`;
+  let h = `<button class="fchip${folderFilter === "" ? " active" : ""}" onclick="folderSetFilter('')">全部<span class="fcount">${mediaItems.filter(mediaKindMatch).length}</span></button>`;
   h += chip("__none__", "未归类", count("__none__"));
   h += mediaFolders.map((f) => chip(f, f, count(f), ` <span class="fdel" title="删除文件夹（图片保留）" onclick="event.stopPropagation();folderDelete('${esc(f)}')">×</span>`)).join("");
   $("#media-folderbar").innerHTML = h;
 }
 let mediaSel = new Set();
+function mediaKindMatch(m) { return mediaKind === "video" ? isVid(m.key) : (!isVid(m.key) && !isPoster(m.key)); }
 function mediaFiltered() {
   const f = mediaFilter, ff = folderFilter;
-  return mediaItems.filter((m) => (!f || (f === "untagged" ? !m.tag : m.tag === f)) && (!ff || (ff === "__none__" ? !m.folder : m.folder === ff)));
+  return mediaItems.filter((m) => mediaKindMatch(m) && (!f || (f === "untagged" ? !m.tag : m.tag === f)) && (!ff || (ff === "__none__" ? !m.folder : m.folder === ff)));
 }
 function paintMedia() {
   const list = mediaFiltered();
   const vis = new Set(list.map((m) => m.key));
   [...mediaSel].forEach((k) => { if (!vis.has(k)) mediaSel.delete(k); });   // 选中集只留当前可见项
-  $("#media-count").textContent = `${list.length} / ${mediaItems.length} 张`;
+  $("#media-count").textContent = `${list.length} / ${mediaItems.filter(mediaKindMatch).length} ${mediaKind === "video" ? "个" : "张"}`;
   const folderOpts = (cur) => `<option value=""${!cur ? " selected" : ""}>未归类</option>` + mediaFolders.map((fd) => `<option value="${esc(fd)}"${cur === fd ? " selected" : ""}>${esc(fd)}</option>`).join("");
+  const isV = mediaKind === "video";
   $("#media-grid").innerHTML = list.map((m) => `
     <div class="mtile${mediaSel.has(m.key) ? " sel" : ""}">
       <label class="mtile-sel"><input type="checkbox" ${mediaSel.has(m.key) ? "checked" : ""} onchange="mediaToggleSel('${esc(m.key)}',this)"></label>
-      <img src="${esc(m.url)}" loading="lazy" title="${esc(m.key)}">
+      ${isV ? `<video src="${esc(m.url)}#t=0.1" preload="metadata" muted playsinline title="${esc(m.key)}"></video>` : `<img src="${esc(m.url)}" loading="lazy" title="${esc(m.key)}">`}
       <div class="mtile-key" title="${esc(m.key)}">${esc(m.key.split("/").pop())}</div>
-      <div class="mtile-tag">${m.tag === "clean" ? `<span class="pill">干净产品图</span>` : m.tag === "marketing" ? `<span class="pill pf">营销拼图</span>` : `<span class="muted">未标</span>`}</div>
+      <div class="mtile-tag">${isV ? `<span class="pill">▶ 视频</span>` : (m.tag === "clean" ? `<span class="pill">干净产品图</span>` : m.tag === "marketing" ? `<span class="pill pf">营销拼图</span>` : `<span class="muted">未标</span>`)}</div>
       <select class="mtile-folder" onchange="mediaMoveFolder('${esc(m.key)}',this.value)" title="归入文件夹">${folderOpts(m.folder)}</select>
       <div class="mtile-act">
-        <button onclick="mediaTag('${esc(m.key)}','clean')">干净</button>
+        ${isV ? "" : `<button onclick="mediaTag('${esc(m.key)}','clean')">干净</button>
         <button onclick="mediaTag('${esc(m.key)}','marketing')">营销</button>
-        <button onclick="mediaTag('${esc(m.key)}','')">清标</button>
+        <button onclick="mediaTag('${esc(m.key)}','')">清标</button>`}
         <button class="danger" onclick="mediaDelete('${esc(m.key)}')">删</button>
       </div>
-    </div>`).join("") || `<div class="card muted">无媒体${(mediaFilter || folderFilter) ? "（此筛选下）" : ""}</div>`;
+    </div>`).join("") || `<div class="card muted">无${isV ? "视频" : "媒体"}${(mediaFilter || folderFilter) ? "（此筛选下）" : ""}</div>`;
   mediaSyncBulk();
 }
 function mediaToggleSel(key, cb) { if (cb.checked) mediaSel.add(key); else mediaSel.delete(key); cb.closest(".mtile").classList.toggle("sel", cb.checked); mediaSyncBulk(); }
@@ -1106,6 +1136,23 @@ async function mediaUpload(files) {
     msg("上传 " + f.name + "…");
     try { const w = await toWebp(f); const r = await fetch("/api/admin/upload?name=" + encodeURIComponent(w.name), { method: "POST", headers: { "content-type": w.type }, body: w.blob }); const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status); msg("已上传 " + f.name); }
     catch (e) { msg(f.name + " 上传失败：" + e.message, 1); }
+  }
+  await loadMedia();
+}
+function mediaUploadRouter(files) { return mediaKind === "video" ? mediaUploadVideos(files) : mediaUpload(files); }
+async function mediaUploadVideos(files) {
+  for (const f of files) {
+    if (f.type !== "video/mp4" && !/\.mp4$/i.test(f.name)) { msg("只支持 mp4", 1); continue; }
+    if (f.size > 50 * 1024 * 1024) { msg(f.name + " 超 50MB", 1); continue; }
+    try {
+      msg("上传视频 " + f.name + "…");
+      const r = await fetch("/api/admin/upload-video?name=" + encodeURIComponent(f.name), { method: "POST", headers: { "content-type": "video/mp4" }, body: f });
+      const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status);
+      // ⭐ 上传即抽首帧存封面到派生 key(<base>.poster.webp)——本地 blob 同源可抽；产品插入时复用它(避开对 R2 裸 mp4 跨域抽帧，总工 B)
+      const frame = await extractPoster(f);
+      if (frame) { const pk = j.key.replace(/\.mp4$/, ".poster.webp"); await fetch("/api/admin/upload?key=" + encodeURIComponent(pk), { method: "POST", headers: { "content-type": "image/webp" }, body: frame }); }
+      msg("已上传视频 " + f.name + (frame ? "" : "（未能自动生成封面）"));
+    } catch (e) { msg(f.name + " 视频上传失败：" + e.message, 1); }
   }
   await loadMedia();
 }
@@ -1422,9 +1469,31 @@ function paintVideos() {
       <span class="vtag">▶ 视频</span>
       <input placeholder="标题（可选）" value="${esc(v.title || "")}" onchange="vitems[${i}].title=this.value">
       <button class="vpb" onclick="changePoster(${i})">换封面</button>
-    </div>`).join("") + `<div class="gadd" id="vadd">➕<br>上传视频(mp4)</div>`;
+    </div>`).join("") + `<div class="gadd" id="vpick">📁<br>从视频库插入</div><div class="gadd" id="vadd">➕<br>现场上传(mp4)</div>`;
   $("#vadd").onclick = () => { const f = document.createElement("input"); f.type = "file"; f.accept = "video/mp4"; f.onchange = () => uploadVideos([...f.files]); f.click(); };
+  $("#vpick").onclick = openVideoPicker;
 }
+// 从视频库插入（复用库里上传时已抽存的封面 <base>.poster.webp，避开跨域抽帧）
+let _vpVids = [];
+async function openVideoPicker() {
+  const box = $("#vp-grid"); $("#video-picker").style.display = "flex";
+  box.innerHTML = `<div class="muted">加载中… <span class="spin"></span></div>`;
+  try { const r = await api("/media"); _vpVids = (r.media || []).filter((m) => isVid(m.key)); }
+  catch (e) { box.innerHTML = `<div class="muted">加载失败：${esc(e.message)}</div>`; return; }
+  if (!_vpVids.length) { box.innerHTML = `<div class="muted">视频库为空——先到左栏「视频」库上传，或用「现场上传」直接传。</div>`; return; }
+  box.innerHTML = _vpVids.map((m, i) => `
+    <div class="vp-item">
+      <video src="${esc(m.url)}#t=0.1" preload="metadata" muted playsinline></video>
+      <div class="vp-name" title="${esc(m.key)}">${esc(m.key.split("/").pop())}</div>
+      <button class="primary" onclick="pickVideo(${i})">选择</button>
+    </div>`).join("");
+}
+function pickVideo(i) {
+  const m = _vpVids[i]; if (!m) return;
+  vitems.push({ key: m.key, poster: { key: m.key.replace(/\.mp4$/, ".poster.webp") }, title: "", alt: "" });
+  paintVideos(); closeVideoPicker(); msg("已从视频库插入（记得保存）");
+}
+function closeVideoPicker() { $("#video-picker").style.display = "none"; }
 function vDel(i) { vitems.splice(i, 1); paintVideos(); }
 function videoData() { return vitems.map((v) => ({ ...(v.key !== undefined ? { key: v.key } : { src: v.src }), ...(v.poster ? { poster: v.poster } : {}), title: v.title || "", alt: v.alt || "" })); }
 // 从视频首帧抽 webp 封面（纯客户端 canvas，同源无 CORS；失败返回 null → 用户可手动换）
@@ -1450,12 +1519,12 @@ async function uploadVideos(files) {
     if (f.type !== "video/mp4" && !/\.mp4$/i.test(f.name)) { msg("只支持 mp4", 1); continue; }
     if (f.size > 50 * 1024 * 1024) { msg(f.name + " 超 50MB（v1 上限）", 1); continue; }
     try {
-      msg("生成封面 " + f.name + "…");
-      let poster = null; const frame = await extractPoster(f);
-      if (frame) { const pr = await fetch("/api/admin/upload?name=poster.webp", { method: "POST", headers: { "content-type": "image/webp" }, body: frame }); const pj = await pr.json(); if (pr.ok && !pj.error) poster = { key: pj.key }; }
       msg("上传视频 " + f.name + "…");
       const r = await fetch("/api/admin/upload-video?name=" + encodeURIComponent(f.name), { method: "POST", headers: { "content-type": "video/mp4" }, body: f });
       const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status);
+      // 抽首帧存封面到派生 key(<base>.poster.webp)——与视频库同一约定，产品/库互通
+      let poster = null; const frame = await extractPoster(f);
+      if (frame) { const pk = j.key.replace(/\.mp4$/, ".poster.webp"); const pr = await fetch("/api/admin/upload?key=" + encodeURIComponent(pk), { method: "POST", headers: { "content-type": "image/webp" }, body: frame }); const pj = await pr.json(); if (pr.ok && !pj.error) poster = { key: pj.key }; }
       vitems.push({ key: j.key, poster, title: "", alt: "" }); paintVideos();
       msg("已上传视频 " + f.name + (poster ? "" : "（未能自动生成封面，点「换封面」手动传）"));
     } catch (e) { msg(f.name + " 视频上传失败：" + e.message, 1); }

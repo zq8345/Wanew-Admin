@@ -121,13 +121,17 @@ app.get("/api/admin/products/:id", async (c) => {
 
 // 上传：R2 直传，返回 key（产品 images[].key），URL = IMG_BASE(img.wanew.com)+key
 app.post("/api/admin/upload", async (c) => {
+  // 可选强制 key：仅允许"视频封面"命名(<视频base>.poster.webp)，用于视频库上传时把封面钉到视频同 base
+  // → 封面 = 命名约定派生(videoKey.replace .mp4→.poster.webp)、无需元数据表；图片库按此后缀过滤掉封面。
+  const forced = c.req.query("key");
+  const isPosterKey = !!forced && /^u_file\/uploads\/[a-z0-9]+\.poster\.webp$/.test(forced);
   const name = c.req.query("name") || "image";
-  const ext = (name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const ext = isPosterKey ? "webp" : (name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");   // 封面 key 隐含 webp，不看 name
   if (!["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) return c.json({ error: "unsupported image type" }, 400);
   const buf = await c.req.arrayBuffer();
   if (!buf.byteLength) return c.json({ error: "empty body" }, 400);
   if (buf.byteLength > 8 * 1024 * 1024) return c.json({ error: "image exceeds 8MB" }, 413);
-  const key = `u_file/uploads/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const key = isPosterKey ? forced! : `u_file/uploads/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.${ext}`;
   await c.env.IMAGES.put(key, buf, { httpMetadata: { contentType: c.req.header("content-type") || "application/octet-stream" } });
   return c.json({ ok: true, key, url: c.env.IMG_BASE + key });
 });
