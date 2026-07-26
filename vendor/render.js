@@ -92,9 +92,10 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
   // ⭐ 原来这里只发三条:en、【自己】、x-default —— 也就是"只认对侧"的二元形状。es 上线后,
   //   一个 pt 产品页会闭口不提它有西语版,反之亦然。hreflang 是互指的,漏一边等于没挂。
   //   → 每一门 enabled 语种都发,当且仅当【它那边真的有这个页】(urlOf 原样还回来 = 没有)。
-  //   ⚠️ en 侧维持现状(不发 hreflang):那是本轮之前就有的结构缺口,改它会动 64 个英文页的
-  //      <head>,不属于"上线 es"这次改动 —— 单独记账,不夹带。
-  const hreflang = urlOf && locale !== "en" && Array.isArray(enabled) && enabled.length
+  //   ⭐ 2026-07-26 补上 en 侧欠账(审计挖出的真 SEO bug):原来 en 详情页发 0 条 hreflang,而
+  //      es/pt 各发 4 条簇 → 非互惠,Google 整簇忽略,整个产品目录国际定向失效。去掉 `locale!=="en"`
+  //      让 en 也发互惠簇(en 自指 + es/pt 存在则发 + x-default→en)。逻辑与其它语种同一套,零特例。
+  const hreflang = urlOf && Array.isArray(enabled) && enabled.length
     ? enabled
         .filter((loc) => loc === "en" || urlOf(path, loc) !== path)
         .map((loc) => `\n<link rel="alternate" hreflang="${loc}" href="https://wanew.com${urlOf(path, loc)}" />`)
