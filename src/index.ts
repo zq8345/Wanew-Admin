@@ -521,18 +521,29 @@ async function loadMediaTags(env: Env): Promise<Record<string, string>> {
 async function saveMediaTags(env: Env, tags: Record<string, string>) {
   await env.IMAGES.put(MEDIA_META, JSON.stringify(tags), { httpMetadata: { contentType: "application/json" } });
 }
+// 显示名覆盖（库内改名·#5）：覆盖 customMetadata.name/随机 key；给旧批随机名文件补好认的名。
+const MEDIA_NAMES = "_meta/media-names.json";
+async function loadNames(env: Env): Promise<Record<string, string>> {
+  const obj = await env.IMAGES.get(MEDIA_NAMES);
+  if (!obj) return {};
+  try { return JSON.parse(await obj.text()); } catch { return {}; }
+}
+async function saveNames(env: Env, names: Record<string, string>) {
+  await env.IMAGES.put(MEDIA_NAMES, JSON.stringify(names), { httpMetadata: { contentType: "application/json" } });
+}
 
 // 列 R2 对象(分页抽干、上限保护) + 合并标签 + 对外 URL(img.wanew.com)
 app.get("/api/admin/media", async (c) => {
   const tags = await loadMediaTags(c.env);
   const fm = await loadFolders(c.env);
+  const names = await loadNames(c.env);
   const items: any[] = [];
   let cursor: string | undefined;
   do {
     const res: any = await c.env.IMAGES.list({ limit: 1000, cursor, include: ["customMetadata"] });
     for (const o of res.objects) {
-      if (o.key === MEDIA_META || o.key === MEDIA_FOLDERS) continue;
-      items.push({ key: o.key, size: o.size, uploaded: o.uploaded, url: c.env.IMG_BASE + o.key, tag: tags[o.key] || "", folder: fm.assign[o.key] || "", name: (o.customMetadata && o.customMetadata.name) || "" });
+      if (o.key === MEDIA_META || o.key === MEDIA_FOLDERS || o.key === MEDIA_NAMES) continue;
+      items.push({ key: o.key, size: o.size, uploaded: o.uploaded, url: c.env.IMG_BASE + o.key, tag: tags[o.key] || "", folder: fm.assign[o.key] || "", name: names[o.key] || (o.customMetadata && o.customMetadata.name) || "" });
     }
     cursor = res.truncated ? res.cursor : undefined;
   } while (cursor && items.length < 5000);
@@ -550,6 +561,17 @@ app.put("/api/admin/media/tag", async (c) => {
   if (tag) tags[key] = tag; else delete tags[key];
   await saveMediaTags(c.env, tags);
   return c.json({ ok: true, key, tag });
+});
+
+// #5 库内改显示名：覆盖名存 _meta（不改 R2 对象/key）；空=清覆盖、回退 customMetadata/basename。给旧批随机名文件补好认的名。
+app.put("/api/admin/media/name", async (c) => {
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const key = String(body?.key || ""), name = String(body?.name || "").trim().slice(0, 200);
+  if (!key || key === MEDIA_META || key === MEDIA_NAMES) return c.json({ error: "bad key" }, 400);
+  const names = await loadNames(c.env);
+  if (name) names[key] = name; else delete names[key];
+  await saveNames(c.env, names);
+  return c.json({ ok: true, key, name });
 });
 
 // 删除 R2 对象(前端强 confirm；⚠️ 删被产品引用的图会裂详情页——前端提示，Joe 定)

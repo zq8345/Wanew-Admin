@@ -1142,7 +1142,7 @@ function paintMedia() {
         ${isV ? "" : `<button onclick="mediaTag('${esc(m.key)}','clean')">干净</button>
         <button onclick="mediaTag('${esc(m.key)}','marketing')">营销</button>
         <button onclick="mediaTag('${esc(m.key)}','')">清标</button>`}
-        ${manageMode ? `<button class="danger" onclick="mediaDelete('${esc(m.key)}')">删</button>` : ""}
+        ${manageMode ? `<button onclick="mediaRename('${esc(m.key)}')" title="改显示名（不改文件/key）">改名</button><button class="danger" onclick="mediaDelete('${esc(m.key)}')">删</button>` : ""}
       </div>
     </div>`).join("");
   // 文件夹引导（治"0 夹 N 未归类"）：根视图 + 未归类多 + 文件夹少 时，提示 + 建议文件夹一键建
@@ -1217,6 +1217,13 @@ async function mediaMoveFolder(key, folder) {
 async function mediaTag(key, tag) {
   try { await api("/media/tag", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, tag }) }); const m = mediaItems.find((x) => x.key === key); if (m) m.tag = tag; paintMedia(); msg(tag ? "已标记" : "已清标签"); }
   catch (e) { msg("标记失败：" + e.message, 1); }
+}
+async function mediaRename(key) {
+  const m = mediaItems.find((x) => x.key === key) || {};
+  const name = prompt("显示名（留空=回退原始/随机名）：", m.name || "");
+  if (name === null) return;
+  try { await api("/media/name", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, name: name.trim() }) }); if (m) m.name = name.trim(); paintMedia(); msg(name.trim() ? "显示名已更新" : "已回退原始名"); }
+  catch (e) { msg("改名失败：" + e.message, 1); }
 }
 async function mediaDelete(key) {
   const v = isVid(key);
