@@ -132,7 +132,7 @@ app.post("/api/admin/upload", async (c) => {
   if (!buf.byteLength) return c.json({ error: "empty body" }, 400);
   if (buf.byteLength > 8 * 1024 * 1024) return c.json({ error: "image exceeds 8MB" }, 413);
   const key = isPosterKey ? forced! : `u_file/uploads/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  await c.env.IMAGES.put(key, buf, { httpMetadata: { contentType: c.req.header("content-type") || "application/octet-stream" } });
+  await c.env.IMAGES.put(key, buf, { httpMetadata: { contentType: c.req.header("content-type") || "application/octet-stream" }, customMetadata: { name: (c.req.query("orig") || c.req.query("name") || "").slice(0, 200) } });
   return c.json({ ok: true, key, url: c.env.IMG_BASE + key });
 });
 
@@ -148,7 +148,7 @@ app.post("/api/admin/upload-video", async (c) => {
   const body = c.req.raw.body;
   if (!body) return c.json({ error: "empty body" }, 400);
   const key = `u_file/uploads/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.mp4`;
-  await c.env.IMAGES.put(key, body, { httpMetadata: { contentType: "video/mp4" } });
+  await c.env.IMAGES.put(key, body, { httpMetadata: { contentType: "video/mp4" }, customMetadata: { name: (c.req.query("orig") || c.req.query("name") || "").slice(0, 200) } });
   return c.json({ ok: true, key, url: c.env.IMG_BASE + key });
 });
 
@@ -529,10 +529,10 @@ app.get("/api/admin/media", async (c) => {
   const items: any[] = [];
   let cursor: string | undefined;
   do {
-    const res: any = await c.env.IMAGES.list({ limit: 1000, cursor });
+    const res: any = await c.env.IMAGES.list({ limit: 1000, cursor, include: ["customMetadata"] });
     for (const o of res.objects) {
       if (o.key === MEDIA_META || o.key === MEDIA_FOLDERS) continue;
-      items.push({ key: o.key, size: o.size, uploaded: o.uploaded, url: c.env.IMG_BASE + o.key, tag: tags[o.key] || "", folder: fm.assign[o.key] || "" });
+      items.push({ key: o.key, size: o.size, uploaded: o.uploaded, url: c.env.IMG_BASE + o.key, tag: tags[o.key] || "", folder: fm.assign[o.key] || "", name: (o.customMetadata && o.customMetadata.name) || "" });
     }
     cursor = res.truncated ? res.cursor : undefined;
   } while (cursor && items.length < 5000);
