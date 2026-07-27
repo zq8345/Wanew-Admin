@@ -692,13 +692,20 @@ async function loadCatsView() {
 function paintCats() {
   $("#cats-rows").innerHTML = catsEdit.map((c, i) => `
     <tr>
-      <td class="muted"><button onclick="catMove(${i},-1)" ${i === 0 ? "disabled" : ""}>↑</button> <button onclick="catMove(${i},1)" ${i === catsEdit.length - 1 ? "disabled" : ""}>↓</button></td>
+      <td class="muted"><button onclick="catMove(${i},-1)" ${i === 0 ? "disabled" : ""}>↑</button> <button onclick="catMove(${i},1)" ${i === catsEdit.length - 1 ? "disabled" : ""}>↓</button> <button class="danger" onclick="catDel(${i})" title="删机型（保存后生效；有产品会被拒删、需先迁移）">删</button></td>
       <td class="muted">${esc(c.slug)}</td>
       <td><input value="${esc(c.display)}" oninput="catsEdit[${i}].display=this.value" style="width:100%"></td>
       <td><input value="${esc(c.model)}" oninput="catsEdit[${i}].model=this.value" style="width:100%"></td>
     </tr>`).join("") || `<tr><td colspan="4" class="muted">无类目</td></tr>`;
 }
 function catMove(i, d) { const j = i + d; if (j < 0 || j >= catsEdit.length) return; const t = catsEdit[i]; catsEdit[i] = catsEdit[j]; catsEdit[j] = t; paintCats(); }
+// 删机型（只删不加·总工拍）：本地标记删除，点「保存」走后端守卫（产品数>0 拒删）+ 删空列表页 + 刷总列表。
+function catDel(i) {
+  const c = catsEdit[i];
+  if (!confirm(`删机型「${c.slug}」？\n\n点「保存」后生效。⚠️ 若该机型下还有产品，保存会被拒——机型 slug 是产品 URL(/${c.slug}/…)，删了会断链，需先用「批量改机型」把产品迁到别的机型。\n（加机型暂未开放，等官网机制。）`)) return;
+  catsEdit.splice(i, 1); paintCats();
+  msg(`已标记删除「${c.slug}」——点「保存」生效（该机型若还有产品会被拒删）`);
+}
 async function saveCats() {
   for (const c of catsEdit) {
     if (!c.display.trim()) return msg("显示名不能为空：" + c.slug, 1);

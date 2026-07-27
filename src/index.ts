@@ -246,6 +246,12 @@ app.put("/api/admin/categories", async (c) => {
   if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
   const v = validateCategories(body, ctx.categories);
   if (v.error) return c.json({ error: v.error }, 400);
+  // ⭐ 删机型守卫（URL 安全·零破坏）：机型 slug 就是产品 URL /{slug}/{id}——该机型还有产品则拒删，逼先迁移。
+  const removed = v.removed || [];
+  for (const r of removed) {
+    const n = (ctx.manifest as any[]).filter((m: any) => m.category === r).length;
+    if (n > 0) return c.json({ error: `机型「${r}」下还有 ${n} 个产品，删了会断它们的 URL。请先用「批量改机型」把这些产品迁到别的机型，再删。` }, 400);
+  }
   // display 变更的类目 → 重烘焙；纯顺序变更只落 json（首页瓦片顺序随下次本地管线——诚实边界）
   const oldMap: Record<string,string> = {}; for (const cc of ctx.categories.categories) oldMap[cc.slug] = cc.display;
   const changed = v.cats.categories.filter((cc: any) => oldMap[cc.slug] !== cc.display).map((cc: any) => cc.slug);
@@ -253,8 +259,17 @@ app.put("/api/admin/categories", async (c) => {
   try {
     const ctx2 = { ...ctx, categories: v.cats, catmap: Object.fromEntries(v.cats.categories.map((cc: any) => [cc.slug, cc.display])) };
     for (const slug of changed) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug));
-    const r = await (await import("../vendor/github.js") as any).commitFiles(c.env, cfg, files, `admin: categories update (${operator(c)})`);
-    return c.json({ ok: true, rebaked: changed, filesWritten: files.length, note: changed.length ? "display 变更类目已重烘焙" : "仅顺序/无实质变更——首页瓦片顺序随下次本地管线", ...r });
+    // 删机型（产品数已=0）：删各语该机型空列表页 /{slug}/index.html + 刷总列表(products/index.html)把它从 nav/分区抹掉
+    for (const r of removed) for (const locale of ctx.locales.enabled) {
+      const dir = ctx.locDir[locale]; const rel = dir ? `${dir}/${r}/index.html` : `${r}/index.html`;
+      if (ctx.pagesList.has(rel)) files.push({ path: rel, delete: true });
+    }
+    if (removed.length && !changed.length) {   // 没有 display 变更触发过 total 重烘焙 → 用剩余机型触发一次刷 total
+      const anyRemain = v.cats.categories[0]?.slug;
+      if (anyRemain) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, anyRemain));
+    }
+    const r = await (await import("../vendor/github.js") as any).commitFiles(c.env, cfg, files, `admin: categories update${removed.length ? ` (删机型 ${removed.join(",")})` : ""} (${operator(c)})`);
+    return c.json({ ok: true, rebaked: changed, removed, filesWritten: files.length, note: removed.length ? `已删机型 ${removed.join(",")}（空列表页删除 + 总列表刷新）` : (changed.length ? "display 变更类目已重烘焙" : "仅顺序/无实质变更——首页瓦片顺序随下次本地管线"), ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 

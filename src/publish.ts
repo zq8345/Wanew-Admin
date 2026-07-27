@@ -355,7 +355,7 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
 // 一期边界：**slug 集合不可变**（增删类目牵动目录结构/列表页存在性=二期）；可改 display 与顺序。
 // display/model 变更 → 重烘焙受影响页（该类目全部详情页三语存在性规则 + 该类目列表 + 总列表）。
 // 顺序变更只落 json（首页瓦片顺序吃它——随下次本地管线；诚实边界，注明在响应里）。
-export function validateCategories(body: any, existing: any): { cats?: any; error?: string } {
+export function validateCategories(body: any, existing: any): { cats?: any; error?: string; removed?: string[] } {
   const list = body?.categories;
   if (!Array.isArray(list) || !list.length) return { error: "categories must be a non-empty array" };
   const slugs = list.map((c: any) => c?.slug);
@@ -365,9 +365,9 @@ export function validateCategories(body: any, existing: any): { cats?: any; erro
   const oldSlugs = new Set((existing?.categories || []).map((c: any) => c.slug));
   const newSlugs = new Set(slugs);
   const added = slugs.filter((x: string) => !oldSlugs.has(x));
-  const removed = [...oldSlugs].filter((x) => !newSlugs.has(x as string));
-  if (added.length || removed.length) return { error: `一期 slug 集合不可变（增删类目=二期）。added=${added} removed=${removed}` };
-  return { cats: { ...(existing || {}), categories: list.map((c: any) => ({ slug: c.slug, display: String(c.display) })) } };
+  const removed = [...oldSlugs].filter((x) => !newSlugs.has(x as string)) as string[];
+  if (added.length) return { error: `加机型暂未开放（等官网"从零建列表页"机制定契约）。added=${added}` };   // 只放开删、仍拒加
+  return { cats: { ...(existing || {}), categories: list.map((c: any) => ({ slug: c.slug, display: String(c.display) })) }, removed };
 }
 
 // 重烘焙一个类目：详情页（三语存在性）双步 + 该类目列表 + 总列表（各语种存在的）。返回 files 数组。
