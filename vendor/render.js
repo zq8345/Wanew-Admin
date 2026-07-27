@@ -74,6 +74,21 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
     `\n              <div class="col-xl-3 col-lg-4 col-md-6">\n                <div class="blog-one__single">\n                  <a href="${c.href}">\n                    <div class="blog-one__img"><img src="${c.img}" alt="${c.alt}" loading="lazy"></div>\n                    <div class="blog-content"><h3 class="blog-one__title">${c.title}</h3></div>\n                  </a>\n                </div>\n              </div>`
   ).join("") + "\n            ";
   const summary = e.summary_html ? `<div class="item-explain">\n                ${e.summary_html}\n              </div>` : "";
+  // P5: 详情页视频区(Admin #79 上传已做,官网渲染当时排期中→现补)。videos[] 真实形状(661.json):
+  // [{ key:"u_file/uploads/x.mp4", poster:{key:"...webp"}, alt:"" }]。src/poster 走同一 resolveImg
+  // (key→imgBase+key);无 videos→空串,不出空区。type 由扩展名派生(Admin 未来传 webm 也对)。
+  const vids = Array.isArray(prod.videos) ? prod.videos.filter((v) => v && v.key) : [];
+  const videosBlock = vids.length
+    ? `\n  <section class="w3-pvideo">\n    <div class="w3-container">\n      <h2 class="w3-pvideo__title">{{t.body.videos.title}}</h2>\n      <div class="w3-pvideo__grid">` +
+      vids.map((v) => {
+        const ext = (v.key.split(".").pop() || "mp4").toLowerCase();
+        const type = ext === "webm" ? "video/webm" : ext === "ogg" ? "video/ogg" : "video/mp4";
+        const poster = v.poster && v.poster.key ? ` poster="${resolveImg(v.poster, imgBase)}"` : "";
+        const label = v.alt && v.alt.trim() ? ` aria-label="${v.alt.replace(/"/g, "&quot;")}"` : "";
+        return `\n        <video class="w3-pvideo__player" controls preload="metadata" playsinline${poster}${label}><source src="${resolveImg(v, imgBase)}" type="${type}"></video>`;
+      }).join("") +
+      `\n      </div>\n    </div>\n  </section>\n`
+    : "";
   const robots = prod.robots ? `\n<meta name="robots" content="${prod.robots}">` : "";
   // JSON-LD Product embeds the English meta_description verbatim; for a non-en locale swap it so
   // the structured data matches the visible <meta>. The name field stays en (SKU/model).
@@ -106,7 +121,7 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
     ROBOTS_META: robots, CANONICAL: canonical, HREFLANG: hreflang,
     HTML_LANG: locale, OG_LOCALE: locale === "en" ? "" : `\n<meta property="og:locale" content="${locale.replace("-", "_")}" />`,
     GALLERY_MAIN: slides, GALLERY_THUMB: slides, CATEGORY: (modelDisplay && modelDisplay[prod.category]) || catmap[prod.category] || prod.category,
-    TITLE: e.title, SUMMARY_BLOCK: summary, DESCRIPTION: e.description_html,
+    TITLE: e.title, SUMMARY_BLOCK: summary, DESCRIPTION: e.description_html, VIDEOS_BLOCK: videosBlock,
     RELATED: cards, JSONLD_BREADCRUMB: prod.jsonld_breadcrumb || "", JSONLD_PRODUCT: jsonldProduct,
   };
   let r = template;
