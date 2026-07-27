@@ -1588,12 +1588,12 @@ function paintGallery() {
       <button class="gx" onclick="gDel(${i})">✕</button>
       <img src="${esc(imgUrl(im))}" loading="lazy">
       <input placeholder="alt 描述" value="${esc(im.alt || "")}" onchange="gitems[${i}].alt=this.value">
-    </div>`).join("") + `<div class="gadd" id="gadd">➕<br>点击或拖入图片</div>`;
+    </div>`).join("") + `<div class="gadd" id="gadd">➕<br>添加图片 / 视频</div>`;
   const add = $("#gadd");
-  add.onclick = () => { const f = document.createElement("input"); f.type = "file"; f.accept = "image/*"; f.multiple = true; f.onchange = () => uploadFiles([...f.files]); f.click(); };
+  add.onclick = () => { const f = document.createElement("input"); f.type = "file"; f.accept = "image/*,video/mp4"; f.multiple = true; f.onchange = () => addMedia([...f.files]); f.click(); };
   add.ondragover = (e) => { e.preventDefault(); add.classList.add("drag"); };
   add.ondragleave = () => add.classList.remove("drag");
-  add.ondrop = (e) => { e.preventDefault(); add.classList.remove("drag"); uploadFiles([...e.dataTransfer.files].filter((f) => f.type.startsWith("image/"))); };
+  add.ondrop = (e) => { e.preventDefault(); add.classList.remove("drag"); addMedia([...e.dataTransfer.files]); };
   g.querySelectorAll(".gitem").forEach((el) => {
     el.addEventListener("dragstart", () => el.classList.add("dragging"));
     el.addEventListener("dragend", () => el.classList.remove("dragging"));
@@ -1606,6 +1606,16 @@ function paintGallery() {
 }
 function gDel(i) { gitems.splice(i, 1); paintGallery(); }
 function galleryData() { return gitems.map((im) => (im.key !== undefined ? { key: im.key, alt: im.alt || "" } : { src: im.src, alt: im.alt || "" })); }
+// 统一媒体添加（P4-A）：一个入口收图片+视频，按 MIME 自动分流——图片→图库 images[]，视频→视频区 videos[]。
+function addMedia(files) {
+  const isImg = (f) => (f.type || "").startsWith("image/");
+  const isVid = (f) => f.type === "video/mp4" || /\.mp4$/i.test(f.name);
+  const imgs = files.filter(isImg), vids = files.filter((f) => !isImg(f) && isVid(f));
+  const other = files.filter((f) => !isImg(f) && !isVid(f));
+  if (imgs.length) uploadFiles(imgs);
+  if (vids.length) uploadVideos(vids);
+  if (other.length) msg("跳过不支持的文件（仅图片/mp4）：" + other.map((f) => f.name).join("、"), 1);
+}
 async function uploadFiles(files) {
   for (const f of files) {
     msg("上传 " + f.name + "…");
@@ -1630,8 +1640,8 @@ function paintVideos() {
       <span class="vtag">▶ 视频</span>
       <input placeholder="标题（可选）" value="${esc(v.title || "")}" onchange="vitems[${i}].title=this.value">
       <button class="vpb" onclick="changePoster(${i})">换封面</button>
-    </div>`).join("") + `<div class="gadd" id="vpick">📁<br>从视频库插入</div><div class="gadd" id="vadd">➕<br>现场上传(mp4)</div>`;
-  $("#vadd").onclick = () => { const f = document.createElement("input"); f.type = "file"; f.accept = "video/mp4"; f.onchange = () => uploadVideos([...f.files]); f.click(); };
+    </div>`).join("") + `<div class="gadd" id="vpick">📁<br>从视频库插入</div><div class="gadd" id="vadd">➕<br>添加图片 / 视频</div>`;
+  $("#vadd").onclick = () => { const f = document.createElement("input"); f.type = "file"; f.accept = "image/*,video/mp4"; f.multiple = true; f.onchange = () => addMedia([...f.files]); f.click(); };
   $("#vpick").onclick = openVideoPicker;
 }
 // 从视频库插入（复用库里上传时已抽存的封面 <base>.poster.webp，避开跨域抽帧）
