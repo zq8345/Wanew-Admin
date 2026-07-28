@@ -29,8 +29,67 @@ const kb = (n) => (n / 1024).toFixed(0) + "KB";
 const wr = (a) => execFileSync(process.platform === "win32" ? "npx.cmd" : "npx",
   ["--no-install", "wrangler", ...a], { encoding: "buffer", shell: process.platform === "win32", maxBuffer: 1 << 28 });
 
+// ── `--check <清单路径>`：清单漂移闸 ──────────────────────────────────────────
+// 回答的是"**谁在什么时候更新那份清单**"里最危险的那一半：**没更新的时候，谁会告诉我。**
+//
+// 上传时会生成缩略图对象，但**上传路径不写清单** —— 清单必须由**枚举真实存在的对象**产生，
+// 而"我刚 PUT 了所以它存在"是**意图**，不是事实（PUT 成功而清单提交失败，两边就永远对不上）。
+// 代价是有个真实缺口：**新图有缩略图文件、清单里没有 → regen 回落原图 → 新图享受不到优化，且无症状。**
+// 这个闸就是把那个缺口**变成会出声的**。它不修，只吼。
+const CHECK = args.includes("--check") ? (args[args.indexOf("--check") + 1] || "") : "";
+if (CHECK) {
+  const idxUrl = "https://wanew.com/data/products-index.json";
+  const res = await fetch(idxUrl);
+  const body = await res.text();
+  // ⚠️ 先断言材料有效：空响应/308 被吃掉，喂给下面的 diff 会得到"零漂移"——和真的零漂移一模一样
+  if (!res.ok || body.length < 1000) { console.error(`🔴 products-index 取不到（${res.status} / ${body.length}B）——不出结论`); process.exit(1); }
+  const idx = JSON.parse(body);
+  if (!Array.isArray(idx) || idx.length < 10) { console.error(`🔴 products-index 条数异常：${idx.length}`); process.exit(1); }
+
+  const mRaw = readFileSync(CHECK, "utf8");
+  const manifest = JSON.parse(mRaw);
+  // ⚠️ 用**消费方 regen 的读法**读清单（`new Set(m.keys)` 然后 has），不是我以为的形状
+  const inManifest = new Set(manifest.keys || []);
+  if (!inManifest.size) { console.error(`🔴 清单按消费方读法读出 0 条（${CHECK}）——形状可能又变了，不出结论`); process.exit(1); }
+
+  // 只看 R2 那一半：`/static/…` 归官网侧管
+  const r2 = idx.map((e) => e.thumb).filter((t) => t && /^https?:\/\/img\.wanew\.com\//.test(t));
+  console.log(`清单漂移闸：products-index ${idx.length} 条 · 其中 R2 图 ${r2.length} 张 · 清单 ${inManifest.size} 条\n`);
+
+  const alive = async (k) => { try { return (await fetch(`https://img.wanew.com/${k}`, { method: "HEAD" })).ok; } catch { return false; } };
+
+  // ⚠️ products-index 的 thumb **是 regen 的产出，不是原图** —— 接管上线后它已经指向 `.thumb.webp`。
+  //    上一版这里假设 thumb 永远是原图、再去派生 `.thumb.webp`，结果对已接管的图派生出
+  //    `xxx.thumb.thumb.webp` —— 一个永远不存在、也永远不在清单里的 key，**两个判据同时落空 → 闸全绿**。
+  //    所以要按 thumb 的**实际形态**分流，别假设它是哪一种。
+  const missing = [], stale = [], broken = [];
+  for (const url of r2) {
+    const k = url.replace(/^https?:\/\/img\.wanew\.com\//, "");
+    if (/\.thumb\.webp$/i.test(k)) {
+      // regen 已选用缩略图：它必须真的存在（否则页面上就是 404），且必须在清单里（清单就是它的依据）
+      if (!(await alive(k))) broken.push(k);
+      else if (!inManifest.has(k)) missing.push(k + "（页面已在用、清单却没有）");
+    } else {
+      // regen 回落了原图：如果其实已有缩略图文件，就是白生成 —— 正是"上传了但清单没更新"的形态
+      const tk = k.replace(/\.[a-z0-9]+$/i, "") + ".thumb.webp";
+      if (await alive(tk)) missing.push(tk);
+    }
+  }
+  // 状态③ 只能靠**遍历清单自己**抓到 —— 只遍历 products-index 派生出的 key，清单里的野条目永远碰不到
+  for (const k of inManifest) if (!(await alive(k))) stale.push(k);
+
+  const say = (n, list, why) => { console.log(`${list.length ? "🔴" : "✅"} ${n}：${list.length}${list.length ? "  ← " + why : ""}`); list.slice(0, 8).forEach((k) => console.log(`     ${k}`)); };
+  say("有缩略图文件、但清单里没有", missing, "regen 会回落原图，这些图白生成了（无症状）");
+  say("清单里有、但文件不存在", stale, "regen 会指向 404");
+  say("页面正在用、但对象不存在", broken, "🔴 列表页图裂了");
+  if (broken.length) process.exit(1);
+  if (missing.length || stale.length) { console.error(`\n🔴 清单已漂移 —— 重跑一次生成（不带 --check）并把 data/r2-thumbs.json 提交到官网仓。`); process.exit(1); }
+  console.log("\n✅ 清单与 R2 实际内容一致。");
+  process.exit(0);
+}
+
 // 目标清单：外部传入（由 img-audit 产出），避免脚本自己猜该处理哪些
-if (!LIST) { console.error("🔴 必须 --list <r2-targets.json>"); process.exit(1); }
+if (!LIST) { console.error("🔴 必须 --list <r2-targets.json> 或 --check <清单路径>"); process.exit(1); }
 const raw = readFileSync(LIST, "utf8");
 if (raw.length < 50) { console.error("🔴 清单材料无效：" + raw.length + "B"); process.exit(1); }
 let targets = JSON.parse(raw);

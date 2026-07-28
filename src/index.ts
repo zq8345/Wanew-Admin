@@ -125,14 +125,17 @@ app.post("/api/admin/upload", async (c) => {
   // 可选强制 key：仅允许"视频封面"命名(<视频base>.poster.webp)，用于视频库上传时把封面钉到视频同 base
   // → 封面 = 命名约定派生(videoKey.replace .mp4→.poster.webp)、无需元数据表；图片库按此后缀过滤掉封面。
   const forced = c.req.query("key");
-  const isPosterKey = !!forced && /^u_file\/uploads\/[a-z0-9]+\.poster\.webp$/.test(forced);
+  // 派生资产的强制 key：封面 `<base>.poster.webp` / 列表卡缩略图 `<base>.thumb.webp`。
+  // ⚠️ 正则窄到只认 `u_file/uploads/` 下的这两种命名 —— 这个参数让调用方指定写入位置，
+  //    放宽一个字符就等于把"往任意 key 写对象"开放出去。要加第三种派生物就再加一条，别改成通配。
+  const isDerivedKey = !!forced && /^u_file\/uploads\/[a-z0-9]+\.(poster|thumb)\.webp$/.test(forced);
   const name = c.req.query("name") || "image";
-  const ext = isPosterKey ? "webp" : (name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");   // 封面 key 隐含 webp，不看 name
+  const ext = isDerivedKey ? "webp" : (name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");   // 派生 key 隐含 webp，不看 name
   if (!["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) return c.json({ error: "unsupported image type" }, 400);
   const buf = await c.req.arrayBuffer();
   if (!buf.byteLength) return c.json({ error: "empty body" }, 400);
   if (buf.byteLength > 8 * 1024 * 1024) return c.json({ error: "image exceeds 8MB" }, 413);
-  const key = isPosterKey ? forced! : `u_file/uploads/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const key = isDerivedKey ? forced! : `u_file/uploads/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.${ext}`;
   await c.env.IMAGES.put(key, buf, { httpMetadata: { contentType: c.req.header("content-type") || "application/octet-stream" }, customMetadata: { name: (c.req.query("orig") || c.req.query("name") || "").slice(0, 200) } });
   return c.json({ ok: true, key, url: c.env.IMG_BASE + key });
 });
@@ -623,8 +626,11 @@ app.delete("/api/admin/media", async (c) => {
   const key = c.req.query("key") || "";
   if (!key || key === MEDIA_META) return c.json({ error: "bad key" }, 400);
   await c.env.IMAGES.delete(key);
-  // 删视频顺带删其封面(命名约定 <base>.poster.webp)——防孤儿 poster 死重
+  // 删原始资产顺带删其派生物(命名约定)——防孤儿死重：mp4→封面、图片→列表卡缩略图。
+  // ⚠️ 只在删**原始**资产时连带；派生 key 自己被删时不再递归（`a.thumb.webp` 去扩展名 + `.thumb.webp`
+  //    就是它自己，会变成删两次同一个对象——无害但没意义，也会掩盖"到底删了什么"）。
   if (/\.mp4$/i.test(key)) await c.env.IMAGES.delete(key.replace(/\.mp4$/i, ".poster.webp"));
+  else if (!/\.(poster|thumb)\.webp$/i.test(key)) await c.env.IMAGES.delete(key.replace(/\.[a-z0-9]+$/i, "") + ".thumb.webp");
   const tags = await loadMediaTags(c.env);
   if (tags[key] !== undefined) { delete tags[key]; await saveMediaTags(c.env, tags); }
   // 顺手清文件夹归属（图没了归属也该没）

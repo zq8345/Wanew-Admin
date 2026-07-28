@@ -1672,7 +1672,12 @@ let mediaItems = [], mediaFilter = "", mediaFolders = [], folderFilter = "", med
 const isVid = (k) => /\.mp4$/i.test(k);
 // 文件夹按 kind 归属：显式 kind 优先，缺省(旧文件夹)按名字启发式(含"视频/video/影片"=视频)——修 Joe 报的视频夹串进图片库
 function folderKind(name) { return folderKinds[name] || (/视频|video|影片/i.test(name) ? "video" : "image"); }
-const isPoster = (k) => /\.poster\.webp$/i.test(k);   // 视频封面(命名约定 <base>.poster.webp)——图片库里过滤掉
+const isPoster = (k) => /\.poster\.webp$/i.test(k);   // 视频封面(命名约定 <base>.poster.webp)
+const isThumb = (k) => /\.thumb\.webp$/i.test(k);     // 列表卡缩略图(命名约定 <base>.thumb.webp)
+// ⭐ 派生资产 = 由某个原始资产按命名约定生成的。**图片库只列原始资产** ——
+//    否则 Joe 每上传一张图，库里就多出一张几乎一模一样的，还得自己分辨哪张是"真的"。
+//    再加第三种派生物时改这一个谓词，别在调用点上再加一个 `&& !isXxx`。
+const isDerived = (k) => isPoster(k) || isThumb(k);
 async function showLib(kind) {
   mediaKind = kind;
   showView("media");
@@ -1702,7 +1707,7 @@ function paintFolderbar() {
   $("#media-folderbar").innerHTML = `<div class="fcrumb">${crumb}${atRoot ? "" : ` <button class="fbk" onclick="folderSetFilter('')">← 返回全部</button>`}</div>`;
 }
 let mediaSel = new Set();
-function mediaKindMatch(m) { return mediaKind === "video" ? isVid(m.key) : (!isVid(m.key) && !isPoster(m.key)); }
+function mediaKindMatch(m) { return mediaKind === "video" ? isVid(m.key) : (!isVid(m.key) && !isDerived(m.key)); }
 function mediaFiltered() {
   const f = mediaFilter, ff = folderFilter;
   return mediaItems.filter((m) => mediaKindMatch(m) && (!f || (f === "untagged" ? !m.tag : m.tag === f)) && (ff ? m.folder === ff : !m.folder));   // 根(ff="")=未归类松散项；否则=该文件夹内
@@ -1843,10 +1848,59 @@ async function toWebp(file, quality = 0.82) {
     return { blob, name: file.name.replace(/\.[^.]+$/, "") + ".webp", type: "image/webp" };
   } catch { return { blob: file, name: file.name, type: file.type }; }
 }
+// ── 缩略图（长边 960）────────────────────────────────────────────────────────
+// ⚠️ 规格必须与回填脚本 scripts/r2-thumbs.mjs 逐条一致，否则同一批图会有两种缩略图：
+//    长边 960 · fit=inside · **不放大** · webp q82 · key = 原 key 去扩展名 + `.thumb.webp`。
+//    改这里必须同时改那边 —— 两个数字分开写，就等着它们哪天不一样。
+const THUMB_LONG_EDGE = 960, THUMB_QUALITY = 0.82;
+const thumbKeyOf = (key) => key.replace(/\.[a-z0-9]+$/i, "") + ".thumb.webp";
+
+async function makeThumb(blob) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("decode")); i.src = url; });
+    const w0 = img.naturalWidth, h0 = img.naturalHeight;
+    if (!w0 || !h0) throw new Error("零尺寸");
+    const s = Math.min(1, THUMB_LONG_EDGE / Math.max(w0, h0));   // ≤1：**不放大**
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(w0 * s); cv.height = Math.round(h0 * s);
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    const out = await new Promise((res) => cv.toBlob(res, "image/webp", THUMB_QUALITY));
+    if (!out || !out.size) throw new Error("编码失败");
+    // ⭐ 统一规则：**缩略图必须真的更小，否则不生成**（与 toWebp 同一条判据）。
+    //    这一条同时覆盖了"长边已 ≤960"——那时缩放是空操作、原图又已是 webp，编出来不会更小 → 自然不生成。
+    //    写成 `if (长边<=960) return null` 是同一件事的一个特例；特例会和回填脚本的行为对不上
+    //    （脚本的原图是 jpeg，同尺寸重编成 webp **确实**更小、该生成）。用"是否更小"表述，两边就都对。
+    return out.size < blob.size ? out : null;
+  } finally { URL.revokeObjectURL(url); }
+}
+
+// ⭐ 会被产品消费的图片，上传一律走这里（媒体库 mediaUpload / 产品图库 uploadFiles）——
+//    **不在每个上传面各加一段缩略图逻辑**：那样第三个上传面加进来时会静默漏掉。
+//    ⚠️ **视频封面(poster)不走这里，是故意的**：它由 `.poster.webp` 命名约定派生、只做视频封面，
+//    不进 products-index 的 thumb，没有消费方 —— 给它生成缩略图只是白占一份存储。
+//    新增任何"图会出现在产品列表卡上"的上传路径，走这个函数，别另写一份。
+async function uploadImage(file) {
+  const w = await toWebp(file);
+  const r = await fetch("/api/admin/upload?name=" + encodeURIComponent(w.name) + "&orig=" + encodeURIComponent(file.name), { method: "POST", headers: { "content-type": w.type }, body: w.blob });
+  const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status);
+  // 缩略图失败**绝不连坐主图**（官网会回落原图，页面照常）——但必须留声，不能静默。
+  try {
+    const t = await makeThumb(w.blob);
+    if (t) {
+      const tr = await fetch("/api/admin/upload?key=" + encodeURIComponent(thumbKeyOf(j.key)), { method: "POST", headers: { "content-type": "image/webp" }, body: t });
+      const tj = await tr.json().catch(() => ({}));
+      if (!tr.ok || tj.error) throw new Error(tj.error || tr.status);
+      j.thumbKey = thumbKeyOf(j.key);
+    }
+  } catch (e) { msg("⚠️ " + file.name + " 缩略图没生成（原图已上传，列表页会用原图）：" + e.message, 1); }
+  return j;
+}
+
 async function mediaUpload(files) {
   for (const f of files) {
     msg("上传 " + f.name + "…");
-    try { const w = await toWebp(f); const r = await fetch("/api/admin/upload?name=" + encodeURIComponent(w.name) + "&orig=" + encodeURIComponent(f.name), { method: "POST", headers: { "content-type": w.type }, body: w.blob }); const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status); msg("已上传 " + f.name); }
+    try { await uploadImage(f); msg("已上传 " + f.name); }
     catch (e) { msg(f.name + " 上传失败：" + e.message, 1); }
   }
   await loadMedia();
@@ -2312,9 +2366,7 @@ async function uploadFiles(files) {
   for (const f of files) {
     msg("上传 " + f.name + "…");
     try {
-      const w = await toWebp(f);
-      const r = await fetch("/api/admin/upload?name=" + encodeURIComponent(w.name) + "&orig=" + encodeURIComponent(f.name), { method: "POST", headers: { "content-type": w.type }, body: w.blob });
-      const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || r.status);
+      const j = await uploadImage(f);
       gitems.push({ key: j.key, alt: "" }); paintGallery(); msg("已上传 " + f.name);
     } catch (e) { msg(f.name + " 上传失败：" + e.message, 1); }
   }
