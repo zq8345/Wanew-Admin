@@ -277,6 +277,27 @@ button.ico-del:hover:not(:disabled){color:var(--w3-err);border-color:rgba(255,15
 .fr .nm{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fr .id{font-size:10.5px;color:var(--w3-text3);font-variant-numeric:tabular-nums;flex:none}
 .fr .ord{display:inline-flex;gap:3px;flex:none}
+/* 攻略：搜索 + 轴筛选 + 可折叠分组（目标=能找到某一篇） */
+.gtool{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.gtool input[type=search]{flex:1;min-width:220px}
+.gchips{display:flex;gap:6px;flex-wrap:wrap}
+.gchip{height:27px;padding:0 11px;font-size:12px;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--w3-line);background:var(--w3-bg2);color:var(--w3-text2);border-radius:999px;cursor:pointer}
+.gchip:hover{border-color:var(--w3-line2);color:var(--w3-text)}
+.gchip.on{background:rgba(125,177,255,.14);border-color:var(--w3-accent);color:var(--w3-text);font-weight:600}
+.gchip .c{font-size:10.5px;color:var(--w3-text3);font-variant-numeric:tabular-nums}
+.gchip.on .c{color:var(--w3-text2)}
+.gsec{border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);background:var(--w3-bg2);margin-bottom:8px}
+.gsec>summary{cursor:pointer;padding:9px 13px;font-size:12.5px;color:var(--w3-text);user-select:none;display:flex;align-items:center;gap:9px;list-style:none}
+.gsec>summary::-webkit-details-marker{display:none}
+.gsec>summary::before{content:"▸";color:var(--w3-text3);font-size:10px;transition:transform .12s}
+.gsec[open]>summary::before{transform:rotate(90deg)}
+.gsec>summary .n{color:var(--w3-text3);font-size:11px;font-variant-numeric:tabular-nums;margin-left:auto}
+.grow{display:flex;align-items:center;gap:10px;padding:7px 13px;border-top:1px solid var(--w3-line);font-size:13px}
+.grow:hover{background:var(--w3-panel2)}
+.gax{flex:none;font-size:10px;padding:1px 7px;border-radius:3px;background:var(--w3-tile);color:var(--w3-ink);font-weight:600}
+.grow .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grow .gid{font-size:10.5px;color:var(--w3-text3);font-variant-numeric:tabular-nums;flex:none}
+.gempty{padding:16px 13px;color:var(--w3-text3);font-size:12.5px}
 .cat-add{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;height:auto;padding:10px;margin-top:12px;border:1px dashed var(--w3-line2);background:transparent;color:var(--w3-text3);border-radius:var(--dz-radius-s);font-size:13px}
 .cat-add:disabled{opacity:.7;cursor:not-allowed}
 .cat-add:hover:not(:disabled){border-color:var(--w3-accent);color:var(--w3-accent)}
@@ -1227,11 +1248,11 @@ async function loadGuides() {
   if (r.retired) {
     // 退休态：把针对已下线 /service/ 的误导控件收干净（保存/预览按钮、官网攻略页 404 链、重烘焙文案）
     ["btn-guides-preview", "btn-guides-save", "guides-service-link", "guides-help"].forEach((id) => { const el = document.getElementById(id); if (el) el.style.display = "none"; });
-    const _tag = document.getElementById("guides-idtag"); if (_tag) _tag.textContent = "攻略 · /guides/ 内容库（只读）";
-    const arts = r.articles || [], byTopic = {};
-    arts.forEach((a) => { (byTopic[a.topic || "其它"] = byTopic[a.topic || "其它"] || []).push(a); });
-    const groups = Object.keys(byTopic).sort().map((t) => `<div class="card"><h3>${esc(t)} <span class="muted" style="font-weight:400;font-size:12px">· ${byTopic[t].length} 篇</span></h3>${byTopic[t].map((a) => `<div style="padding:5px 0;border-bottom:1px solid var(--w3-line);font-size:13px"><a class="ttl-link" href="${SITE}/guides/${esc(a.slug)}" target="_blank">${esc(a.title)} <span class="ext">↗</span></a></div>`).join("")}</div>`).join("");
-    box.innerHTML = `<div class="card"><h3>攻略内容库 <span class="pill">重构中 · 只读</span></h3><p style="font-size:13px;line-height:1.7;color:var(--w3-text2)">${esc(r.note || "")}</p><p style="font-size:12px;color:var(--w3-text3)">${arts.length ? `共 ${arts.length} 篇（按主题分组，点击看线上页）。` : ""}完整内容管理编辑器（看/策展/编文章）待 Guides 结构定稿后一次做对（不再报错崩溃）。</p></div>${groups}`;
+    const _tag = document.getElementById("guides-idtag"); if (_tag) _tag.textContent = "攻略 · /guides/ 内容库";
+    guidesArts = r.articles || [];
+    guidesQ = ""; guidesTopic = "";
+    guidesNote = guidesArts.length ? "" : (r.note || "");   // 清单缺失时 note 是唯一解释，别吞掉
+    paintGuidesLib();
     return;
   }
   guidesMeta = r.meta || {}; guidesCards = r.cards || []; guidesLocales = r.locales || [];
@@ -1260,6 +1281,59 @@ function paintGuides() {
   h += `</div>`;
   $("#guides-fields").innerHTML = h;
 }
+// ---------- 攻略内容库（只读清单：目标=能找到某一篇并打开）----------
+// 状态说明写实话：这里**能做什么**（搜、按轴筛、开线上页）、**还不能做什么**（编内容）、
+// **什么时候能**（官网 Guides 结构定稿后）。不挂"重构中"这种含糊的半成品标签。
+let guidesArts = [], guidesQ = "", guidesTopic = "", guidesNote = "";
+const GUIDE_AXIS = { compatibility: "兼容性", cabling: "布线", mounts: "支架", power: "供电", protection: "防护", oem: "OEM/定制" };
+const axisName = (t) => GUIDE_AXIS[t] || t || "其它";
+function paintGuidesLib() {
+  const box = $("#guides-fields"); if (!box) return;
+  const arts = guidesArts;
+  if (!arts.length) {   // 一篇都没有：把后端给的原因如实显示（别显示成"0 篇"了事）
+    box.innerHTML = `<div class="card"><h3>攻略内容库</h3><p style="font-size:13px;line-height:1.7;color:var(--w3-text2);margin:0">${esc(guidesNote || "暂无文章清单。")}</p></div>`;
+    return;
+  }
+  const counts = {};
+  arts.forEach((a) => { counts[a.topic || "其它"] = (counts[a.topic || "其它"] || 0) + 1; });
+  const topics = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  const q = guidesQ.trim().toLowerCase();
+  const hit = (a) => (!guidesTopic || (a.topic || "其它") === guidesTopic) &&
+    (!q || [a.title, a.card_title, a.slug, String(a.id), a.old].some((x) => String(x || "").toLowerCase().includes(q)));
+  const shown = arts.filter(hit);
+  const row = (a) => `<div class="grow">
+      <span class="gax" title="所属轴">${esc(axisName(a.topic))}</span>
+      <span class="t" title="${esc(a.title)}">${esc(a.card_title || a.title)}</span>
+      <span class="gid">#${esc(String(a.id))}</span>
+      <a class="editbar-link" style="height:26px;font-size:12px" href="${SITE}/guides/${esc(a.slug)}" target="_blank" title="打开线上页">↗</a>
+    </div>`;
+  // 无搜索无筛选=按轴分组折叠；一旦搜索/筛选=平铺结果（找东西时不该再被分组挡住）
+  const body = !shown.length
+    ? `<div class="gempty">没有匹配「${esc(guidesQ)}」的文章${guidesTopic ? `（当前只看「${esc(axisName(guidesTopic))}」轴）` : ""}。</div>`
+    : (!q && !guidesTopic
+      ? topics.map((t) => `<details class="gsec" ${topics.length <= 3 ? "open" : ""}><summary>${esc(axisName(t))} <span class="muted" style="font-size:11px">${esc(t)}</span><span class="n">${counts[t]} 篇</span></summary>${arts.filter((a) => (a.topic || "其它") === t).map(row).join("")}</details>`).join("")
+      : `<div class="gsec">${shown.map(row).join("")}</div>`);
+  box.innerHTML = `
+    <div class="card">
+      <h3>攻略内容库 <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">${arts.length} 篇 · ${topics.length} 个轴</span></h3>
+      <p style="font-size:12.5px;line-height:1.65;color:var(--w3-text2);margin:0 0 4px">这里可以<b>搜索、按轴筛选、打开线上页</b>。<b>改内容（编/删/新建文章）还没接</b>——等官网 Guides 结构定稿后一次做对，避免刚做完就被改版推翻。</p>
+      <p style="font-size:11.5px;color:var(--w3-text3);margin:0">文章正文与分轴目前由官网仓维护（<span class="tnum">data/pages/guides-manifest.json</span>）。</p>
+    </div>
+    <div class="gtool">
+      <input type="search" id="g-q" placeholder="搜标题 / slug / 编号…" value="${esc(guidesQ)}" oninput="guidesSearch(this.value)">
+      <div class="gchips">
+        <button class="gchip${guidesTopic ? "" : " on"}" onclick="guidesFilter('')">全部 <span class="c">${arts.length}</span></button>
+        ${topics.map((t) => `<button class="gchip${guidesTopic === t ? " on" : ""}" onclick="guidesFilter('${esc(t)}')">${esc(axisName(t))} <span class="c">${counts[t]}</span></button>`).join("")}
+      </div>
+    </div>
+    ${(q || guidesTopic) ? `<p class="muted" style="font-size:11.5px;margin:0 0 8px">显示 ${shown.length} / ${arts.length} 篇</p>` : ""}
+    ${body}`;
+  const inp = $("#g-q");
+  if (inp && guidesQ) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+}
+function guidesSearch(v) { guidesQ = v; paintGuidesLib(); }
+function guidesFilter(t) { guidesTopic = t; paintGuidesLib(); }
+
 function collectGuidesEdits() {
   const edits = [];
   document.querySelectorAll("#guides-fields textarea[data-gk]").forEach((t) => {

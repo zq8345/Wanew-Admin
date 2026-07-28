@@ -423,7 +423,7 @@ app.get("/api/admin/guides", async (c) => {
   // 攻略内容迁往统一 /guides/ 库 → 此处指向新 guides-manifest.json 做【只读清单展示】(Joe 能看
   // Guides 里有哪些文章)。完整内容管理编辑器待 Guides②③结构定稿后一次做对(见 roadmap 内容运营)。
   const manRaw = await readFile(c.env, cfg, "data/pages/guides-manifest.json");
-  if (!manRaw) return c.json({ retired: true, articles: [], note: "攻略内容库重构中（/service/ 已下线、/guides/ 迁移进行中），暂无清单可读。" });
+  if (!manRaw) return c.json({ retired: true, articles: [], note: "官网仓里还没有 data/pages/guides-manifest.json，所以列不出文章。/service/ 已下线、内容迁往 /guides/——清单文件由官网侧生成，生成后这里自动出现。" });
   let articles: any[] = [];
   try { articles = (JSON.parse(manRaw).articles || []).map((a: any) => ({ id: a.id, topic: a.topic || "其它", slug: a.slug, title: a.title || a.slug, old: a.old || "" })); } catch {}
   return c.json({ retired: true, readonly: true, articles, count: articles.length, note: "攻略已迁到统一 /guides/ 库（内容层重构中）。此处只读展示文章清单；完整内容管理编辑器待 Guides 结构定稿后对齐。" });
