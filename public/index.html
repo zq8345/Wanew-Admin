@@ -202,7 +202,7 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
 .banner{padding:9px 13px;border-radius:var(--dz-radius-s);border:1px solid var(--dz-warn-line);background:var(--dz-warn-bg);margin-bottom:12px;font-size:13px;display:none}
 .banner.on{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 /* toast/spinner（JS 用 .msg/.spin 类名，保留）*/
-.msg{position:fixed;bottom:18px;right:18px;background:var(--w3-panel);border:1px solid var(--w3-line);border-left:3px solid var(--dz-ok);border-radius:var(--dz-radius-s);padding:10px 14px;font-size:13px;display:none;max-width:420px;z-index:200;box-shadow:0 24px 60px -24px rgba(0,0,0,.55)}
+.msg{position:fixed;bottom:18px;right:18px;background:var(--w3-panel);border:1px solid var(--w3-line);border-left:3px solid var(--dz-ok);border-radius:var(--dz-radius-s);padding:10px 14px;font-size:13px;display:none;max-width:420px;z-index:200;box-shadow:0 24px 60px -24px rgba(0,0,0,.55);white-space:pre-wrap;overflow-wrap:anywhere}
 .msg.err{border-left-color:var(--dz-err)}
 .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--w3-text3);border-top-color:transparent;border-radius:50%;animation:sp 1s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -702,7 +702,16 @@ function reauth(why) {
 const api = (p, opt) => fetch("/api/admin" + p, { redirect: "manual", ...(opt || {}) }).then(async (r) => {
   if (r.type === "opaqueredirect" || r.status === 0) { reauth(); throw new Error("登录已过期"); }
   const j = await r.json().catch(() => ({ error: "bad response" }));
-  if (!r.ok || j.error) throw new Error(j.error || ("HTTP " + r.status));
+  // ⚠️ 服务端把真实原因放在 `detail` 里（GitHub 的状态码 + 原文）。上一版只取 `error` —— 那是我们
+  //    自己的措辞（"commit failed"），对使用者零信息量：**它失败得很响亮，但那声响不携带任何可行动的信息。**
+  //    服务器知道、也回传了，是这里扔掉的。带上 detail，让下一次失败自己说出原因。
+  //    12 个调用点都是 `catch (e) { msg("保存失败：" + e.message) }` —— **不去改那 12 个地方**
+  //    （第 13 个加进来又会漏），在**抛出的这一个点**就把原因拼进 message。
+  if (!r.ok || j.error) {
+    const e = new Error((j.error || ("HTTP " + r.status)) + (j.detail ? "\n· " + String(j.detail).slice(0, 240) : ""));
+    e.detail = j.detail || ""; e.status = r.status;
+    throw e;
+  }
   return j;
 }).catch((e) => {
   // fetch 本身 reject（TypeError "Failed to fetch"）：多为 Access 掉线的跨域重定向被浏览器拦
@@ -713,7 +722,14 @@ const FORMS = ["Cables", "Mounts & Brackets", "Power & Charging", "Networking", 
 const SITE = "https://wanew.com";
 let products = [], cats = [], sel = new Set(), cur = null; // cur = 正在编辑的产品(含 i18n 全量)
 
-function msg(t, err) { const m = $("#msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ""); m.style.display = "block"; clearTimeout(msg._t); msg._t = setTimeout(() => m.style.display = "none", err ? 7000 : 3500); }
+// ⚠️ 出错的 toast **不自动消失**：错误现在带着 GitHub 的原文（可能上百字），
+//    7 秒读不完就没了 = 和没写一样。成功照旧自动消失，失败要人主动点掉——**失败值得占用注意力**。
+function msg(t, err) {
+  const m = $("#msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ""); m.style.display = "block";
+  clearTimeout(msg._t);
+  if (err) { m.title = "点击关闭"; m.onclick = () => { m.style.display = "none"; }; }
+  else { m.title = ""; m.onclick = null; msg._t = setTimeout(() => m.style.display = "none", 3500); }
+}
 
 // 账号菜单的**增强层**（非必需）：Esc 关、点外部关。
 // <details> 本身已提供开合与键盘可达；这段挂了菜单只是不自动收（点一下还能关），是可见的降级。
