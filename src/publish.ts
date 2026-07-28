@@ -9,6 +9,8 @@
 // 单真源铁律：render/chrome/github 全部跨目录 import，零复制。
 // @ts-ignore js 模块
 import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf, renderHome, renderPage } from "../vendor/render.js";
+// @ts-ignore js 模块（官网权威：manifest 条目形状 + 缩略图派生规则 + 三态存在性语义）
+import { thumbFor, manifestEntry } from "../vendor/manifest-entry.js";
 // @ts-ignore js 模块
 import { makeChrome } from "../vendor/chrome.js";
 // @ts-ignore js 模块
@@ -60,6 +62,8 @@ export interface Ctx {
   manifest: any[]; manifestRaw: string | null; partial: string; pagesList: Set<string>;
   // 仓库真实文件集（递归 tree）。**null = 拿不到，不是没有** —— 见 loadCtx 里那段。
   repoFiles: Set<string> | null;
+  // R2 缩略图 key 集合（data/r2-thumbs.json 的 .keys）。**null = 查不到，不是没有。**
+  r2Thumbs: Set<string> | null;
   locDir: Record<string, string>; catmap: Record<string, string>;
   // 形态/品类轴单源（#52 block2）：forms = data/forms.json 的 forms[]（[{key,name}]，数组顺序=/type 页序=chip 序）；
   // formKey = 官网同款派生 {name→key}（render.js cardHtml/regenListPage 穿参、chrome.js makeChrome 内部同式派生）。
@@ -139,6 +143,16 @@ export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
   //    所以回落时 `repoFiles` 是 **null = 我不知道**，而不是一个会说"没有"的空集。
   //    ⚠️ **"查不到"和"不存在"必须能被区分** —— 消费方遇到 null 应当保持原值不动，而不是当作没有。
   const repoFiles: Set<string> | null = treePaths;
+
+  // R2 缩略图存在性：官网 regen 查它自己的 R2_THUMBS，我查同一份 data/r2-thumbs.json。
+  // ⚠️ 同样是 **null = 查不到**，不是空集：空集会让每个产品的 thumb 都判成"没有缩略图"
+  //    → 每保存一次就退回原图，一次 GitHub 抖动变成一批数据退化。
+  //    （此前不读它，是因为**还没有消费方**——不为一个不存在的调用方预先花子请求。现在有了。）
+  let r2Thumbs: Set<string> | null = null;
+  try {
+    const raw = await readFile(env, cfg, "data/r2-thumbs.json");
+    if (raw) { const j = JSON.parse(raw); if (Array.isArray(j.keys)) r2Thumbs = new Set<string>(j.keys); }
+  } catch { /* 保持 null —— 见上 */ }
   const locDir = localeDirs(locales);
   const forms = JSON.parse(formsRaw).forms || [];
   const formKey = formKeyOf(forms);
@@ -151,7 +165,7 @@ export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
     locDir,
     forms,   // #52 block2：品类 nav 计数吃 forms.json 单源（不传=计数全 0，不崩但错）
   });
-  return { template, site, locales, catalog, categories, manifest, manifestRaw: manRaw ?? null, partial, pagesList, repoFiles, locDir, catmap: catmapOf(categories), forms, formKey, sizes, chrome };
+  return { template, site, locales, catalog, categories, manifest, manifestRaw: manRaw ?? null, partial, pagesList, repoFiles, r2Thumbs, locDir, catmap: catmapOf(categories), forms, formKey, sizes, chrome };
 }
 
 // body h1 消毒：模板已把产品标题渲成 canonical <h1>（render.js {{TITLE}}），body 正文里再出现 <h1>
@@ -242,19 +256,36 @@ function matchJson(existingRaw: string | null | undefined, obj: any): string {
 
 // 发布：manifest upsert + 每个 enabled locale 的详情页（存在性规则）双步渲染 + 受影响列表页 regen
 // → 一个原子 commit（= 一次 Pages 部署）。
-export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, opts: { isNew: boolean; oldCategory?: string; email: string; dryRun?: boolean }) {
-  const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome, formKey, sizes } = ctx;
-  const thumb = prod.images[0] ? resolveImg(prod.images[0], site.img_base) : "";
-  const entry: any = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, ...(prod.i18n.en.card_title ? { card_title: prod.i18n.en.card_title } : {}), thumb, excerpt: excerptOf(prod) };
-  // ⭐ manifest entry 的 i18n（pt/es 卡片标题/摘要）——抄 regen.mjs:47-53 同源逻辑。
-  //   漏它的代价（字节对照抓出的真雷）：每次保存，该品在 pt/es 列表卡片退化英文（Δ59/44B 实测）。
+// ⭐ manifest 条目的**唯一构造点**。保存产品与批量两处都走它。
+//    手拼两份必然分头漂 —— 650 丢 `path` 正是"抄一份 regen 的逻辑"的结果，而抄件过期时没人会通知我。
+//    形状、`path` 派生、thumb 语义全在 vendored `manifestEntry`/`thumbFor` 里，**这里只负责注入 IO**。
+//    ⚠️ 两个存在性函数**必须能表达"我不知道"**：Set 为 null 时返回 null 而不是 false ——
+//    false 是"没有缩略图"这个断言，会让 thumb 退回原图；null 让 manifestEntry 沿用旧值。
+function entryOf(prod: any, ctx: Ctx): any {
+  const { site, locales, manifest } = ctx;
+  const exists = {
+    hasR2Thumb: (k: string) => (ctx.r2Thumbs === null ? null : ctx.r2Thumbs.has(k)),
+    hasRepoFile: (p: string) => (ctx.repoFiles === null ? null : ctx.repoFiles.has(p)),
+  };
+  const thumb = prod.images && prod.images[0] ? thumbFor(prod.images[0], site.img_base, exists) : "";
+  const enExcerpt = excerptOf(prod);
+  // manifest entry 的 i18n（pt/es 卡片标题/摘要）——漏它的代价：该品在 pt/es 列表卡退化英文（实测 Δ59/44B）
+  const i18n: any = {};
   for (const loc of locales.enabled) {
     if (loc === locales.default) continue;
     const t = prod.i18n[loc] && prod.i18n[loc].title;
     const ct = prod.i18n[loc] && prod.i18n[loc].card_title;
     const x = excerptOf(prod, loc);
-    if (t || ct || x !== entry.excerpt) (entry.i18n ??= {})[loc] = { ...(t ? { title: t } : {}), ...(ct ? { card_title: ct } : {}), ...(x ? { excerpt: x } : {}) };
+    if (t || ct || x !== enExcerpt) i18n[loc] = { ...(t ? { title: t } : {}), ...(ct ? { card_title: ct } : {}), ...(x ? { excerpt: x } : {}) };
   }
+  // 旧条目供 thumb 查不到时沿用（manifestEntry 的 previous 语义）
+  const previous = (manifest as any[]).find((e: any) => e.id === prod.id);
+  return manifestEntry(prod, { thumb, excerpt: enExcerpt, i18n, previous });
+}
+
+export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, opts: { isNew: boolean; oldCategory?: string; email: string; dryRun?: boolean }) {
+  const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome, formKey, sizes } = ctx;
+  const entry: any = entryOf(prod, ctx);
   // ⭐ 状态机：published=进 index+渲染页；draft/archived=不进 index、删已存在的线上页（保留 {id}.json）。
   //   （prod.status 缺省 published=零迁移。官网只渲 products-index.json→draft/archived 天然不渲染/不被爬。）
   const isLive = (prod.status || "published") === "published";
@@ -427,13 +458,7 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
     files.push({ path: `data/products/${id}.json`, content: matchJson(raw, prod) });
     // manifest：移旧条目；live 则加新条目（entry 抄 publishProduct 逻辑）
     manifest = manifest.filter((e: any) => e.id !== id);
-    const thumb = prod.images?.[0] ? resolveImg(prod.images[0], site.img_base) : "";
-    const entry: any = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, ...(prod.i18n.en.card_title ? { card_title: prod.i18n.en.card_title } : {}), thumb, excerpt: excerptOf(prod) };
-    for (const loc of locales.enabled) {
-      if (loc === locales.default) continue;
-      const t = prod.i18n[loc] && prod.i18n[loc].title; const x = excerptOf(prod, loc); const ct = prod.i18n[loc] && prod.i18n[loc].card_title;
-      if (t || ct || x !== entry.excerpt) (entry.i18n ??= {})[loc] = { ...(t ? { title: t } : {}), ...(ct ? { card_title: ct } : {}), ...(x ? { excerpt: x } : {}) };
-    }
+    const entry: any = entryOf(prod, ctx);   // ⭐ 与保存产品同一个构造点，别再手拼
     if (isLive) manifest.push(entry);
     affectedCats.add(oldCat); affectedCats.add(prod.category);
     // 页面计划（一致性核心，纯函数算）
