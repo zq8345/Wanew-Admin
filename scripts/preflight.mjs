@@ -70,6 +70,10 @@ const ven = run(["scripts/vendor.mjs", "check"]);
 console.log(`   vendor 守卫     exit=${ven.code}`); if (ven.code) { show(ven); bad++; } else console.log("   " + ven.out.trim().split("\n").pop());
 const tok = run(["scripts/token-lint.mjs"]);
 console.log(`   令牌纪律        exit=${tok.code}`); if (tok.code) { show(tok); bad++; } else console.log("   " + tok.out.trim().split("\n").pop());
+// ⚠️ 钉死行尾（.gitattributes）让问题不再发生，**也让我再也测不到它**。
+//    把变量钉死 ≠ 证明代码对那个变量不敏感。这一道在临时 CRLF 树上重跑，判定必须一致。
+const crlf = run(["scripts/crlf-selftest.mjs"]);
+console.log(`   CRLF 自检       exit=${crlf.code}`); if (crlf.code) { show(crlf); bad++; } else console.log("   " + crlf.out.trim().split("\n").pop());
 
 // ⑤ 上线就绪：**字节一致 ≠ 可以上线**
 // 2026-07-28 现场：官网把逐文件 blob 换成 tree 内联 content 后，vendor 守卫立刻转绿（字节确实一致），
