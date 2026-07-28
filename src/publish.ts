@@ -772,91 +772,10 @@ export async function publishContact(env: Env, cfg: any, ctx: Ctx, edits: Contac
 // ⚠️ 安全红线：shared.json 是全站共享 i18n，误改炸全站。写路径**只允许**下方硬白名单键
 //   （service.json 的页头/meta 2 键 + shared.json 的 20 个攻略卡片键=10 卡×[标题,摘要]），
 //   任何非白名单键一律拒写。白名单写死后端、前端只暴露这些。
-export const SERVICE_META_KEYS = ["service.page-header-subtitle.1", "service.meta.title"];   // 在 service.json
 // 10 张攻略卡片，每张 [标题键, 摘要键]（从 page-service.html 精确提取，全在 shared.json）
-export const SERVICE_CARDS: [string, string][] = [
-  ["shared.starlink_compatible_power_adapters_buyer", "shared.buyer_guide_for_starlink_power_adapters_"],
-  ["shared.how_to_set_up_starlink_mini_for_rv_campi", "shared.complete_step_by_step_guide_to_setting_u"],
-  ["shared.wanew_pipe_mount_vs_wall_mount_vs_flat_r", "shared.comprehensive_comparison_of_wanew_pipe_m"],
-  ["shared.shipping_and_logistics_how_wanew_deliver", "shared.global_shipping_and_logistics_guide_for_"],
-  ["shared.quality_control_standards_for_starlink_c", "shared.complete_quality_control_standards_for_t"],
-  ["shared.custom_starlink_accessory_manufacturing_", "shared.oem_odm_manufacturing_guide_for_starlink"],
-  ["shared.bulk_ordering_guide_moq_lead_time_and_pr", "shared.complete_bulk_ordering_guide_for_wanew_s"],
-  ["shared.starlink_junction_box_installation_for_o", "shared.installation_guide_for_wanew_outdoor_jun"],
-  ["shared.how_to_install_a_starlink_mount_without_", "shared.guide_to_installing_starlink_without_dri"],
-  ["shared.starlink_wall_mount_vs_roof_mount_pros_a", "shared.comprehensive_comparison_of_starlink_wal"],
-];
-export const SERVICE_CARD_KEYS = SERVICE_CARDS.flat();
-export const SERVICE_WHITELIST = new Set<string>([...SERVICE_META_KEYS, ...SERVICE_CARD_KEYS]);
-export interface ServiceEdit { key: string; locale: string; value: string; }
 
 // 纯函数：白名单校验 + merge（可 node 单测"非白名单键被拒"红线，无需 token）
-export function mergeService(serviceJson: any, sharedJson: any, edits: ServiceEdit[]): { service?: any; shared?: any; touchedService?: boolean; touchedShared?: boolean; error?: string } {
-  const service = JSON.parse(JSON.stringify(serviceJson || {}));
-  const shared = JSON.parse(JSON.stringify(sharedJson || {}));
-  let touchedService = false, touchedShared = false;
-  for (const e of edits) {
-    if (!e || typeof e.key !== "string") return { error: "编辑项缺 key" };
-    if (!SERVICE_WHITELIST.has(e.key)) return { error: `拒写非白名单键：${e.key}（Guides 编辑器只允许 /service/ 页头+meta 与 10 张卡片文案）` };
-    if (typeof e.value !== "string") return { error: `值须为字符串：${e.key}` };
-    if (typeof e.locale !== "string") return { error: `locale 须为字符串：${e.key}` };
-    const inService = e.key.startsWith("service.");
-    const target = inService ? service : shared;
-    if (!target[e.key] || typeof target[e.key] !== "object") return { error: `键不存在/结构异常：${e.key}` };
-    if (!(e.locale in target[e.key])) return { error: `未知 locale：${e.locale}（${e.key} 无此语言）` };
-    target[e.key][e.locale] = e.value;
-    if (inService) touchedService = true; else touchedShared = true;
-  }
-  return { service, shared, touchedService, touchedShared };
-}
 
-export async function publishService(env: Env, cfg: any, ctx: Ctx, edits: ServiceEdit[], opts: { email: string; dryRun?: boolean }) {
-  if (!edits.length) return { error: "没有改动" };
-  const { locales, catalog, chrome, locDir } = ctx;
-  const [svcRaw, sharedRaw, tpl] = await Promise.all([
-    readFile(env, cfg, "data/pages/service.json"),
-    readFile(env, cfg, "data/pages/shared.json"),
-    readFile(env, cfg, "data/templates/page-service.html"),
-  ]);
-  const miss = [!svcRaw && "data/pages/service.json", !sharedRaw && "data/pages/shared.json", !tpl && "data/templates/page-service.html"].filter(Boolean);
-  if (miss.length) return { error: "攻略页源缺失", missing: miss };
-  const svcJson = JSON.parse(svcRaw as string), sharedJson = JSON.parse(sharedRaw as string);
-  const mv = mergeService(svcJson, sharedJson, edits);
-  if (mv.error) return { error: mv.error };
-
-  const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
-  const dirOf = (loc: string) => locDir[loc] ?? "";
-  const RENDER_SET: string[] = [...(locales.enabled || []), ...(locales.render_extra || [])];
-  const INTERNAL: string[] = locales.internal_noindex || [];
-  // catalog 镜像 regen：{...chrome, ...shared(merged), ...pcat(=service merged)}
-  const catBase = { ...catalog, ...mv.shared, ...mv.service };
-
-  const files: any[] = [];
-  if (mv.touchedService) files.push({ path: "data/pages/service.json", content: matchJson(svcRaw, mv.service) });
-  if (mv.touchedShared) files.push({ path: "data/pages/shared.json", content: matchJson(sharedRaw, mv.shared) });
-  const chromeErrors: string[] = [];
-  for (const locale of RENDER_SET) {
-    const dir = dirOf(locale);
-    const rel = dir ? `${dir}/service/index.html` : "service/index.html";
-    const isExtra = (locales.render_extra || []).includes(locale);
-    if (!ctx.pagesList.has(rel) && !isExtra) continue;
-    const h0 = renderPage(tpl, { locale, catalog: catBase, urlOf, path: "/service/", dirOf, enabled: locales.enabled, internal_noindex: INTERNAL } as any);
-    const { html, errors } = chrome.applyChrome((h0 as string).replace(/\r/g, ""), rel);
-    chromeErrors.push(...errors);
-    const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;
-    files.push({ path: rel, content: matchEol(prevRaw, html) });
-  }
-  if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
-  const enPage = files.find((f) => f.path === "service/index.html");
-  if (opts.dryRun) return {
-    dry: true,
-    previewHtml: enPage ? enPage.content : null,
-    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? byteLen(f.content) : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })),
-    locales: RENDER_SET,
-  };
-  const r = await commitFiles(env, cfg, files, `admin: guides(/service/) copy update (${opts.email})`);
-  return { ...r, files: files.map((f) => f.path) };
-}
 
 // ================= SEO A：信息页 meta title/desc 四语编辑（每页 data/pages/{slug}.json 的 {slug}.meta.*）=================
 // ⚠️ 收窄安全页：排除 service（Guides A 已管其 meta）+ about 系（官网重排 about.json 撞车）。

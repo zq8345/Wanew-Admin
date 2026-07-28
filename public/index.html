@@ -586,7 +586,6 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       <div class="spacer"></div>
       <a class="editbar-link" id="guides-service-link" href="https://wanew.com/service/" target="_blank">🌐 官网攻略页</a>
       <button id="btn-guides-preview" onclick="previewGuides()" title="渲染攻略页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
-      <button class="primary" id="btn-guides-save" onclick="saveGuides()">🚀 保存攻略页</button>
     </div>
     <p class="note" id="guides-help">编辑 /service/ 攻略落地页的<b>页头文案 + 10 张攻略卡片的标题/摘要</b>（四语）。⚠️ 本编辑器<b>只能改这些文案</b>——攻略文章正文、卡片增删属二期（需数据模型）。保存=重烘焙 /service/（四语）提交官网仓，≈1分钟上线；保存前可「预览」。</p>
     <div id="guides-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
@@ -1439,7 +1438,7 @@ async function loadGuides() {
   catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadGuides()">重试</button></div>`; return; }
   if (r.retired) {
     // 退休态：把针对已下线 /service/ 的误导控件收干净（保存/预览按钮、官网攻略页 404 链、重烘焙文案）
-    ["btn-guides-preview", "btn-guides-save", "guides-service-link", "guides-help"].forEach((id) => { const el = document.getElementById(id); if (el) el.style.display = "none"; });
+    ["btn-guides-preview", "guides-service-link", "guides-help"].forEach((id) => { const el = document.getElementById(id); if (el) el.style.display = "none"; });
     const _tag = document.getElementById("guides-idtag"); if (_tag) _tag.textContent = "攻略 · /guides/ 内容库";
     guidesArts = r.articles || [];
     guidesQ = ""; guidesTopic = "";
@@ -1544,18 +1543,6 @@ async function previewGuides() {
     if (r.previewHtml && w) { const html = r.previewHtml.replace(/<head([^>]*)>/i, '<head$1><base href="https://wanew.com/">'); w.document.open(); w.document.write(html); w.document.close(); msg("已在新标签打开攻略页渲染预览（未提交、未上线）"); }
     else { if (w) w.close(); msg((r.error || "预览无渲染 HTML"), 1); }
   } catch (e) { if (w) w.close(); msg("预览失败：" + e.message, 1); }
-}
-async function saveGuides() {
-  const edits = collectGuidesEdits();
-  if (!edits.length) return msg("没有改动");
-  if (!confirm(`将保存 ${edits.length} 处攻略页文案到官网仓（重烘焙 /service/ 四语、≈1分钟上线）。\n此操作直接修改生产官网仓。确定？`)) return;
-  const btn = $("#btn-guides-save"); btn.disabled = true; btn.textContent = "保存中…";
-  try {
-    const r = await api("/guides", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits }) });
-    msg(`✅ 攻略页已保存（commit ${(r.commit || "").slice(0, 7)}）· 写 ${(r.files || []).length} 文件 · ≈1分钟官网可见`);
-    await loadGuides();
-  } catch (e) { msg("保存失败：" + e.message, 1); }
-  btn.disabled = false; btn.textContent = "🚀 保存攻略页";
 }
 
 // ---------- SEO A·信息页 meta 四语编辑器 ----------

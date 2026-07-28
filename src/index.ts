@@ -88,8 +88,8 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // ================= 批2-2：产品 CRUD（双步三语，继承 [[path]].js 骨架） =================
 // 写路径全部走 loadCtx（GitHub 读真源）→ validate(merge) → publish/unpublish（原子 commit）。
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
-import { loadCtx, validateProduct, publishProduct, unpublishProduct, publishBulk, validateCategories, validateForms, formRenameFiles, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishService, SERVICE_META_KEYS, SERVICE_CARDS, publishPageMeta, SEO_PAGES, parseAuditMessage } from "./publish";
-import type { HomeEdit, ContactEdit, ServiceEdit, SeoEdit } from "./publish";
+import { loadCtx, validateProduct, publishProduct, unpublishProduct, publishBulk, validateCategories, validateForms, formRenameFiles, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishPageMeta, SEO_PAGES, parseAuditMessage } from "./publish";
+import type { HomeEdit, ContactEdit, SeoEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
 // @ts-ignore js 模块（守卫盯字节；本仓只读镜像）。⚠️ 形态/品类轴 slug 真源已从 render.js 的
@@ -536,7 +536,9 @@ app.put("/api/admin/contact", async (c) => {
 });
 
 // ================= Guides A：/service/ 落地页文案编辑器（硬白名单）=================
-// GET 回填页头/meta + 10 卡片(标题/摘要)四语；PUT publishService(白名单 merge→renderPage /service/→commit)。
+// ⚠️ **只读**。/service/ 已随官网 G1 下线（生产实测三语种全 301 → /guides/，仓里 0 个 service 页文件），
+//    所以写路径（PUT + publishService + 前端保存按钮）**已整体删除**，不是隐藏。
+//    留着它只有一种可能的结局：报「攻略页源缺失」——一个描述已经不存在的东西的错误。
 // 安全红线:只写 service.json 页头/meta + shared.json 那 20 卡片键,非白名单一律拒(publish.ts mergeService)。
 app.get("/api/admin/guides", async (c) => {
   const cfg = ghConfig(c.env);
@@ -551,19 +553,6 @@ app.get("/api/admin/guides", async (c) => {
   return c.json({ retired: true, readonly: true, articles, count: articles.length, note: "攻略已迁到统一 /guides/ 库（内容层重构中）。此处只读展示文章清单；完整内容管理编辑器待 Guides 结构定稿后对齐。" });
 });
 
-app.put("/api/admin/guides", async (c) => {
-  const cfg = ghConfig(c.env);
-  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
-  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
-  if (!Array.isArray(body?.edits)) return c.json({ error: "edits must be an array" }, 400);
-  const ctx = await loadCtx(c.env, cfg);
-  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
-  try {
-    const r: any = await publishService(c.env, cfg, ctx, body.edits as ServiceEdit[], { email: operator(c), dryRun: !!body.dryRun });
-    if (r.error) return c.json(r, 502);
-    return c.json({ ok: true, ...r, note: r.dry ? "dry preview" : "guides updated; Pages deploys in ~1 min" });
-  } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
-});
 
 // ================= SEO A：信息页 meta title/desc 四语编辑器（收窄安全页，硬白名单）=================
 // GET 回填各安全页 meta；PUT /seo/:slug → publishPageMeta(白名单 merge {slug}.meta.*→renderPage /{slug}/→commit)。
