@@ -39,17 +39,23 @@ app.use("*", (c, next) => withBudget(async () => {
   // ⚠️ 零子请求：console 而已。**失败时配额可能已经耗尽**，此刻再去写 R2 只会一起失败——
   //    "仅在失败路径上执行"的代码必须零放大，否则它只在系统已不健康时才加重病情。
   const m = c.req.method;
-  if (m !== "GET" && m !== "HEAD" && c.res && c.res.status >= 400) {
+  if (m !== "GET" && m !== "HEAD" && c.res) {
     let body = "";
     try { body = (await c.res.clone().text()).slice(0, 600); } catch { body = "(响应体读不出来)"; }
+    // ⭐ 不只记失败，也记**成功但跳过了东西**的那种。
+    //    跳过时响应是 **200**：后台显示"改名成功，连带改了 N 个产品"，而 N 少了一个。
+    //    只记 ≥400 的话，**"跳了但没人细看响应"和"没跳"事后仍然分不出来** —— 而两者差着一条坏数据。
+    const skipped = /"skipped":\s*\[/.test(body);
+    if (c.res.status >= 400 || skipped) {
     console.error(JSON.stringify({
-      evt: "write_failed",
+      evt: c.res.status >= 400 ? "write_failed" : "write_skipped",
       method: m, path: new URL(c.req.url).pathname, status: c.res.status,
       operator: c.req.header("cf-access-authenticated-user-email") || "(无)",
       subrequests: spent(), limit: SUBREQ_LIMIT,
       redirected: redirectedUrls(),          // 非空 = 计数偏低，"为什么没超却炸了"的线索
       response: body,                        // ⭐ 原话，不是我们的措辞
     }));
+    }
   }
 }));
 
@@ -388,8 +394,9 @@ app.put("/api/admin/categories", async (c) => {
     files.push({ path: "data/locales.json", content: JSON.stringify(locJson, null, 2) + "\n" });
   }
   try {
+    const skipped: any[] = [];   // 静默跳过的产品 —— 必须数出来并报出去
     const ctx2 = { ...ctx, categories: v.cats, catmap: Object.fromEntries(v.cats.categories.map((cc: any) => [cc.slug, cc.display])) };
-    for (const slug of changed) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug));
+    for (const slug of changed) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug, skipped));
     // 删机型（产品数已=0）：删各语该机型空列表页 /{slug}/index.html + 刷总列表(products/index.html)把它从 nav/分区抹掉
     for (const r of removed) for (const locale of ctx.locales.enabled) {
       const dir = ctx.locDir[locale]; const rel = dir ? `${dir}/${r}/index.html` : `${r}/index.html`;
@@ -397,7 +404,7 @@ app.put("/api/admin/categories", async (c) => {
     }
     if (removed.length && !changed.length) {   // 没有 display 变更触发过 total 重烘焙 → 用剩余机型触发一次刷 total
       const anyRemain = v.cats.categories[0]?.slug;
-      if (anyRemain) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, anyRemain));
+      if (anyRemain) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, anyRemain, skipped));
     }
     const tag = [added.length ? `加机型 ${added.join(",")}` : "", removed.length ? `删机型 ${removed.join(",")}` : ""].filter(Boolean).join(" / ");
     const r = await commitGuarded(c.env, cfg, files, `admin: categories update${tag ? ` (${tag})` : ""} (${operator(c)})`);
@@ -406,7 +413,7 @@ app.put("/api/admin/categories", async (c) => {
     const note = added.length
       ? `已提交新机型 ${added.join(",")}（数据已入库）。⚠️ 机型页面需官网构建后才生效——请知会官网跑一次 build，届时 /${added[0]}/ 及三语页会出现。`
       : (removed.length ? `已删机型 ${removed.join(",")}（空列表页删除 + 总列表刷新）` : (changed.length ? "display 变更类目已重烘焙" : "仅顺序/无实质变更——首页瓦片顺序随下次本地管线"));
-    return c.json({ ok: true, rebaked: changed, removed, added, needsSiteBuild: added.length > 0, filesWritten: files.length, note, ...r });
+    return c.json({ ok: true, ...(skipped.length ? { skipped } : {}), rebaked: changed, removed, added, needsSiteBuild: added.length > 0, filesWritten: files.length, note, ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
@@ -442,10 +449,11 @@ app.put("/api/admin/models", async (c) => {
   loc.model_display = md;
   const files: any[] = [{ path: "data/locales.json", content: JSON.stringify(loc, null, 2) + "\n" }];
   try {
+    const skipped: any[] = [];   // 静默跳过的产品 —— 必须数出来并报出去
     const ctx2 = { ...ctx, locales: loc };
-    for (const slug of changed) if (ctx.catmap[slug] !== undefined) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug));
+    for (const slug of changed) if (ctx.catmap[slug] !== undefined) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug, skipped));
     const r = await commitGuarded(c.env, cfg, files, `admin: model_display update (${operator(c)})`);
-    return c.json({ ok: true, rebaked: changed, filesWritten: files.length, ...r });
+    return c.json({ ok: true, ...(skipped.length ? { skipped } : {}), rebaked: changed, filesWritten: files.length, ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
@@ -930,7 +938,7 @@ app.put("/api/admin/forms", async (c) => {
   const formsFile = { path: "data/forms.json", content: JSON.stringify(formsJson, null, 2) + "\n" };
 
   try {
-    let touched = 0, scanned = 0;
+    let touched = 0, scanned = 0; let rfSkipped: any[] = [];
     let r: any;
     if (renamed.length) {
       // 改显示名 → 连带改产品 form（扫全部产品含草稿/下架），与 forms.json 同一次 commit
@@ -939,7 +947,7 @@ app.put("/api/admin/forms", async (c) => {
       // 别混进 502 的"扫描失败"里（那会让人以为 GitHub 出问题了，往错的方向查）。
       if ((rf as any).budget) return c.json({ error: "改显示名超出单次调用上限（未提交，仓库未改动）", detail: rf.error, spent: spent(), limit: SUBREQ_LIMIT }, 409);
       if (rf.error) return c.json({ error: "扫描产品失败（未提交）", detail: rf.error }, 502);
-      touched = rf.touched; scanned = rf.scanned;
+      touched = rf.touched; scanned = rf.scanned; rfSkipped = (rf as any).skipped || [];
       r = await commitGuarded(
         c.env, cfg, [...rf.files, formsFile],
         `admin: forms update (改显示名 ${renamed.map((x) => `${x.from}→${x.to}`).join(",")}${touched ? ` · 连带 ${touched} 产品` : ""}) (${operator(c)})`);
@@ -956,7 +964,7 @@ app.put("/api/admin/forms", async (c) => {
     if (renamed.length) parts.push(`已改显示名 ${renamed.map((x) => `${x.from}→${x.to}`).join(",")}（连带改了 ${touched} 个产品／共扫 ${scanned} 个）`);
     if (!parts.length) parts.push("已保存新顺序");
     const note = parts.join("；") + (needsSiteBuild ? "。⚠️ 数据已入库，但 /type/ 页面与导航计数需官网构建后才生效——请知会官网跑一次 build。" : "。改显示名只动数据，页面无需重建。");
-    return c.json({ ok: true, added, removed, renamed, productsTouched: touched, productsScanned: scanned, needsSiteBuild, note, ...r });
+    return c.json({ ok: true, added, removed, renamed, productsTouched: touched, productsScanned: scanned, ...(rfSkipped.length ? { skipped: rfSkipped } : {}), needsSiteBuild, note, ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 

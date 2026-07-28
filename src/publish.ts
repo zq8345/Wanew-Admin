@@ -372,11 +372,15 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
   const files: any[] = [];
   const chromeErrors: string[] = [];
   let touched = 0;
+  const skipped: any[] = [];   // ⭐ 跳过的必须被数出来并报出去
 
   for (const id of idset) {
     const raw = await readFile(env, cfg, `data/products/${id}.json`);
-    if (!raw) continue;   // 跳过缺失
-    const prod: any = JSON.parse(raw);
+    // ⚠️ readFile 只在 **404** 时返回 null，而这个 id 刚从 manifest 里来 ——
+    //    "清单里有、读回来是 null" 是一个**应该吼的矛盾**，静默 continue 会让
+    //    "改了 N 个"里的 N 少一个而没人知道少了哪个。
+    if (!raw) { skipped.push({ id, why: "读不到（404，但 manifest 里有）" }); continue; }
+    let prod: any; try { prod = JSON.parse(raw); } catch (e: any) { skipped.push({ id, why: "JSON 解析失败：" + String(e).slice(0, 80) }); continue; }
     const oldCat = prod.category;
     if (op === "status") prod.status = value;
     else if (op === "category") prod.category = value;
@@ -426,7 +430,7 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
   }
   if (opts.extraFiles?.length) files.push(...opts.extraFiles);   // 与产品改动同一次 commit=原子
   const r = await commitFiles(env, cfg, files, opts.message || `admin: bulk ${op}=${value} ${touched} products (${opts.email})`);
-  return { ...r, count: touched, files: files.map((f) => f.path) };
+  return { ...r, count: touched, files: files.map((f) => f.path), ...(skipped.length ? { skipped } : {}) };
 }
 
 
@@ -481,7 +485,7 @@ export function validateForms(body: any, existing: any[]): {
 //    漏改它们=一发布就撞白名单校验。返回 files（不 commit），由调用方与 forms.json 一起原子提交。
 // 注：品类显示名只是**数据桶值**——卡片 data-form 用的是 key、chip 标签来自 chrome.json，
 //    故改显示名不改任何已 built 页面，只动 products/*.json + products-index.json。
-export async function formRenameFiles(env: Env, cfg: any, ctx: Ctx, renames: { from: string; to: string }[]): Promise<{ files: any[]; touched: number; scanned: number; error?: string }> {
+export async function formRenameFiles(env: Env, cfg: any, ctx: Ctx, renames: { from: string; to: string }[]): Promise<{ files: any[]; touched: number; scanned: number; error?: string; skipped?: any[] }> {
   const map = new Map(renames.map((r) => [r.from, r.to]));
   const files: any[] = [];
   let ids: number[] = [];
@@ -502,10 +506,14 @@ export async function formRenameFiles(env: Env, cfg: any, ctx: Ctx, renames: { f
   if (no) return { files: [], touched: 0, scanned: ids.length, error: no, budget: true } as any;
 
   let touched = 0;
+  const skipped: any[] = [];
   for (const id of ids) {
     const raw = await readFile(env, cfg, `data/products/${id}.json`);
-    if (!raw) continue;
-    let prod: any; try { prod = JSON.parse(raw); } catch { continue; }
+    // ⚠️ 这两处原本静默 continue：一个产品文件坏了 → 改品类显示名时它被跳过 →
+    //    它的 form 停在旧值 → 官网 build 的 integrity-check FAIL，而 admin 报的是"改名成功"。
+    //    **不是让它不跳，是让它跳得出声。**
+    if (!raw) { skipped.push({ id, why: "读不到（404，但目录列表里有）" }); continue; }
+    let prod: any; try { prod = JSON.parse(raw); } catch (e: any) { skipped.push({ id, why: "JSON 解析失败：" + String(e).slice(0, 80) }); continue; }
     const to = prod.form ? map.get(prod.form) : undefined;
     if (!to) continue;
     prod.form = to;
@@ -515,18 +523,21 @@ export async function formRenameFiles(env: Env, cfg: any, ctx: Ctx, renames: { f
   // manifest（已发布产品的索引）同步改名
   const manifest = ctx.manifest.map((e: any) => (e.form && map.has(e.form) ? { ...e, form: map.get(e.form) } : e));
   if (JSON.stringify(manifest) !== JSON.stringify(ctx.manifest)) files.push({ path: "data/products-index.json", content: matchJson(ctx.manifestRaw, manifest) });
-  return { files, touched, scanned: ids.length };
+  return { files, touched, scanned: ids.length, skipped };
 }
 
 // 重烘焙一个类目：详情页（三语存在性）双步 + 该类目列表 + 总列表（各语种存在的）。返回 files 数组。
-export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string): Promise<any[]> {
+export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string, sink?: any[]): Promise<any[]> {
   const { template, site, locales, catalog, manifest, locDir, catmap, chrome, formKey, sizes } = ctx;
   const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
   const files: any[] = [];
+  // ⚠️ 返回的是裸数组、调用点用 spread —— 改返回形状要动 3 处调用点。
+  //    改成**收集器传入**：跳过的信息汇到调用方手里，spread 用法一字不动。
+  const skipped: any[] = sink || [];
   for (const e of manifest.filter((m: any) => m.category === slug)) {
     const raw = await readFile(env, cfg, `data/products/${e.id}.json`);
-    if (!raw) continue;
-    const prod = JSON.parse(raw);
+    if (!raw) { skipped.push({ id: e.id, why: "读不到（404，但 manifest 里有）" }); continue; }
+    let prod: any; try { prod = JSON.parse(raw); } catch (err: any) { skipped.push({ id: e.id, why: "JSON 解析失败：" + String(err).slice(0, 80) }); continue; }
     for (const locale of locales.enabled) {
       const dir = locDir[locale];
       const rel = dir ? `${dir}/${slug}/${e.id}.html` : `${slug}/${e.id}.html`;
