@@ -15,6 +15,23 @@ export function resolveImg(im, imgBase) {
   return im && im.key !== undefined ? imgBase + im.key : (im ? im.src : "");
 }
 
+// ── #66/#8：图片固有尺寸（防 CLS）─────────────────────────────────────────────
+//
+// 没有 width/height 时，浏览器要等图下载完才知道该留多大位置，内容就会跳。全站量到 5569 个
+// <img> 没有这两个属性。正文里的图已经在构建时补上了（regen 的 imgAttrs），但**由本文件生成的**
+// 画廊 / 卡片 / 瓦片图补不了：render.js 是双运行时（regen 用 Node，Admin 用 CF Worker），
+// **Worker 读不到磁盘，量不出尺寸**。
+//
+// ⭐ 所以尺寸不在这里量，而是【构建期量好、作为数据穿进来】：`data/media-sizes.json`
+//   （路径 -> [w,h]），regen 从磁盘生成它，Admin Worker 经 GitHub API 读同一份。
+//   两条渲染路径吃同一份事实 —— 这正是之前 formKey 用过的那条路子。
+// ⚠️ 查不到就【什么都不写】：一个错的宽高比比没有更糟（会按错的比例预留位置）。
+//   所以 sizes 缺失时行为与今天完全一致，不会出坏页。
+export function dimAttr(src, sizes) {
+  const d = sizes && sizes[src];
+  return Array.isArray(d) && d.length === 2 ? ` width="${d[0]}" height="${d[1]}"` : "";
+}
+
 // Field-level locale merge: every field falls back to en when the locale lacks it
 // (i18n[locale][field] ?? en[field]) — including title (a pt title still carries tokens like
 // Type-C/RJ45/AWG and the model name).
@@ -50,7 +67,7 @@ export function metaTitleOf(e, prod, locale, modelDisplay, catalog) {
   return `${e.title}-${model}-Wanew${suffix}`;
 }
 
-export function render(prod, { template, imgBase, related, locale = "en", modelDisplay, catalog, urlOf, enabled, catmap = {} }) {
+export function render(prod, { template, imgBase, related, locale = "en", modelDisplay, catalog, urlOf, enabled, catmap = {}, sizes }) {
   const e = mergeI18n(prod, locale);
   // Gallery alt is DERIVED from the localized title, not stored (总工 2026-07-14, verified across
   // all 428: 369 already duplicate the title verbatim, 59 are filenames, 0 are real descriptions —
@@ -68,10 +85,10 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
     || enTitle.startsWith(head(a)) || a.startsWith(head(enTitle));
   const altOfImage = (im) => (isDerivable(im.alt) ? e.title : im.alt);
   const slides = prod.images.map((im) =>
-    `\n                  <div class="swiper-slide feedback-single bg-white position-relative rounded"><img src="${resolveImg(im, imgBase)}" alt="${altOfImage(im)}" class="img-fluid" loading="lazy"></div>`
+    `\n                  <div class="swiper-slide feedback-single bg-white position-relative rounded"><img src="${resolveImg(im, imgBase)}"${dimAttr(resolveImg(im, imgBase), sizes)} alt="${altOfImage(im)}" class="img-fluid" loading="lazy"></div>`
   ).join("") + "\n                ";
   const cards = related.map((c) =>
-    `\n              <div class="col-xl-3 col-lg-4 col-md-6">\n                <div class="blog-one__single">\n                  <a href="${c.href}">\n                    <div class="blog-one__img"><img src="${c.img}" alt="${c.alt}" loading="lazy"></div>\n                    <div class="blog-content"><h3 class="blog-one__title">${c.title}</h3></div>\n                  </a>\n                </div>\n              </div>`
+    `\n              <div class="col-xl-3 col-lg-4 col-md-6">\n                <div class="blog-one__single">\n                  <a href="${c.href}">\n                    <div class="blog-one__img"><img src="${c.img}"${dimAttr(c.img, sizes)} alt="${c.alt}" loading="lazy"></div>\n                    <div class="blog-content"><h3 class="blog-one__title">${c.title}</h3></div>\n                  </a>\n                </div>\n              </div>`
   ).join("") + "\n            ";
   const summary = e.summary_html ? `<div class="item-explain">\n                ${e.summary_html}\n              </div>` : "";
   // P5: 详情页视频区(Admin #79 上传已做,官网渲染当时排期中→现补)。videos[] 真实形状(661.json):
@@ -137,6 +154,13 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
     if (v === undefined || v === null || v === "") throw new Error(`catalog ${key} has no value for ${locale} — the guard should have caught this first`);
     return v;
   });
+  // {{url./some/path/}} -> the locale's version of that path, falling back to the default when
+  // that locale has no such page (urlOf's existence rule). renderHome/renderPage already had this;
+  // render() did not, so the product template's compatibility link shipped the token verbatim into
+  // the href — caught by checking the built page rather than trusting that the token "looked
+  // supported". Without urlOf (a caller mid-migration) the raw path is emitted, which is still a
+  // working link, never a leftover token.
+  r = r.replace(/\{\{url\.(\/[a-z0-9/-]*)\}\}/gi, (m, p) => (urlOf ? urlOf(p, locale) : p));
   return r;
 }
 
@@ -181,11 +205,11 @@ export function genRelated(prodEntry, entries, locale = "en", catalog, urlOf) {
 // defensive floor only: an unthreaded caller yields empty data-form / 0 chip counts (visibly wrong,
 // caught by forms-integrity-check + the /type/ curl verify), never a crash on the live publish path.
 
-export function cardHtml(e, locale = "en", catalog, urlOf, formKey = {}) {
+export function cardHtml(e, locale = "en", catalog, urlOf, formKey = {}, sizes) {
   const title = entryTitle(e, locale);
   const alt = altOf(title, locale, catalog);
   const href = urlOf ? urlOf(`/${e.category}/${e.id}`, locale) : `/${e.category}/${e.id}`;
-  return `\n              <div class="col-xl-3 col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="200ms" data-cat="${e.category}" data-form="${formKey[e.form] || ""}">\n                <div class="blog-one__single">\n                  <a href="${href}">\n                    <div class="blog-one__img">\n                      <img src="${e.thumb}" alt="${alt}" loading="lazy">\n                    </div>\n                    <div class="blog-content">\n                      <h3 class="blog-one__title">${title}</h3>\n                      <p class="blog-one__tt">${entryExcerpt(e, locale)}</p>\n                    </div>\n                  </a>\n                </div>\n              </div>`;
+  return `\n              <div class="col-xl-3 col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="200ms" data-cat="${e.category}" data-form="${formKey[e.form] || ""}">\n                <div class="blog-one__single">\n                  <a href="${href}">\n                    <div class="blog-one__img">\n                      <img src="${e.thumb}"${dimAttr(e.thumb, sizes)} alt="${alt}" loading="lazy">\n                    </div>\n                    <div class="blog-content">\n                      <h3 class="blog-one__title">${title}</h3>\n                      <p class="blog-one__tt">${entryExcerpt(e, locale)}</p>\n                    </div>\n                  </a>\n                </div>\n              </div>`;
 }
 
 function updateChips(html, id, countFn) {
@@ -235,7 +259,7 @@ export function setTileAlts(html, locale, catalog, modelDisplay) {
 // 机型卡按【存在性】过滤,不是按一张写死的清单:一张卡只在它指向的页面于该语种存在时才出现。
 // 这不是我发明的规则 —— 它精确预测了 pt 首页的现状(7 张,正好是有 pt 页的 7 个分类)。en 8 张。
 // 好处是它自己会长:等 /pt/performance-gen-2/ 建出来,pt 首页自动就有第 8 张,没人需要记得。
-export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, exists, dirOf, enabled, products, featured, internal_noindex = [] }) {
+export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, exists, dirOf, enabled, products, featured, internal_noindex = [], sizes }) {
   const sfx = catalog["card.alt.category"];
   const suffix = sfx[locale] ?? sfx.en;
   const cards = tiles
@@ -243,7 +267,7 @@ export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, e
     .map((t) => {
       const name = modelDisplay[t.cat];
       return `<div class="product-grid-item">\n            <a href="${urlOf(`/${t.cat}/`, locale)}" class="product-grid-link">\n` +
-        `              <div class="product-grid-img">\n                <img src="${t.img}" alt="${name} ${suffix}" loading="lazy">\n` +
+        `              <div class="product-grid-img">\n                <img src="${t.img}"${dimAttr(t.img, sizes)} alt="${name} ${suffix}" loading="lazy">\n` +
         `              </div>\n              <div class="product-grid-text"><b>${name}</b></div>\n            </a>\n          </div>`;
     })
     .join("\n          \n          ");
@@ -256,7 +280,7 @@ export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, e
       const title = entryTitle(e, locale);
       const href = urlOf(`/${e.category}/${e.id}`, locale);
       return `<a class="w3-pstrip__card" href="${href}">\n` +
-        `            <div class="w3-pstrip__img"><img src="${e.thumb}" alt="${altOf(title, locale, catalog)}" loading="lazy"></div>\n` +
+        `            <div class="w3-pstrip__img"><img src="${e.thumb}"${dimAttr(e.thumb, sizes)} alt="${altOf(title, locale, catalog)}" loading="lazy"></div>\n` +
         `            <div class="w3-pstrip__title">${title}</div>\n          </a>`;
     }).join("\n          ");
     out = out.split("{{PRODUCT_STRIP}}").join(strip);
@@ -506,7 +530,7 @@ export function setListTitle(html, name, locale, catalog) {
 // Gen 2 page aggregates the Performance family — it has 0 products of its own and must not be a
 // dead click), or {form} for the /type/ pages. One predicate covers all four so no caller needs a
 // special case, and adding a fifth kind of list page later costs nothing.
-export function regenListPage(html, entries, catFilter, { locale = "en", catalog, urlOf, formKey = {} } = {}) {
+export function regenListPage(html, entries, catFilter, { locale = "en", catalog, urlOf, formKey = {}, sizes } = {}) {
   const inScope = (e) => {
     if (!catFilter) return true;
     if (Array.isArray(catFilter)) return catFilter.includes(e.category);
@@ -518,7 +542,7 @@ export function regenListPage(html, entries, catFilter, { locale = "en", catalog
   // NB: must be an arrow, not `scope.map(cardHtml)` — map passes (el, index, array), so the bare
   // reference would feed the INDEX in as `locale`. It would even look fine in en (an unknown
   // locale falls back to English), which is the worst kind of wrong: right by accident.
-  const cards = scope.map((e) => cardHtml(e, locale, catalog, urlOf, formKey)).join("") + "\n            ";
+  const cards = scope.map((e) => cardHtml(e, locale, catalog, urlOf, formKey, sizes)).join("") + "\n            ";
   html = html.replace(
     /(<div class="row" id="productGrid"[^>]*>)(?:\s*<div class="col-xl-3[^"]*"[^>]*data-cat="[^"]*"[^>]*>[\s\S]*?<\/a>\s*<\/div>\s*<\/div>)*\s*(<\/div>)/,
     (m, open, close) => open + cards + close

@@ -454,7 +454,9 @@ app.get("/api/admin/seo", async (c) => {
     const j = raws[i] ? JSON.parse(raws[i] as string) : {};
     const meta: Record<string, any> = {};
     for (const f of p.fields) meta[f] = j[`${p.slug}.meta.${f}`] || {};
-    return { slug: p.slug, label: p.label, fields: p.fields, meta };
+    // hasFile：官网仓里到底有没有这页的数据文件（实测 data/pages/marine.json 就不存在）。
+    // 没有 ≠ 填了空——完成度视图要如实区分，不然"全空"会被当成没写过而反复重填。
+    return { slug: p.slug, label: p.label, fields: p.fields, meta, hasFile: !!raws[i] };
   });
   const first = pages.map((p) => p.meta[p.fields[0]]).find((v) => v && typeof v === "object");
   const locales = first ? Object.keys(first).filter((l) => !l.startsWith("reason")) : [];
