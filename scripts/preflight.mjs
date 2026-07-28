@@ -71,6 +71,47 @@ console.log(`   vendor 守卫     exit=${ven.code}`); if (ven.code) { show(ven);
 const tok = run(["scripts/token-lint.mjs"]);
 console.log(`   令牌纪律        exit=${tok.code}`); if (tok.code) { show(tok); bad++; } else console.log("   " + tok.out.trim().split("\n").pop());
 
+// ⑤ 上线就绪：**字节一致 ≠ 可以上线**
+// 2026-07-28 现场：官网把逐文件 blob 换成 tree 内联 content 后，vendor 守卫立刻转绿（字节确实一致），
+// 但那一版**没有任何校验** —— 内联 content 没有 `encoding` 字段，官网自己的注释都写着
+// "这条是推论，不是文档明文"。此时发版 = 编码若错，**"保存成功"之后静默写坏三语数据**。
+// **漂移守卫只比字节、不判对错；一道守卫的沉默，只覆盖它检查的那一维。**
+// 于是"能不能发"不再靠谁记得拦一下。
+//
+// ⚠️ 这道闸自己的局限，写在这里而不是让它顶着一个更强的名义：
+//    它检查的是"**代码在不在、位置对不对**"，**不是"它真的跑过、且判得对"**。
+//    位置这一条有意义（校验必须在 `POST /git/commits` **之前** —— 拦在不可逆那一步前才叫闸），
+//    但**一段永远返回"通过"的校验代码，也能让这道闸变绿。**真正的判据仍是运行时的 SHA 比对本身。
+console.log("\n⑤ 上线就绪：内联 content 有没有配套校验");
+{
+  const gh = readFileSync(path.join(ROOT, "vendor/github.js"), "utf8");
+  const fn = (gh.match(/export async function commitFiles[\s\S]*?\n\}/) || [""])[0];
+  const inline = /type: "blob", content:/.test(fn);        // 用了内联 content 吗
+  // ⚠️ 算 SHA 的函数在 commitFiles **外面**（辅助函数），所以这里找的是**对它的调用**，
+  //    不是 `digest(` 本身 —— 第一版在函数体里找 digest，对这份实现会误判成"没有闸"。
+  const shaFn = (gh.match(/async function (\w*[Bb]lobSha\w*)\s*\(/) || [])[1];
+  const iVerify = shaFn ? fn.indexOf(shaFn) : -1;
+  const iCommit = fn.search(/git\/commits`/);              // 不可逆那一步
+  if (!inline) {
+    console.log("   ⚪ 未使用内联 content（走逐文件 blob，GitHub 显式 encoding:utf-8）—— 本闸不适用");
+  } else if (iVerify < 0) {
+    console.error("   🔴 用了内联 content，但 commitFiles 里没有 blob SHA 校验。");
+    console.error("      → 内联 content 没有 encoding 字段，编码是推论；错了会在【保存成功之后】静默写坏数据。");
+    console.error("      → 等官网带闸那一版；这是【不能上线】的红，不是漂移的红。");
+    bad++;
+  } else if (iCommit >= 0 && iVerify > iCommit) {
+    console.error("   🔴 SHA 校验出现在 POST /git/commits 之后 —— 拦不住不可逆那一步，等于没有。");
+    bad++;
+  } else if (!/throw new Error\([^)]*(?:SHA|中止)/.test(fn)) {
+    // 校验存在但不中止 = "警告一下继续提交"，等于没有闸
+    console.error("   🔴 有 SHA 校验但不匹配时没有 throw —— 警告后继续提交，等于没有这道闸。");
+    bad++;
+  } else {
+    console.log(`   ✅ 内联 content + SHA 校验(${shaFn})，校验在 POST /git/commits 之前，不匹配即中止`);
+    console.log("      ⚠️ 本闸只看代码在不在、位置对不对、失败会不会抛，**不能证明它跑过、也不能证明它判得对**。");
+  }
+}
+
 if (bad) { console.error(`\n🔴 ${bad} 道闸没过 —— 别报 deploy。`); process.exit(1); }
 console.log(drifted
   ? "\n✅ 三闸全绿。镜像**本轮被同步过** —— 复核完签名与行为自查再报 deploy。"

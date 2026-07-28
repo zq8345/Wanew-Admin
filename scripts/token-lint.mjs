@@ -51,22 +51,35 @@ if (!mirrorVars) {
 // 所以这里机器核对，不靠记性：数 commitFiles 里的 `await gh(` 调用点，并确认循环里没有网络请求。
 {
   const gh = readFileSync(path.join(ROOT, "vendor/github.js"), "utf8");
-  const fn = (gh.match(/export async function commitFiles[\s\S]*?\n\}/) || [""])[0];
-  const calls = (fn.match(/await gh\(/g) || []).length;
-  const loopFetch = /for \(const f of files\)[\s\S]*?await gh\(/.test(fn);
-  const model = Number((readFileSync(path.join(ROOT, "src/publish.ts"), "utf8").match(/const COMMIT_SUBREQ = (\d+)/) || [])[1]);
+  const pub = readFileSync(path.join(ROOT, "src/publish.ts"), "utf8");
+  const fn = (gh.match(/export async function commitFiles[\s\S]*?\n\}\n/) || [""])[0];
   if (!fn) { console.error("🔴 在 vendor/github.js 里找不到 commitFiles —— 成本模型无法核对"); process.exit(1); }
-  if (loopFetch) {
-    console.error(`🔴 commitFiles 的文件循环里又出现了网络请求 —— 写入开销重新变成"每文件一次"。`);
-    console.error(`   → 预算模型 COMMIT_SUBREQ 不再是常数，src/publish.ts 必须跟着改。`);
+
+  const inline = /type: "blob", content:/.test(fn);          // 内联路径
+  const blobPath = /git\/blobs`/.test(fn);                   // 逐文件 blob 退路
+  const base = [...fn.matchAll(/await gh\(env, `([^`]*)`/g)].map((m) => m[1])
+    .filter((u) => !/git\/blobs`?$/.test(u) && !u.includes("git/blobs")).length;   // 不含 blob 的固定开销
+  const model = Number((pub.match(/const COMMIT_SUBREQ = (\d+)/) || [])[1]);
+  const vLimit = (gh.match(/const INLINE_LIMIT = ([\d *]+);/) || [])[1];
+  const pLimit = (pub.match(/const INLINE_LIMIT = ([\d *]+);/) || [])[1];
+
+  if (base !== model) {
+    console.error(`🔴 成本模型对不上：commitFiles 的固定开销是 ${base} 次（不含 blob），src/publish.ts 写的是 ${model}。`);
+    console.error(`   → 模型偏大会**误拒正常保存**，偏小会重新撞上限。改 COMMIT_SUBREQ。`);
     process.exit(1);
   }
-  if (calls !== model) {
-    console.error(`🔴 成本模型对不上：vendor/github.js 的 commitFiles 有 ${calls} 次子请求，src/publish.ts 写的是 ${model}。`);
-    console.error(`   → 官网改了提交实现。模型偏大会**误拒正常保存**，偏小会重新撞上限。改 COMMIT_SUBREQ。`);
+  // ⚠️ 两条路径必须都被模型认得：只按 5 算会在退路上撞限，只按 5+N 算会误拒正常保存
+  if (blobPath && !/COMMIT_SUBREQ \+ writes\.length/.test(pub)) {
+    console.error(`🔴 vendor 有"体积超限退回逐文件 blob"的路径，但成本模型没有对应分支。`);
+    console.error(`   → 那条路上开销是 ${base} + 文件数，模型只算 ${base} 会重新撞上限。`);
     process.exit(1);
   }
-  console.log(`✅ 成本模型 PASS：commitFiles 实测 ${calls} 次子请求，与 COMMIT_SUBREQ=${model} 一致（循环内无网络请求）。`);
+  if (inline && vLimit && pLimit && vLimit.replace(/\s/g, "") !== pLimit.replace(/\s/g, "")) {
+    console.error(`🔴 体积阈值对不上：vendor INLINE_LIMIT=${vLimit.trim()}，src/publish.ts=${pLimit.trim()}。`);
+    console.error(`   → 两边判"走内联还是走退路"的分界线不同，模型会在中间那段算错。`);
+    process.exit(1);
+  }
+  console.log(`✅ 成本模型 PASS：固定 ${base} 次${blobPath ? " + 超限退路(按 5+文件数 计)" : ""}${vLimit ? ` · 阈值两边一致(${vLimit.trim()})` : ""}。`);
 }
 
 if (bad) {

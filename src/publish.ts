@@ -27,10 +27,24 @@ import { afford, spent } from "./subreq";
 //    旧模型是 `2 + 文件数 + 3`；若不跟着改，保存产品（33 文件）会被算成需要 38 次而**被我自己的闸拒掉**
 //    —— 实际只花 5 次。**一个模型过时了的安全装置，就是停机器。**
 //    这个常数与 vendor 实现的一致性由 `scripts/token-lint.mjs` 机器核对，不靠记性。
+// vendor 现在有**两条**写入路径，成本不同：
+//   · 内联 content（请求体 ≤ INLINE_LIMIT）→ 固定 5 次
+//   · 体积超限 → 退回逐文件 blob POST  → 5 + 文件数
+// 只按 5 算会在退路上撞限；只按 5+N 算会**误拒正常保存**（33 文件的产品保存实际只花 5）。
+// ⚠️ INLINE_LIMIT 必须与 vendor 里那个常数一致 —— 由 token-lint 机器核对，不靠记性。
 const COMMIT_SUBREQ = 5;
+const INLINE_LIMIT = 5 * 1024 * 1024;
+
+const commitCost = (files: any[]): number => {
+  const writes = files.filter((f: any) => !f.delete);
+  // ⚠️ 字节数不是字符长度：`"中".length === 1` 而 UTF-8 是 3 字节。
+  //    用 .length 会在中文内容上把体积**低估到三分之一**，于是该走退路的判成内联。
+  const bytes = writes.reduce((a: number, f: any) => a + new TextEncoder().encode(String(f.content ?? "")).length, 0);
+  return bytes <= INLINE_LIMIT ? COMMIT_SUBREQ : COMMIT_SUBREQ + writes.length;
+};
 
 export async function commitFiles(env: Env, cfg: any, files: any[], message: string) {
-  const no = afford(COMMIT_SUBREQ, `提交 ${files.length} 个文件`);
+  const no = afford(commitCost(files), `提交 ${files.length} 个文件`);
   if (no) throw new Error(`调用次数超限（未提交，仓库未改动）\n${no}`);
   return rawCommitFiles(env, cfg, files, message);
 }
