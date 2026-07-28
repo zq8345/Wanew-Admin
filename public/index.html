@@ -508,7 +508,6 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
         <button id="cat-manage-btn" onclick="toggleCatManage()" title="进入管理态才显示删除按钮（防误删）">🔧 管理</button>
         <button class="primary" onclick="saveCats()">💾 保存</button>
       </div>
-      <p class="muted" style="font-size:11.5px;margin:0 0 10px">每个机型一个显示名（官网列表/导航/详情/瓦片统一用它）；URL 段一期不可改</p>
       <table class="cat-tbl">
         <thead><tr>
           <th class="c-ord">顺序</th><th>显示名</th><th class="c-act">操作</th>
@@ -517,7 +516,8 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       </table>
       <button class="cat-add" onclick="catAdd()" title="加机型：新 URL 段、不影响现有机型">＋ 添加机型</button>
       <div class="buildnote" id="cat-build-note" style="display:none"></div>
-      <p class="muted" style="font-size:12px;margin-top:10px">保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。<b>加机型</b>：数据即时入库，<b>页面需官网构建后出现</b>。<b>删机型</b>：点行末 ✕ 标记、保存时后端守卫（有产品会拒删）。URL 段一经创建不可改（改=断链接）。</p>
+      <!-- Joe：规则说明读一次就够，不该每次挡在数据前面 → 并进按钮下方这段脚注的首句（两张卡同一种处理）。文案未改。 -->
+      <p class="muted" style="font-size:12px;margin-top:10px">每个机型一个显示名（官网列表/导航/详情/瓦片统一用它）；URL 段一期不可改。保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。<b>加机型</b>：数据即时入库，<b>页面需官网构建后出现</b>。<b>删机型</b>：点行末 ✕ 标记、保存时后端守卫（有产品会拒删）。URL 段一经创建不可改（改=断链接）。</p>
     </div>
 
     <!-- 形态/品类轴（可编辑：data/forms.json 单源·契约 §3/§4）-->
@@ -528,7 +528,6 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
         <button id="form-manage-btn" onclick="toggleFormManage()" title="进入管理态才显示删除按钮（防误删）">🔧 管理</button>
         <button class="primary" onclick="saveForms()">💾 保存</button>
       </div>
-      <p class="muted" style="font-size:11.5px;margin:0 0 10px">每个品类一个显示名（也是产品的形态值）；URL 段 /type/… 一期不可改</p>
       <table class="cat-tbl">
         <thead><tr>
           <th class="c-ord">顺序</th><th>显示名</th><th class="cat-cnt">产品数</th><th class="c-act">操作</th>
@@ -537,7 +536,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       </table>
       <button class="cat-add" onclick="formAdd()" title="加品类：新 /type/ URL 段、不影响现有品类">＋ 添加品类</button>
       <div class="buildnote" id="form-build-note" style="display:none"></div>
-      <p class="muted" style="font-size:12px;margin-top:10px">真源=官网 <span class="tnum">data/forms.json</span>。<b>顺序</b>决定 /type 页与筛选 chip 的排列。<b>改显示名</b>会连带修改引用它的所有产品（含草稿/下架），页面不需重建。<b>加/删/排序</b>的数据即时入库，但 <b>/type/ 页面与导航计数需官网构建后生效</b>。URL 段一经创建不可改（改=断链接）。</p>
+      <p class="muted" style="font-size:12px;margin-top:10px">每个品类一个显示名（也是产品的形态值）；URL 段 /type/… 一期不可改。真源=官网 <span class="tnum">data/forms.json</span>。<b>顺序</b>决定 /type 页与筛选 chip 的排列。<b>改显示名</b>会连带修改引用它的所有产品（含草稿/下架），页面不需重建。<b>加/删/排序</b>的数据即时入库，但 <b>/type/ 页面与导航计数需官网构建后生效</b>。URL 段一经创建不可改（改=断链接）。</p>
     </div>
 
     </div><!-- /.cat-2col -->

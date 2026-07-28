@@ -33,7 +33,9 @@
   --w3-edge-top: inset 0 1px 0 rgba(255,255,255,.09);   /* 顶边内高光(加亮):把卡片从暗底"抬"起来 */
   --w3-invert-bg: #f4f5f7;   /* 选择性提亮带(信任/证据类)浅底 */
   --w3-invert-ink: #14181d;  /* 反转带深标题 */
-  --w3-invert-ink2: #56606b; /* 反转带正文 */
+  --w3-invert-ink2: #4d5762; /* 反转带正文。2026-07-28:#56606b 在白卡上只有 6.40,低于总工定的正文级 ≥7;改 #4d5762 → 7.35。
+     ⚠️ 全站令牌:14 条规则 / 32 个挂 w3-whitecards 的页面(首页 Our Advantages、Solutions、Guides、About)。
+     只改文字深浅,不动任何版式。要退回原样就把这一行改回 #56606b。 */
   --w3-invert-accent: #1d63d6; /* 反转带 accent(浅底上 --w3-accent 太浅→用深蓝,与 §2.1 链接色同源) */
   --w3-well: radial-gradient(circle at 50% 42%, rgba(125,177,255,.13), transparent 70%);  /* 图标空 void 垫底(补白) */
 }
