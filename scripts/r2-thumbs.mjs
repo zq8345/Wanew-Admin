@@ -131,7 +131,10 @@ if (WRITE) {
   console.log(`\n存在性清单：逐个回探公开 CDN（只有真取得到才进清单）`);
   const { out, hit, miss } = await buildManifest(report);
   const manifest = {
-    _note: "R2 缩略图存在性清单。key = 原图 R2 key，value = 缩略图 key（长边 960 webp）。" +
+    // ⚠️ 形状由消费方定：regen 读的是 **`.keys` 数组**（`new Set(m.keys)` 然后 `has(thumbKey)`）。
+    //    这段描述必须跟着真实形状走 —— 上一版这里写的是 `{原图key: 缩略图key}`，文件已经改成 .keys 了、
+    //    描述没跟着改，重跑一次就把错描述又写回文件里。**读的人会信描述而不是去数结构。**
+    _note: "R2 缩略图存在性清单。keys = **缩略图 key 的数组**（长边 960 webp）——形状由消费方 regen 定（它读 .keys）。" +
       "由 wanew-admin 的 scripts/r2-thumbs.mjs 在生成缩略图后【逐个回探公开 CDN 确认真的取得到】才写入——" +
       "是事实不是意图，写失败的不会出现在这里。regen 用法：命中→用缩略图，未命中→回落原图（不会 404）。" +
       "⚠️ 只覆盖 R2(img.wanew.com) 那部分；/static/ 下的缩略图 regen 直接查磁盘，不在此清单。",
@@ -147,4 +150,37 @@ if (WRITE) {
   writeFileSync(path, JSON.stringify(manifest, null, 2) + "\n");
   console.log(`   进清单 ${hit} · 未进 ${miss}（未进的 regen 会回落原图）`);
   console.log(`   清单已生成：${path}  → 提交到官网仓 data/r2-thumbs.json`);
+
+  // ── 尺寸元数据（同一次测量产出，不另跑一遍）─────────────────────────────
+  // 官网 regen 只扫 `static/` 生成 media-sizes.json 且**全量覆写**，R2 的尺寸它量不到，
+  // 我也不能写进那个文件（会被下次 regen 冲掉 = 又一个"两个写入方"）。所以单出一份、由 regen 合并。
+  //
+  // ⚠️ **两个 key 都要，且各配各自的真实尺寸** —— 消费方 `dimAttr(src, sizes)` 用 **src 原样**查：
+  //    · 卡片 `dimAttr(e.thumb, …)` → regen 接管后 e.thumb 是**缩略图 URL** → 配**缩略图尺寸**
+  //    · 详情页 `dimAttr(resolveImg(im), …)` → **原图 URL** → 配**原图尺寸**
+  //    只给原图那一组，卡片就查不到 → 不写 width/height → **这 28 张的防 CLS 白做**（且无症状）。
+  //    ⚠️ 绝不能把缩略图尺寸配到原图 key 上：`fit:inside` 下两者比例几乎相同，
+  //       **写错了在今天不会有任何症状，直到有人换一张比例不同的图** —— 所以两组分开算、分开写。
+  const IMGBASE = "https://img.wanew.com/";
+  const sizes = {};
+  const inManifest = new Set(out);
+  for (const r of report) {
+    if (r.err) continue;
+    const [sw, sh] = r.srcDim.split("×").map(Number);
+    const [tw, th] = r.outDim.split("×").map(Number);
+    sizes[IMGBASE + r.key] = [sw, sh];                                   // 原图 URL → **原图**尺寸
+    if (inManifest.has(r.thumbKey)) sizes[IMGBASE + r.thumbKey] = [tw, th];  // 缩略图 URL → **缩略图**尺寸
+  }
+  const sizesDoc = {
+    _note: "R2(img.wanew.com) 图片的真实宽高，供 render.js 的 dimAttr 注 width/height 防 CLS。" +
+      "官网 regen 只扫 static/ 且【全量覆写】data/media-sizes.json，所以 R2 这部分单出一份、由 regen 合并进 sizes（别写进那个文件，会被冲掉）。" +
+      "⚠️ 键是 dimAttr 查询时用的**完整 URL 原样**：原图 URL 配【原图】尺寸（详情页图库用），缩略图 URL 配【缩略图】尺寸（列表卡用）。" +
+      "两者比例几乎相同，配错了今天不会有任何症状，直到换一张比例不同的图——所以两组分开量、分开写。" +
+      "只收真读出来的（sharp 解析成功），量不到的不进表：错的宽高比比没有更糟。",
+    _generated_by: "wanew-admin/scripts/r2-thumbs.mjs（与缩略图同一次运行产出，不分两步跑）",
+    sizes,
+  };
+  const sp = `${TMP}/r2-media-sizes.json`;
+  writeFileSync(sp, JSON.stringify(sizesDoc, null, 2) + "\n");
+  console.log(`   尺寸元数据：${Object.keys(sizes).length} 条（原图 ${report.filter((r) => !r.err).length} + 缩略图 ${inManifest.size}）→ ${sp}`);
 }
