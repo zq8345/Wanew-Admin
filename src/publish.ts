@@ -100,7 +100,36 @@ export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
   const site = JSON.parse(siteRaw), locales = JSON.parse(locRaw), catalog = JSON.parse(catRaw);
   const categories = JSON.parse(categoriesRaw);
   const manifest = manRaw ? JSON.parse(manRaw) : [];
-  const pagesList = new Set<string>(JSON.parse(pagesRaw));
+  // ── 「这个页面存不存在」的真源 ────────────────────────────────────────────
+  // 原来查 `data/pages-list.json` —— 那是**另一个仓维护的一份清单**，而清单会和现实分叉：
+  // 实测它 611 条 / 仓里 613 个 HTML，已经差了 2 条。分叉的两个方向各对应一种病：
+  //   清单多一条 → 对不存在的路径下 tombstone；清单少一条 → 该更新的页被**静默跳过**。
+  //
+  // ⭐ 改成问仓库本身：一次 `GET /git/trees/{branch}?recursive=1` 拿到全部路径。
+  //    **1 次子请求、与文件数无关**（实测 1843 个文件，GitHub 截断阈值约 10 万条/7MB）。
+  //    从此 `exists` 问的是"仓库里有没有这个文件"，**它不可能说谎**。
+  //
+  // ⚠️ 只做**成员判断**，不枚举 —— 已核实全仓 0 处枚举 `pagesList`。
+  //    这一条很重要：`pages-list.json` 里编码着"**哪些 HTML 算站点页**"，那条规则的权威在官网；
+  //    裸文件列表里 `admin/index.html` 这种也在。**枚举它就等于在 admin 里重新实现那条规则。**
+  let treePaths: Set<string> | null = null;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.name}/git/trees/${cfg.branch}?recursive=1`, {
+      headers: { Authorization: `Bearer ${(env as any).GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
+    });
+    const tr: any = res.ok ? await res.json() : null;
+    if (!res.ok) console.error(JSON.stringify({ evt: "tree_fetch_failed", status: res.status }));
+    if (tr && Array.isArray(tr.tree)) {
+      // ⚠️ 截断时**不能**当"这些就是全部"——那会把没列出来的文件判成不存在（= 复活 + 停更两种病一起来）
+      if (tr.truncated) console.error(JSON.stringify({ evt: "tree_truncated", note: "递归 tree 被截断，回落 pages-list.json" }));
+      else treePaths = new Set<string>(tr.tree.filter((n: any) => n.type === "blob").map((n: any) => n.path));
+    }
+  } catch (e: any) {
+    // 拿不到就回落到旧真源（今天的行为），并留痕 —— 静默降级会让"为什么又漂了"查不出来
+    console.error(JSON.stringify({ evt: "tree_fetch_failed", detail: String(e).slice(0, 200) }));
+  }
+  const listedPages = new Set<string>(JSON.parse(pagesRaw));
+  const pagesList = treePaths || listedPages;
   const locDir = localeDirs(locales);
   const forms = JSON.parse(formsRaw).forms || [];
   const formKey = formKeyOf(forms);
