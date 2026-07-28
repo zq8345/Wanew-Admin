@@ -8,7 +8,8 @@
     "guard:vendor": "node scripts/vendor.mjs check",
     "vendor:sync": "node scripts/vendor.mjs sync",
     "deploy": "wrangler deploy",
-    "guard:tokens": "node scripts/token-lint.mjs"
+    "guard:tokens": "node scripts/token-lint.mjs",
+    "preflight": "node scripts/preflight.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260717.1",
