@@ -46,6 +46,8 @@ export function mergeI18n(prod, locale) {
   const loc = (prod.i18n && prod.i18n[locale]) || {};
   return {
     title: loc.title ?? en.title,
+    // ⚠️ 本函数是白名单不是透传:没列在这里的字段会被静默丢掉。加字段必须同时加这里。
+    card_title: loc.card_title ?? en.card_title,
     summary_html: loc.summary_html ?? en.summary_html,
     description_html: loc.description_html ?? en.description_html,
     meta_description: loc.meta_description ?? en.meta_description,
@@ -138,7 +140,10 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
     ROBOTS_META: robots, CANONICAL: canonical, HREFLANG: hreflang,
     HTML_LANG: locale, OG_LOCALE: locale === "en" ? "" : `\n<meta property="og:locale" content="${locale.replace("-", "_")}" />`,
     GALLERY_MAIN: slides, GALLERY_THUMB: slides, CATEGORY: (modelDisplay && modelDisplay[prod.category]) || catmap[prod.category] || prod.category,
-    TITLE: e.title, SUMMARY_BLOCK: summary, DESCRIPTION: e.description_html, VIDEOS_BLOCK: videosBlock,
+    TITLE: e.title,                       // 长标题:询盘表单要靠它认出是哪一个(68 个产品短名会撞)
+    CARD_TITLE: e.card_title || e.title,  // h1 用短名,留空回落长标题
+    COMPAT_BADGES: compatBadges(prod, locale, modelDisplay, catmap, catalog),
+    SUMMARY_BLOCK: summary, DESCRIPTION: e.description_html, VIDEOS_BLOCK: videosBlock,
     RELATED: cards, JSONLD_BREADCRUMB: prod.jsonld_breadcrumb || "", JSONLD_PRODUCT: jsonldProduct,
   };
   let r = template;
@@ -169,6 +174,12 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
 // A manifest entry's title/excerpt are English; a locale's are under entry.i18n[locale].
 // Same field-level fallback rule as the catalog — one rule, applied everywhere.
 export const entryTitle = (e, locale) => (e.i18n && e.i18n[locale] && e.i18n[locale].title) || e.title;
+// 卡面短名。跟语言走(产品标题本来分语言,单语短名会让 pt/es 卡面冒英文)。
+// 留空 → 回落长标题,所以 Joe 没填的产品现状一字不变。
+// ⚠️ 只用于【看得见的卡面标题】。alt 仍走长标题:alt 有 en 逐字节门看着(见 altOf 上方注释),
+// 而且屏幕阅读器用户听到的应该是那句更具体的描述,不是短名。
+export const entryCardTitle = (e, locale) =>
+  (e.i18n && e.i18n[locale] && e.i18n[locale].card_title) || e.card_title || entryTitle(e, locale);
 export const entryExcerpt = (e, locale) => (e.i18n && e.i18n[locale] && e.i18n[locale].excerpt) ?? (e.excerpt || "");
 // The card alt suffix is a template string, so it belongs in the catalog — not hardcoded here,
 // where no guard could ever see it and every new language would inherit English silently.
@@ -205,11 +216,30 @@ export function genRelated(prodEntry, entries, locale = "en", catalog, urlOf) {
 // defensive floor only: an unthreaded caller yields empty data-form / 0 chip counts (visibly wrong,
 // caught by forms-integrity-check + the /type/ curl verify), never a crash on the live publish path.
 
+/* 适配徽章。顶层 `compatible_with` 存【机型 slug】不存显示名 —— 存显示名的话 Joe 改一次机型名
+   就要回写 68 个产品(双源);存 slug,徽章跟着显示名自动变。
+   显示名优先级与页面别处一致:locales.json 的 model_display(品牌机型词,分语言) > categories.json 的 display。
+   ⚠️ 空数组 / 无此字段 / slug 查不到显示名 → 该项不出,全空则整块不出。
+   这正是 PDP 体检时我拒做徽章的那条理由的另一面:那时【没有】结构化适配数据,只有散文,
+   做出来就得靠猜;现在有了字段,没填的产品照样什么都不显示 —— 不编。 */
+export function compatBadges(prod, locale, modelDisplay, catmap, catalog) {
+  const slugs = Array.isArray(prod && prod.compatible_with) ? prod.compatible_with : [];
+  const names = slugs
+    .map((s) => (modelDisplay && modelDisplay[s]) || (catmap && catmap[s]) || "")
+    .filter(Boolean);
+  if (!names.length) return "";
+  const lbl = (catalog && catalog["pdp.compatible_with"] && (catalog["pdp.compatible_with"][locale] ?? catalog["pdp.compatible_with"].en)) || "Compatible with";
+  return `<div class="pdp-compat"><span class="pdp-compat__lbl">${lbl}</span>`
+    + names.map((n) => `<span class="pdp-compat__b">${n}</span>`).join("")
+    + `</div>`;
+}
+
 export function cardHtml(e, locale = "en", catalog, urlOf, formKey = {}, sizes) {
   const title = entryTitle(e, locale);
-  const alt = altOf(title, locale, catalog);
+  const alt = altOf(title, locale, catalog);          // alt 仍是长标题(en 逐字节门 + 无障碍)
+  const cardTitle = entryCardTitle(e, locale);        // 卡面显示短名,缺省回落长标题
   const href = urlOf ? urlOf(`/${e.category}/${e.id}`, locale) : `/${e.category}/${e.id}`;
-  return `\n              <div class="col-xl-3 col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="200ms" data-cat="${e.category}" data-form="${formKey[e.form] || ""}">\n                <div class="blog-one__single">\n                  <a href="${href}">\n                    <div class="blog-one__img">\n                      <img src="${e.thumb}"${dimAttr(e.thumb, sizes)} alt="${alt}" loading="lazy">\n                    </div>\n                    <div class="blog-content">\n                      <h3 class="blog-one__title">${title}</h3>\n                      <p class="blog-one__tt">${entryExcerpt(e, locale)}</p>\n                    </div>\n                  </a>\n                </div>\n              </div>`;
+  return `\n              <div class="col-xl-3 col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="200ms" data-cat="${e.category}" data-form="${formKey[e.form] || ""}">\n                <div class="blog-one__single">\n                  <a href="${href}">\n                    <div class="blog-one__img">\n                      <img src="${e.thumb}"${dimAttr(e.thumb, sizes)} alt="${alt}" loading="lazy">\n                    </div>\n                    <div class="blog-content">\n                      <h3 class="blog-one__title">${cardTitle}</h3>\n                      <p class="blog-one__tt">${entryExcerpt(e, locale)}</p>\n                    </div>\n                  </a>\n                </div>\n              </div>`;
 }
 
 function updateChips(html, id, countFn) {

@@ -314,6 +314,44 @@ button.ico-del:hover:not(:disabled){color:var(--dz-err);border-color:var(--dz-er
 .tlens .v{flex:1;min-width:0;color:var(--w3-text2)}
 .tlens .v b{color:var(--w3-text);font-weight:600}
 .missing-sum{display:inline-block;margin-left:6px;font-size:10px;padding:1px 6px;border-radius:3px;background:var(--dz-warn-bg);border:1px solid var(--dz-warn-line);color:var(--dz-warn);white-space:nowrap}
+/* 分类页：机型 + 品类一页两卡（12 行内容不值得用标签切换）。窄屏堆叠。 */
+.cat-2col{display:grid;grid-template-columns:1fr 1fr;gap:var(--dz-gap);align-items:start}
+@media(max-width:1100px){.cat-2col{grid-template-columns:1fr}}
+.cat-block{margin-bottom:0}
+.cat-block .dz-toolbar{margin-bottom:4px}
+.cat-block h3{font-size:13px;color:var(--w3-text);text-transform:none;letter-spacing:0}
+button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var(--w3-text)}
+/* 精选产品：大图卡（Joe：38px 认不出来）。图为主、名为辅、ID 淡。 */
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.fg{position:relative;border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);background:var(--w3-bg2);padding:8px;cursor:grab}
+.fg:hover{border-color:var(--w3-line2)}
+.fg.dragging{opacity:.4}
+.fg.over{border-color:var(--w3-accent);background:var(--dz-accent-bg-soft)}
+.fg img{width:100%;height:132px;object-fit:contain;background:var(--w3-tile);border-radius:5px;display:block}
+.fg .nm{font-size:12px;line-height:1.35;margin-top:7px;color:var(--w3-text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.fg .mt{display:flex;align-items:center;gap:6px;margin-top:5px}
+.fg .id{font-size:10.5px;color:var(--w3-text3);font-variant-numeric:tabular-nums}
+.fg .seq{position:absolute;top:6px;left:6px;min-width:20px;height:20px;padding:0 5px;border-radius:5px;background:var(--dz-glass);color:var(--w3-text);font-size:11px;font-weight:600;display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.fg .ord{margin-left:auto;display:inline-flex;gap:3px}
+.fg .rm{position:absolute;top:6px;right:6px}
+/* 产品图片选择器（Joe：下拉里 100+ 字符长串根本认不出） */
+.pk-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:24px}
+.pk{background:var(--w3-panel);border:1px solid var(--w3-line2);border-radius:var(--dz-radius);width:min(1040px,100%);max-height:86vh;display:flex;flex-direction:column;overflow:hidden}
+.pk-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--w3-line);flex-wrap:wrap}
+.pk-head h3{margin:0;font-size:13px;color:var(--w3-text);text-transform:none;letter-spacing:0}
+.pk-head input[type=search]{flex:1;min-width:200px}
+.pk-body{overflow:auto;padding:12px 14px}
+.pk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:11px}
+.pk-i{border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);background:var(--w3-bg2);padding:8px;cursor:pointer;text-align:left;color:inherit;font:inherit;height:auto;display:block}
+.pk-i:hover{border-color:var(--w3-accent);background:var(--w3-panel2)}
+.pk-i img{width:100%;height:140px;object-fit:contain;background:var(--w3-tile);border-radius:5px;display:block}
+.pk-i .nm{font-size:12px;line-height:1.35;margin-top:7px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--w3-text)}
+.pk-i .id{font-size:10.5px;color:var(--w3-text3);margin-top:3px;font-variant-numeric:tabular-nums}
+.pk-i.added{opacity:.5;cursor:not-allowed;border-color:var(--dz-ok-line)}
+.pk-i.added:hover{border-color:var(--dz-ok-line);background:var(--w3-bg2)}
+.pk-i .tag{position:absolute;top:6px;right:6px;background:var(--dz-ok);color:var(--dz-on-accent);font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px}
+.pk-i{position:relative}
+.pk-foot{padding:10px 14px;border-top:1px solid var(--w3-line);display:flex;align-items:center;gap:10px}
 .cat-add{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;height:auto;padding:10px;margin-top:12px;border:1px dashed var(--w3-line2);background:transparent;color:var(--w3-text3);border-radius:var(--dz-radius-s);font-size:13px}
 .cat-add:disabled{opacity:.7;cursor:not-allowed}
 .cat-add:hover:not(:disabled){border-color:var(--w3-accent);color:var(--w3-accent)}
@@ -453,18 +491,20 @@ button.ico-del:hover:not(:disabled){color:var(--dz-err);border-color:var(--dz-er
   <div id="v-cats" style="display:none">
     <!-- 返回=页级导航，置于 tab 切换之上（Joe①）-->
     <div class="dz-pagenav"><button onclick="backToList()">← 返回列表</button></div>
-    <div class="dz-tabs">
-      <button class="dz-tab active" data-tab="model" onclick="catTab('model')">机型 <span class="muted">Model</span></button>
-      <button class="dz-tab" data-tab="form" onclick="catTab('form')">品类 / 形态 <span class="muted">Type</span></button>
-    </div>
+    <!-- Joe：两块内容一共 12 行，标签切换是纯多余点击 → 一页两卡并排（窄屏自动堆叠）。
+         两块各自保存：它们打不同端点、守卫不同、后果也不同（删机型断 URL / 改品类名连带改产品数据），
+         合成一个保存按钮会让"哪一半失败了"变得看不出来。 -->
+    <div class="cat-2col">
 
     <!-- 机型轴（可编辑：categories.json.display + locales.model_display，统一为一个显示名）-->
-    <div id="cat-tab-model">
+    <div id="cat-tab-model" class="card cat-block">
       <div class="dz-toolbar">
-        <span class="muted">机型 · 每个机型一个显示名（官网列表/导航/详情/瓦片统一用它）；slug 是 URL 标识、一期不可改</span>
+        <h3 style="margin:0">机型 <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">Model</span></h3>
         <div class="spacer"></div>
+        <button id="cat-manage-btn" onclick="toggleCatManage()" title="进入管理态才显示删除按钮（防误删）">🔧 管理</button>
         <button class="primary" onclick="saveCats()">💾 保存</button>
       </div>
+      <p class="muted" style="font-size:11.5px;margin:0 0 10px">每个机型一个显示名（官网列表/导航/详情/瓦片统一用它）；URL 段一期不可改</p>
       <table class="cat-tbl">
         <thead><tr>
           <th class="c-ord">顺序</th><th>显示名</th><th class="c-act">操作</th>
@@ -477,12 +517,14 @@ button.ico-del:hover:not(:disabled){color:var(--dz-err);border-color:var(--dz-er
     </div>
 
     <!-- 形态/品类轴（可编辑：data/forms.json 单源·契约 §3/§4）-->
-    <div id="cat-tab-form" style="display:none">
+    <div id="cat-tab-form" class="card cat-block">
       <div class="dz-toolbar">
-        <span class="muted">品类 / 形态 · 每个品类一个显示名（也是产品的形态值）；URL 段 /type/… 一期不可改</span>
+        <h3 style="margin:0">品类 / 形态 <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">Type</span></h3>
         <div class="spacer"></div>
+        <button id="form-manage-btn" onclick="toggleFormManage()" title="进入管理态才显示删除按钮（防误删）">🔧 管理</button>
         <button class="primary" onclick="saveForms()">💾 保存</button>
       </div>
+      <p class="muted" style="font-size:11.5px;margin:0 0 10px">每个品类一个显示名（也是产品的形态值）；URL 段 /type/… 一期不可改</p>
       <table class="cat-tbl">
         <thead><tr>
           <th class="c-ord">顺序</th><th>显示名</th><th class="cat-cnt">产品数</th><th class="c-act">操作</th>
@@ -493,6 +535,8 @@ button.ico-del:hover:not(:disabled){color:var(--dz-err);border-color:var(--dz-er
       <div class="buildnote" id="form-build-note" style="display:none"></div>
       <p class="muted" style="font-size:12px;margin-top:10px">真源=官网 <span class="tnum">data/forms.json</span>。<b>顺序</b>决定 /type 页与筛选 chip 的排列。<b>改显示名</b>会连带修改引用它的所有产品（含草稿/下架），页面不需重建。<b>加/删/排序</b>的数据即时入库，但 <b>/type/ 页面与导航计数需官网构建后生效</b>。URL 段一经创建不可改（改=断链接）。</p>
     </div>
+
+    </div><!-- /.cat-2col -->
   </div>
 
   <!-- ============ 首页内容 CMS（W5 P1·第一刀=Hero）============ -->
@@ -816,7 +860,7 @@ function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
 let catsEdit = [];
-async function showCats() { showView("cats"); catTab("model"); await loadCatsView(); }
+async function showCats() { showView("cats"); await Promise.all([loadCatsView(), loadForms()]); }   // 一页两卡：两块都要加载
 async function loadCatsView() {
   const rows = $("#cats-rows");
   rows.innerHTML = `<tr><td colspan="3" class="muted">加载中… <span class="spin"></span></td></tr>`;
@@ -839,7 +883,7 @@ function paintCats() {
           ? `<input class="cat-slugin" value="${esc(c.slug)}" oninput="catsEdit[${i}].slug=this.value.trim()" placeholder="url-段（如 performance-gen-4）" title="新机型的 URL 段：小写字母/数字/连字符。定了就不能再改（改=断链接）">`
           : `<span class="cat-slug" title="URL 标识（一期不可改：改了会断现有链接）">/${esc(c.slug)}/</span>`}
       </div></td>
-      <td class="c-act"><button class="ico ico-del" onclick="catDel(${i})" title="删机型（保存后生效；有产品会被拒删、需先迁移）">✕</button></td>
+      <td class="c-act">${(catManage || c._new) ? `<button class="ico ico-del" onclick="catDel(${i})" title="${c._new ? "撤掉这行未保存的新机型" : "删机型（保存后生效；有产品会被拒删、需先迁移）"}">✕</button>` : ""}</td>
     </tr>`).join("") || `<tr><td colspan="3" class="muted">无机型</td></tr>`;
 }
 function catMove(i, d) { const j = i + d; if (j < 0 || j >= catsEdit.length) return; const t = catsEdit[i]; catsEdit[i] = catsEdit[j]; catsEdit[j] = t; paintCats(); }
@@ -899,12 +943,22 @@ function showBuildNote(which, text) {
   el.style.display = "flex";
 }
 
-// ---------- 分类：机型 / 品类形态 双 tab 切换 ----------
-function catTab(t) {
-  document.querySelectorAll("#v-cats .dz-tab").forEach((el) => el.classList.toggle("active", el.dataset.tab === t));
-  $("#cat-tab-model").style.display = t === "model" ? "" : "none";
-  $("#cat-tab-form").style.display = t === "form" ? "" : "none";
-  if (t === "form" && !_formsLoaded) loadForms();
+// ---------- 分类页的两个「管理」态 ----------
+// 沿用图库那套（manageMode + 🔧 管理 / ✓ 管理中），不造第二种交互。
+// 默认态只给改名/排序（低风险、常用）；删除是破坏性的（机型 slug=产品 URL、品类删了产品会从 /type/ 消失），
+// 后端虽有 count>0 守卫，前端也不该让它一直摆在手边。
+let catManage = false, formManage = false;
+function toggleCatManage() {
+  catManage = !catManage;
+  const b = $("#cat-manage-btn");
+  if (b) { b.classList.toggle("on", catManage); b.textContent = catManage ? "✓ 管理中" : "🔧 管理"; }
+  paintCats();
+}
+function toggleFormManage() {
+  formManage = !formManage;
+  const b = $("#form-manage-btn");
+  if (b) { b.classList.toggle("on", formManage); b.textContent = formManage ? "✓ 管理中" : "🔧 管理"; }
+  paintForms();
 }
 let _formsLoaded = false, formsEdit = [], _formOrphans = [];
 async function loadForms() {
@@ -929,7 +983,7 @@ function paintForms() {
           : `<span class="cat-slug" title="URL 标识（一期不可改：改了会断 /type/ 链接）">/type/${esc(f.key)}/</span>`}
       </div></td>
       <td class="cat-cnt tnum">${f._new ? "—" : f.count + " 个"}</td>
-      <td class="c-act"><button class="ico ico-del" onclick="formDel(${i})" title="删品类（保存后生效；有产品会被拒删、需先迁移）">✕</button></td>
+      <td class="c-act">${(formManage || f._new) ? `<button class="ico ico-del" onclick="formDel(${i})" title="${f._new ? "撤掉这行未保存的新品类" : "删品类（保存后生效；有产品会被拒删、需先迁移）"}">✕</button>` : ""}</td>
     </tr>`).join("");
   const orph = _formOrphans.map((f) => `<tr><td class="muted">⚠️</td><td>${esc(f.form)} <span class="muted" style="font-size:11px">（不在 forms.json 里，列表页筛不出、官网构建会拦）</span></td><td class="cat-cnt tnum">${f.count} 个</td><td></td></tr>`).join("");
   $("#forms-rows").innerHTML = known + orph || `<tr><td colspan="4" class="muted">无品类</td></tr>`;
@@ -1092,20 +1146,89 @@ function paintFeatured() {
   const box = $("#home-featured-box"); if (!box) return;
   const byId = new Map(products.map((p) => [p.id, p]));
   const chosen = homeFeatured.map((id) => byId.get(id)).filter(Boolean);
-  const avail = products.filter((p) => !homeFeatured.includes(p.id));
-  box.innerHTML = `<div class="card"><h3>精选产品 · 首页 Popular products <span class="muted" style="font-weight:400;font-size:11px">最多 8 个、按顺序显示；不选=首页自动按形态轮询挑</span></h3>` +
-    (chosen.length ? `<div id="feat-list">` + chosen.map((p, i) => `
-      <div class="fr" draggable="true" data-i="${i}"
-           ondragstart="featDragStart(event,${i})" ondragover="featDragOver(event,${i})" ondragleave="featDragLeave(event)" ondrop="featDrop(event,${i})" ondragend="featDragEnd(event)">
-        <span class="grip" title="拖动排序">⠿</span>
-        <span class="pos">${i + 1}</span>
+  // Joe：38px 缩略图认不出是哪个产品 → 大图卡（图为主、名为辅、ID 淡色小字）。
+  // 拖拽排序保留（他刚学会的），↑↓ 兜底保留；移出按钮按新规矩只在「管理」态出现。
+  box.innerHTML = `<div class="card">
+    <div class="dz-toolbar">
+      <h3 style="margin:0">精选产品 · 首页 <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">最多 8 个、按顺序显示；不选=首页自动按形态轮询挑</span></h3>
+      <div class="spacer"></div>
+      <button id="feat-manage-btn" onclick="toggleFeatManage()" title="进入管理态才显示移出按钮（防误删）">${featManage ? "✓ 管理中" : "🔧 管理"}</button>
+      <button class="primary" ${homeFeatured.length >= 8 ? "disabled" : ""} onclick="openPicker()" title="${homeFeatured.length >= 8 ? "已满 8 个，先移出一个" : "从图片网格里挑"}">＋ 添加产品（${homeFeatured.length}/8）</button>
+    </div>` +
+    (chosen.length ? `<div class="fgrid" id="feat-list">` + chosen.map((p, i) => `
+      <div class="fg${featManage ? " on-manage" : ""}" draggable="true" data-i="${i}"
+           ondragstart="featDragStart(event,${i})" ondragover="featDragOver(event,${i})" ondragleave="featDragLeave(event)" ondrop="featDrop(event,${i})" ondragend="featDragEnd(event)"
+           title="拖动排序">
+        <span class="seq">${i + 1}</span>
+        ${featManage ? `<button class="ico ico-del rm" onclick="featRemove(${p.id})" title="移出精选">✕</button>` : ""}
         ${p.thumb ? `<img src="${esc(imgUrl(p.thumb))}" alt="" loading="lazy">` : `<img alt="" style="opacity:.25">`}
-        <span class="nm" title="${esc(p.title)}">${esc(shortTitle(p.title))}</span>
-        <span class="id">#${p.id}</span>
-        <span class="ord"><button class="ico" onclick="featMove(${i},-1)" ${i === 0 ? "disabled" : ""} title="上移">↑</button><button class="ico" onclick="featMove(${i},1)" ${i === chosen.length - 1 ? "disabled" : ""} title="下移">↓</button></span>
-        <button class="ico ico-del" onclick="featRemove(${p.id})" title="移出精选">✕</button>
+        <div class="nm" title="${esc(p.title)}">${esc(p.card_title || shortTitle(p.title))}</div>
+        <div class="mt"><span class="id">#${p.id}</span>
+          <span class="ord"><button class="ico" onclick="featMove(${i},-1)" ${i === 0 ? "disabled" : ""} title="上移">↑</button><button class="ico" onclick="featMove(${i},1)" ${i === chosen.length - 1 ? "disabled" : ""} title="下移">↓</button></span>
+        </div>
       </div>`).join("") + `</div>` : `<p class="muted">未选精选产品——首页将自动按形态轮询挑 8 个。</p>`) +
-    `<div class="field" style="margin-top:10px"><label>添加产品（${homeFeatured.length}/8）</label><select ${homeFeatured.length >= 8 ? "disabled" : ""} onchange="featAdd(this.value);this.value='';"><option value="">＋ 选产品加入…</option>${avail.map((p) => `<option value="${p.id}">${esc(p.title)} (#${p.id})</option>`).join("")}</select></div></div>`;
+    `</div>`;
+}
+// 「管理」态：与图库、分类页同一套（默认不露破坏性入口）
+let featManage = false;
+function toggleFeatManage() { featManage = !featManage; paintFeatured(); }
+
+// ---------- 产品图片选择器 ----------
+// Joe 卡在"看不见哪个是哪个"：原来是个 <select>，每项是 100+ 字符的 listing 长串。
+// 认产品靠的是图不是字符串 → 图片网格 + 搜索（名字/机型两种都能命中）+ 已加入就地标记。
+let _pkQ = "";
+function openPicker() {
+  if (homeFeatured.length >= 8) return msg("已经 8 个了——先移出一个再加", 1);
+  _pkQ = "";
+  if (!$("#pk-mask")) {
+    const d = document.createElement("div");
+    d.id = "pk-mask"; d.className = "pk-mask";
+    d.onclick = (e) => { if (e.target === d) closePicker(); };
+    document.body.appendChild(d);
+  }
+  $("#pk-mask").style.display = "flex";
+  paintPicker();
+  setTimeout(() => { const i = $("#pk-q"); if (i) i.focus(); }, 30);
+  document.addEventListener("keydown", pkEsc);
+}
+function closePicker() { const m = $("#pk-mask"); if (m) m.style.display = "none"; document.removeEventListener("keydown", pkEsc); }
+function pkEsc(e) { if (e.key === "Escape") closePicker(); }
+function pickerSearch(v) { _pkQ = v; paintPicker(); }
+function paintPicker() {
+  const m = $("#pk-mask"); if (!m) return;
+  const q = _pkQ.trim().toLowerCase();
+  const inFeat = new Set(homeFeatured);
+  // 按产品名 + 机型两种命中（机型既比 slug 也比显示名——Joe 想的是"Mini"不是 "mini"）
+  const hit = (p) => !q || [p.title, p.card_title, String(p.id), p.category, catName(p.category), p.form]
+    .some((x) => String(x || "").toLowerCase().includes(q));
+  const list = products.filter(hit);
+  m.innerHTML = `<div class="pk">
+    <div class="pk-head">
+      <h3>选产品加入精选（${homeFeatured.length}/8）</h3>
+      <input type="search" id="pk-q" placeholder="搜产品名 / 机型 / 编号…" value="${esc(_pkQ)}" oninput="pickerSearch(this.value)">
+      <button onclick="closePicker()">完成</button>
+    </div>
+    <div class="pk-body">
+      ${list.length ? `<div class="pk-grid">` + list.map((p) => {
+        const added = inFeat.has(p.id);
+        return `<button class="pk-i${added ? " added" : ""}" ${added ? "disabled" : ""} onclick="pickerAdd(${p.id})" title="${esc(p.title)}">
+          ${added ? `<span class="tag">已加入</span>` : ""}
+          ${p.thumb ? `<img src="${esc(imgUrl(p.thumb))}" alt="" loading="lazy">` : `<img alt="" style="opacity:.25">`}
+          <div class="nm">${esc(p.card_title || shortTitle(p.title))}</div>
+          <div class="id">#${p.id} · ${esc(catName(p.category))}</div>
+        </button>`;
+      }).join("") + `</div>` : `<p class="muted" style="padding:20px 4px">没有匹配「${esc(_pkQ)}」的产品。</p>`}
+    </div>
+    <div class="pk-foot"><span class="muted" style="font-size:12px">点图即加入，可连续加；加满 8 个会自动关闭。${q ? ` · 显示 ${list.length}/${products.length}` : ""}</span></div>
+  </div>`;
+  const i = $("#pk-q"); if (i && _pkQ) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+}
+function pickerAdd(id) {
+  if (homeFeatured.includes(id) || homeFeatured.length >= 8) return;
+  homeFeatured.push(id);
+  paintFeatured();
+  if (homeFeatured.length >= 8) { closePicker(); msg("已满 8 个 —— 点「保存首页」生效"); return; }
+  paintPicker();   // 就地把这张标成"已加入"，不用等加完才发现重复
 }
 // 产品标题很长（"…for Starlink Mini, 3-Axis…"），列表里只需认出是哪个：留前段 + 悬停看全名。
 function shortTitle(s) {
@@ -1133,7 +1256,6 @@ function featDrop(e, to) {
 }
 function featMove(i, d) { const j = i + d; if (j < 0 || j >= homeFeatured.length) return; const t = homeFeatured[i]; homeFeatured[i] = homeFeatured[j]; homeFeatured[j] = t; paintFeatured(); }
 function featRemove(id) { homeFeatured = homeFeatured.filter((x) => x !== id); paintFeatured(); }
-function featAdd(v) { const id = Number(v); if (id && !homeFeatured.includes(id) && homeFeatured.length < 8) { homeFeatured.push(id); paintFeatured(); } }
 const featChanged = () => JSON.stringify(homeFeatured) !== JSON.stringify(origFeatured);
 function homePayload(extra) {
   const p = { edits: collectHomeEdits(), ...(extra || {}) };
