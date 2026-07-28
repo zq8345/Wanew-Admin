@@ -1,3 +1,6 @@
 .dev.vars
 node_modules/
 .wrangler/
+
+# r2-thumbs.mjs 的本地临时产物（原图/缩略图缓存），不入库
+.thumbtmp/
