@@ -292,11 +292,17 @@ export function bulkPagePlan(
 }
 
 // 批量端点：对 ids 逐个应用 op(status/category/form) → 累积所有变更进一个 files[] → 一次 commitFiles。
-export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], op: string, value: string, opts: { email: string }) {
+// opts.forms：用**将要写入**的 forms.json 覆盖本次操作的形态真源（改品类显示名时，新名还不在 ctx.forms 里）。
+//   一个覆盖同时喂白名单与 formKey ⇒ 二者不可能在同一次操作内打架。
+// opts.extraFiles/message：让调用方把 forms.json 等一起塞进**同一次 commit**（原子；否则中间态会让
+//   官网 forms-integrity-check 看到"产品引用了 forms.json 里没有的 form"而 FAIL）。
+export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], op: string, value: string, opts: { email: string; forms?: { key: string; name: string }[]; extraFiles?: any[]; message?: string }) {
   if (!["status", "category", "form"].includes(op)) return { error: `未知批量操作：${op}` };
-  const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome, formKey } = ctx;
+  const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome } = ctx;
   const CATS: string[] = (ctx.categories?.categories || []).map((c: any) => c.slug);
-  const FORMS: string[] = (ctx.forms || []).map((f: any) => f.name);   // forms.json 单源
+  const formsEff = opts.forms ?? ctx.forms ?? [];
+  const FORMS: string[] = formsEff.map((f: any) => f.name);   // forms.json 单源（可被 opts.forms 覆盖）
+  const formKey = formKeyOf(formsEff);
   if (op === "status" && !["draft", "published", "archived"].includes(value)) return { error: "status 非法" };
   if (op === "category" && !CATS.includes(value)) return { error: `机型非法：${value}` };
   if (op === "form" && value && !FORMS.includes(value)) return { error: `形态非法：${value}` };
@@ -361,16 +367,18 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
       if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey } as any)) });
     }
   }
-  const r = await commitFiles(env, cfg, files, `admin: bulk ${op}=${value} ${touched} products (${opts.email})`);
+  if (opts.extraFiles?.length) files.push(...opts.extraFiles);   // 与产品改动同一次 commit=原子
+  const r = await commitFiles(env, cfg, files, opts.message || `admin: bulk ${op}=${value} ${touched} products (${opts.email})`);
   return { ...r, count: touched, files: files.map((f) => f.path) };
 }
 
 
 // ================= 批2-3：类目/机型管理 =================
-// 一期边界：**slug 集合不可变**（增删类目牵动目录结构/列表页存在性=二期）；可改 display 与顺序。
-// display/model 变更 → 重烘焙受影响页（该类目全部详情页三语存在性规则 + 该类目列表 + 总列表）。
-// 顺序变更只落 json（首页瓦片顺序吃它——随下次本地管线；诚实边界，注明在响应里）。
-export function validateCategories(body: any, existing: any): { cats?: any; error?: string; removed?: string[] } {
+// 一期边界（契约 §5）：可**加 / 改显示名 / 排序 / 带守卫删**；**改 slug 不做**（slug=URL 段 /{slug}/，
+// 改=断外链+需 301 迁移）。加机型=新 slug=新 URL、不碰现有=安全。
+// display/model 变更 → 重烘焙受影响页；顺序变更只落 json。
+// ⚠️ 新机型的**页面**是从零生成的（regen.mjs 需 fs），edge 跑不了 → 必须过一次官网 build（契约 §1/§2）。
+export function validateCategories(body: any, existing: any): { cats?: any; error?: string; removed?: string[]; added?: string[] } {
   const list = body?.categories;
   if (!Array.isArray(list) || !list.length) return { error: "categories must be a non-empty array" };
   const slugs = list.map((c: any) => c?.slug);
@@ -381,8 +389,69 @@ export function validateCategories(body: any, existing: any): { cats?: any; erro
   const newSlugs = new Set(slugs);
   const added = slugs.filter((x: string) => !oldSlugs.has(x));
   const removed = [...oldSlugs].filter((x) => !newSlugs.has(x as string)) as string[];
-  if (added.length) return { error: `加机型暂未开放（等官网"从零建列表页"机制定契约）。added=${added}` };   // 只放开删、仍拒加
-  return { cats: { ...(existing || {}), categories: list.map((c: any) => ({ slug: c.slug, display: String(c.display) })) }, removed };
+  return { cats: { ...(existing || {}), categories: list.map((c: any) => ({ slug: c.slug, display: String(c.display) })) }, removed, added };
+}
+
+// ================= 品类/形态轴管理（契约 §3/§4）=================
+// 真源=data/forms.json 的 forms[]（[{key,name}]，数组顺序=/type 页序=chip 序）。
+// 一期：加 / 排序 / 改显示名 / 带守卫删；**改 key 不做**（key=/type/{key}/ URL 段，改=断外链）。
+// 改 key 在本模型里天然表现为「删旧 key + 加新 key」，而删有 count>0 守卫 ⇒ 在用的 key 改不动 = 契约 §5 自动成立。
+export function validateForms(body: any, existing: any[]): {
+  forms?: { key: string; name: string }[]; error?: string;
+  added?: string[]; removed?: string[]; renamed?: { key: string; from: string; to: string }[];
+} {
+  const list = body?.forms;
+  if (!Array.isArray(list) || !list.length) return { error: "forms must be a non-empty array" };
+  const keys = list.map((f: any) => f?.key);
+  if (keys.some((k: any) => typeof k !== "string" || !/^[a-z0-9-]+$/.test(k))) return { error: "品类 key 只能小写字母/数字/连字符（key = /type/{key}/ 的 URL 段）" };
+  if (new Set(keys).size !== keys.length) return { error: "品类 key 重复" };
+  const names = list.map((f: any) => (typeof f?.name === "string" ? f.name.trim() : ""));
+  if (names.some((n: string) => !n)) return { error: "品类显示名不能为空" };
+  // 显示名=产品 form 字段值（桶标识），重名会让两个品类抢同一批产品 → 必须唯一
+  if (new Set(names).size !== names.length) return { error: "品类显示名重复（显示名就是产品的形态值，重了会归错桶）" };
+  const oldByKey = new Map((existing || []).map((f: any) => [f.key, f.name]));
+  const newKeys = new Set(keys);
+  const added = keys.filter((k: string) => !oldByKey.has(k));
+  const removed = [...oldByKey.keys()].filter((k) => !newKeys.has(k as string)) as string[];
+  const renamed = list
+    .filter((f: any) => oldByKey.has(f.key) && oldByKey.get(f.key) !== String(f.name).trim())
+    .map((f: any) => ({ key: f.key, from: String(oldByKey.get(f.key)), to: String(f.name).trim() }));
+  return { forms: list.map((f: any, i: number) => ({ key: f.key, name: names[i] })), added, removed, renamed };
+}
+
+// 改品类显示名 → 连带把所有引用旧值的产品 form 改成新值（契约 §3：不连带改=孤儿，官网 build integrity 闸 FAIL）。
+// ⚠️ 必须扫**全部**产品文件而非只扫 manifest——manifest 只含已发布的，草稿/下架产品同样带 form，
+//    漏改它们=一发布就撞白名单校验。返回 files（不 commit），由调用方与 forms.json 一起原子提交。
+// 注：品类显示名只是**数据桶值**——卡片 data-form 用的是 key、chip 标签来自 chrome.json，
+//    故改显示名不改任何已 built 页面，只动 products/*.json + products-index.json。
+export async function formRenameFiles(env: Env, cfg: any, ctx: Ctx, renames: { from: string; to: string }[]): Promise<{ files: any[]; touched: number; scanned: number; error?: string }> {
+  const map = new Map(renames.map((r) => [r.from, r.to]));
+  const files: any[] = [];
+  let ids: number[] = [];
+  try {
+    const res = await fetch(`https://api.github.com/repos/${(env as any).GITHUB_REPO}/contents/data/products`, {
+      headers: { Authorization: `Bearer ${(env as any).GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return { files: [], touched: 0, scanned: 0, error: `github contents failed: ${res.status}` };
+    const arr: any = await res.json();
+    if (Array.isArray(arr)) ids = arr.filter((f: any) => /^\d+\.json$/.test(f.name)).map((f: any) => Number(f.name.replace(".json", "")));
+  } catch (e: any) { return { files: [], touched: 0, scanned: 0, error: `github fetch error: ${String(e).slice(0, 160)}` }; }
+
+  let touched = 0;
+  for (const id of ids) {
+    const raw = await readFile(env, cfg, `data/products/${id}.json`);
+    if (!raw) continue;
+    let prod: any; try { prod = JSON.parse(raw); } catch { continue; }
+    const to = prod.form ? map.get(prod.form) : undefined;
+    if (!to) continue;
+    prod.form = to;
+    files.push({ path: `data/products/${id}.json`, content: matchJson(raw, prod) });
+    touched++;
+  }
+  // manifest（已发布产品的索引）同步改名
+  const manifest = ctx.manifest.map((e: any) => (e.form && map.has(e.form) ? { ...e, form: map.get(e.form) } : e));
+  if (JSON.stringify(manifest) !== JSON.stringify(ctx.manifest)) files.push({ path: "data/products-index.json", content: matchJson(ctx.manifestRaw, manifest) });
+  return { files, touched, scanned: ids.length };
 }
 
 // 重烘焙一个类目：详情页（三语存在性）双步 + 该类目列表 + 总列表（各语种存在的）。返回 files 数组。

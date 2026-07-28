@@ -45,7 +45,7 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // ================= 批2-2：产品 CRUD（双步三语，继承 [[path]].js 骨架） =================
 // 写路径全部走 loadCtx（GitHub 读真源）→ validate(merge) → publish/unpublish（原子 commit）。
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
-import { loadCtx, validateProduct, publishProduct, unpublishProduct, publishBulk, validateCategories, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishService, SERVICE_META_KEYS, SERVICE_CARDS, publishPageMeta, SEO_PAGES, parseAuditMessage } from "./publish";
+import { loadCtx, validateProduct, publishProduct, unpublishProduct, publishBulk, validateCategories, validateForms, formRenameFiles, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishService, SERVICE_META_KEYS, SERVICE_CARDS, publishPageMeta, SEO_PAGES, parseAuditMessage } from "./publish";
 import type { HomeEdit, ContactEdit, ServiceEdit, SeoEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
@@ -253,10 +253,26 @@ app.put("/api/admin/categories", async (c) => {
     const n = (ctx.manifest as any[]).filter((m: any) => m.category === r).length;
     if (n > 0) return c.json({ error: `机型「${r}」下还有 ${n} 个产品，删了会断它们的 URL。请先用「批量改机型」把这些产品迁到别的机型，再删。` }, 400);
   }
+  // ⭐ 加机型（契约 §2）：model_display 对新 slug **必填**——缺了 listTitleOf 返 null，
+  // 新机型页会沿用被播种参考页的标题（如误显示 Mini-Wanew…）。不是崩、是静默错标题，所以在此拦住。
+  const added = v.added || [];
+  const mdIn: Record<string, string> = (body?.model_display && typeof body.model_display === "object" && !Array.isArray(body.model_display)) ? body.model_display : {};
+  const lackMd = added.filter((s) => typeof mdIn[s] !== "string" || !mdIn[s].trim());
+  if (lackMd.length) return c.json({ error: `新机型必须给机型显示名（model_display）：${lackMd.join(",")}` }, 400);
   // display 变更的类目 → 重烘焙；纯顺序变更只落 json（首页瓦片顺序随下次本地管线——诚实边界）
+  // 新加的 slug 不进 changed：它的页面还不存在（要官网 build 从零生成），重烘焙无从下手。
   const oldMap: Record<string,string> = {}; for (const cc of ctx.categories.categories) oldMap[cc.slug] = cc.display;
-  const changed = v.cats.categories.filter((cc: any) => oldMap[cc.slug] !== cc.display).map((cc: any) => cc.slug);
+  const addedSet = new Set(added);
+  const changed = v.cats.categories.filter((cc: any) => !addedSet.has(cc.slug) && oldMap[cc.slug] !== cc.display).map((cc: any) => cc.slug);
   const files: any[] = [{ path: "data/categories.json", content: JSON.stringify(v.cats, null, 2) + "\n" }];
+  // 新机型的 model_display 与 categories.json 同一次 commit（原子：避免"有机型没标题"的中间态）
+  if (added.length) {
+    const rawLoc = await readFile(c.env, cfg, "data/locales.json");
+    const locJson = JSON.parse(rawLoc!);
+    locJson.model_display = { ...(locJson.model_display || {}) };
+    for (const s of added) locJson.model_display[s] = mdIn[s].trim();
+    files.push({ path: "data/locales.json", content: JSON.stringify(locJson, null, 2) + "\n" });
+  }
   try {
     const ctx2 = { ...ctx, categories: v.cats, catmap: Object.fromEntries(v.cats.categories.map((cc: any) => [cc.slug, cc.display])) };
     for (const slug of changed) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug));
@@ -269,8 +285,14 @@ app.put("/api/admin/categories", async (c) => {
       const anyRemain = v.cats.categories[0]?.slug;
       if (anyRemain) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, anyRemain));
     }
-    const r = await (await import("../vendor/github.js") as any).commitFiles(c.env, cfg, files, `admin: categories update${removed.length ? ` (删机型 ${removed.join(",")})` : ""} (${operator(c)})`);
-    return c.json({ ok: true, rebaked: changed, removed, filesWritten: files.length, note: removed.length ? `已删机型 ${removed.join(",")}（空列表页删除 + 总列表刷新）` : (changed.length ? "display 变更类目已重烘焙" : "仅顺序/无实质变更——首页瓦片顺序随下次本地管线"), ...r });
+    const tag = [added.length ? `加机型 ${added.join(",")}` : "", removed.length ? `删机型 ${removed.join(",")}` : ""].filter(Boolean).join(" / ");
+    const r = await (await import("../vendor/github.js") as any).commitFiles(c.env, cfg, files, `admin: categories update${tag ? ` (${tag})` : ""} (${operator(c)})`);
+    // ⚠️ 诚实边界（契约 §1）：官网没有 CI，新机型的页面由 regen.mjs（需 fs）生成 —— edge 跑不了。
+    // 数据已提交，但 /{slug}/ 页面要等官网跑一次 build 才出现。别让用户以为立刻可见。
+    const note = added.length
+      ? `已提交新机型 ${added.join(",")}（数据已入库）。⚠️ 机型页面需官网构建后才生效——请知会官网跑一次 build，届时 /${added[0]}/ 及三语页会出现。`
+      : (removed.length ? `已删机型 ${removed.join(",")}（空列表页删除 + 总列表刷新）` : (changed.length ? "display 变更类目已重烘焙" : "仅顺序/无实质变更——首页瓦片顺序随下次本地管线"));
+    return c.json({ ok: true, rebaked: changed, removed, added, needsSiteBuild: added.length > 0, filesWritten: files.length, note, ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
@@ -295,9 +317,13 @@ app.put("/api/admin/models", async (c) => {
   const rawLoc = await readFile(c.env, cfg, "data/locales.json");
   const loc = JSON.parse(rawLoc!);
   const oldMd = loc.model_display || {};
-  // 键集不可变（键=类目 slug 契约；增删=二期）
-  const kOld = Object.keys(oldMd).sort().join(","), kNew = Object.keys(md).sort().join(",");
-  if (kOld !== kNew) return c.json({ error: `一期 model_display 键集不可变。旧=[${kOld}] 新=[${kNew}]` }, 400);
+  // 键集规则（放开加机型后）：① 旧键一个都不许丢——含 performance-gen-2 这类"机型已删、键留孤儿"的，
+  // 丢了会让曾用该键的页面标题失源；② 新增键必须是**现存机型 slug**，防打错字凭空造键。
+  const dropped = Object.keys(oldMd).filter((k) => !(k in md));
+  if (dropped.length) return c.json({ error: `model_display 不许丢键（旧键需原样带上，含已删机型的孤儿键）：${dropped.join(",")}` }, 400);
+  const catSlugs = new Set((ctx.categories?.categories || []).map((cc: any) => cc.slug));
+  const strayNew = Object.keys(md).filter((k) => !(k in oldMd) && !catSlugs.has(k));
+  if (strayNew.length) return c.json({ error: `model_display 新键必须是现存机型 slug：${strayNew.join(",")}` }, 400);
   const changed = Object.keys(md).filter((k) => oldMd[k] !== md[k]);
   loc.model_display = md;
   const files: any[] = [{ path: "data/locales.json", content: JSON.stringify(loc, null, 2) + "\n" }];
@@ -754,7 +780,62 @@ app.get("/api/admin/forms", async (c) => {
   // 孤儿：产品有 form 值但不在 forms.json（未映射=列表页筛不出、build integrity 闸会 FAIL）——吼出来
   const knownForms = new Set(forms.map((f: any) => f.name));
   const orphans = Object.keys(count).filter((f) => f && !knownForms.has(f)).map((f) => ({ form: f, slug: "", count: count[f] }));
-  return c.json({ forms: known, orphans, editable: false, note: "形态轴真源=data/forms.json（key=/type/{key}/ URL，name=产品 form 值）。增删/排序/改名端点待接（契约 §3），页面生成需官网 build。" });
+  return c.json({ forms: known, orphans, editable: true, note: "形态轴真源=data/forms.json（key=/type/{key}/ URL，name=产品 form 值）。可加/排序/改显示名/带守卫删；改 key 一期不做（动 URL）。新品类页面需官网构建后生效。" });
+});
+
+// 品类增删排序改名（契约 §3/§4）。body = { forms:[{key,name}] } 全量覆写，服务端按 key diff。
+// 三件事一次做对：① 删=count>0 拒删（守卫）② 改显示名=连带改所有产品 form（原子同 commit）
+// ③ 加/排序=只落数据，页面等官网 build。
+app.put("/api/admin/forms", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  let body: any; try { body = await c.req.json(); } catch { return c.json({ error: "bad json body" }, 400); }
+  const ctx = await loadCtx(c.env, cfg);
+  if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
+  const v = validateForms(body, ctx.forms);
+  if (v.error) return c.json({ error: v.error }, 400);
+  const added = v.added || [], removed = v.removed || [], renamed = v.renamed || [];
+
+  // ⭐ 删守卫（契约 §4）：该品类还有产品 → 拒删并报数。静默删会让那些产品从 /type/ 页消失、
+  // data-form 变空，官网 build 的 forms-integrity-check 也会 FAIL。响亮拒 > 静默丢。
+  const oldByKey = new Map((ctx.forms || []).map((f: any) => [f.key, f.name]));
+  for (const key of removed) {
+    const name = String(oldByKey.get(key));
+    const n = (ctx.manifest as any[]).filter((m: any) => m.form === name).length;
+    if (n > 0) return c.json({ error: `品类「${name}」下还有 ${n} 个产品，删了它们会从 /type/${key}/ 页消失。请先用「批量改形态」把这些产品迁到别的品类，再删。` }, 400);
+  }
+
+  const rawForms = await readFile(c.env, cfg, "data/forms.json");
+  const formsJson = JSON.parse(rawForms!);
+  formsJson.forms = v.forms;
+  const formsFile = { path: "data/forms.json", content: JSON.stringify(formsJson, null, 2) + "\n" };
+
+  try {
+    let touched = 0, scanned = 0;
+    let r: any;
+    if (renamed.length) {
+      // 改显示名 → 连带改产品 form（扫全部产品含草稿/下架），与 forms.json 同一次 commit
+      const rf = await formRenameFiles(c.env, cfg, ctx, renamed);
+      if (rf.error) return c.json({ error: "扫描产品失败（未提交）", detail: rf.error }, 502);
+      touched = rf.touched; scanned = rf.scanned;
+      r = await (await import("../vendor/github.js") as any).commitFiles(
+        c.env, cfg, [...rf.files, formsFile],
+        `admin: forms update (改显示名 ${renamed.map((x) => `${x.from}→${x.to}`).join(",")}${touched ? ` · 连带 ${touched} 产品` : ""}) (${operator(c)})`);
+    } else {
+      const tag = [added.length ? `加 ${added.join(",")}` : "", removed.length ? `删 ${removed.join(",")}` : ""].filter(Boolean).join(" / ") || "排序";
+      r = await (await import("../vendor/github.js") as any).commitFiles(c.env, cfg, [formsFile], `admin: forms update (${tag}) (${operator(c)})`);
+    }
+    // ⚠️ 诚实边界（契约 §1）：加品类的 /type/{key}/ 页、以及排序后的 chip 顺序/计数，都由官网
+    // build（regen.mjs + chrome-sync）产出 —— edge 跑不了。数据已入库 ≠ 页面已变。
+    const needsSiteBuild = added.length > 0 || removed.length > 0 || (!renamed.length);
+    const parts: string[] = [];
+    if (added.length) parts.push(`已加品类 ${added.join(",")}`);
+    if (removed.length) parts.push(`已删品类 ${removed.join(",")}`);
+    if (renamed.length) parts.push(`已改显示名 ${renamed.map((x) => `${x.from}→${x.to}`).join(",")}（连带改了 ${touched} 个产品／共扫 ${scanned} 个）`);
+    if (!parts.length) parts.push("已保存新顺序");
+    const note = parts.join("；") + (needsSiteBuild ? "。⚠️ 数据已入库，但 /type/ 页面与导航计数需官网构建后才生效——请知会官网跑一次 build。" : "。改显示名只动数据，页面无需重建。");
+    return c.json({ ok: true, added, removed, renamed, productsTouched: touched, productsScanned: scanned, needsSiteBuild, note, ...r });
+  } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
 // run_worker_first=true 时 Worker 先跑：未匹配的路由必须**显式**回落静态资源
