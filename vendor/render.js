@@ -355,7 +355,20 @@ export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, e
    ⚠️ formOrder 里 key 与 name **都**登记进 rank,所以 C 步把 e.form 归一化成 key 之后
       这段不需要跟着改 —— 分桶键是显示名还是 key,排序结果都一样。
       不传 formOrder 时退回字母序,与改动前逐字一致(向后兼容,调用方漏传不会炸)。 */
-export function pickHomeProducts(entries, cap = 8, featured = null, formOrder = null) {
+export function pickHomeProducts(entries, cap = 8, featured = null, formOrder) {
+  /* 🔴 **formOrder 是必需输入,漏传即抛。** 这条是契约,不是这个函数的偏好:
+     vendored 模块新增输入时,「不传就退回旧行为」读起来像贴心,实际是
+     **「你可以忘记传我,而我不会告诉你」** —— 而 Admin 是 renderHome 的另一个调用方,
+     它第一次就没传(靠字节守卫 re-vendor 才发现)。那和 manifest 丢 path 不只是同一形状,
+     **是同一个机制:一个可以缺席而不出声的输入。**
+     改成必需之后:官网加参数 → Admin re-vendor → **调用点当场炸** → 必须跟上。
+     > **漂移变成一次崩溃,而不是一个需要被发现的差异。**
+     ⚠️ 显式传 `null` 是合法的 —— 它的意思是"我确实不需要按清单排序,用字母序"。
+     **"我明确说不需要"和"我忘了"必须长得不一样**,所以只有 undefined 抛。 */
+  if (formOrder === undefined) {
+    throw new Error("pickHomeProducts: 缺 formOrder。传 data/forms.json 的 forms 数组以按站点形态次序排;" +
+      "确实不需要排序就显式传 null —— 漏传不等于不需要。");
+  }
   if (Array.isArray(featured) && featured.length) {
     const byId = new Map(entries.filter((e) => e.thumb).map((e) => [e.id, e]));
     const picked = featured.map((id) => byId.get(Number(id))).filter(Boolean);
