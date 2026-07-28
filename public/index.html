@@ -511,10 +511,24 @@ details.seo summary{cursor:pointer;color:var(--w3-text3);font-size:13px;user-sel
 <script>
 "use strict";
 const $ = (s) => document.querySelector(s);
-const api = (p, opt) => fetch("/api/admin" + p, opt).then(async (r) => {
+// Access 会话过期时，边缘层对 /api/* 一律 302→登录页（跨域），浏览器 fetch 无法跟随 →
+// 裸抛 "Failed to fetch"（看着像代码 bug，实则要重新登录）。redirect:"manual" 让这个 302
+// 表现为 opaqueredirect/status 0，显式识别 → 友好提示 + 自动 reload（顶层导航跟随 302 完成重认证）。
+let _reauthing = false;
+function reauth(why) {
+  if (_reauthing) return; _reauthing = true;
+  msg((why || "登录已过期") + "，正在重新登录…", 1);
+  setTimeout(() => location.reload(), 1200);   // 顶层跳转不受 CORS 限制→跟随 Access 登录→回来带新会话
+}
+const api = (p, opt) => fetch("/api/admin" + p, { redirect: "manual", ...(opt || {}) }).then(async (r) => {
+  if (r.type === "opaqueredirect" || r.status === 0) { reauth(); throw new Error("登录已过期"); }
   const j = await r.json().catch(() => ({ error: "bad response" }));
   if (!r.ok || j.error) throw new Error(j.error || ("HTTP " + r.status));
   return j;
+}).catch((e) => {
+  // fetch 本身 reject（TypeError "Failed to fetch"）：多为 Access 掉线的跨域重定向被浏览器拦
+  if (e instanceof TypeError) reauth();
+  throw e;
 });
 const FORMS = ["Cables", "Mounts & Brackets", "Power & Charging", "Networking", "Cases & Protection"];
 const SITE = "https://wanew.com";
