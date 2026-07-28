@@ -11,6 +11,8 @@
 import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf, renderHome, renderPage } from "../vendor/render.js";
 // @ts-ignore js 模块（官网权威：manifest 条目形状 + 缩略图派生规则 + 三态存在性语义）
 import { thumbFor, manifestEntry } from "../vendor/manifest-entry.js";
+// @ts-ignore js 模块（官网权威：产品页面路径与 slug 派生。entry 缺 path 时它**抛**，不静默兜底）
+import { productPagePath } from "../vendor/page-paths.js";
 // @ts-ignore js 模块
 import { makeChrome } from "../vendor/chrome.js";
 // @ts-ignore js 模块
@@ -303,31 +305,54 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
   let previewContent: string | null = null;   // 默认 locale 详情页渲染（dryRun 预览用；draft 也能预览"若发布长啥样"）
 
   // 详情页 × enabled locales（默认 locale 恒渲染[供预览]；其它 locale：已存在才处理——渲染内容不决定 site map）
-  for (const locale of locales.enabled) {
-    const dir = locDir[locale];
-    const rel = dir ? `${dir}/${prod.category}/${prod.id}.html` : `${prod.category}/${prod.id}.html`;
+  //
+  // 🔴 **5b 之前两套地址都是活的，所以两套都要写。**
+  //    旧址 `{category}/{id}.html` 是**当前被链接、被索引**的那套；新址 `products/{slug}-{id}.html`
+  //    已经存在但带 noindex。只切到新址 = **对外可见的那个页面停在保存之前** ——
+  //    那不是"提前迁移"，是**当场制造一批陈旧页面**，和 es/pt 那个停更病一模一样：
+  //    页面还在、内容合法、只是不再更新。5b 当天删旧址并停写，那时才只写新址。
+  // ⚠️ 每个地址**各渲染一次**：`applyChrome(raw, rel)` 吃 rel（canonical/alternate 由它算），
+  //    复用同一份 HTML 会让新址页带着旧址的规范链接。渲染是 CPU，不是子请求。
+  const renderTo = async (rel: string, locale: string, isDefault: boolean, isPreviewTarget: boolean) => {
     const exists = ctx.pagesList.has(rel);
-    const isDefault = locale === locales.default;
     if (isLive) {
-      if (!isDefault && !exists) continue;
+      if (!isDefault && !exists) return;   // 哪些语种有页面是官网的决定，不是 admin 的
       const related = genRelated(entry, manifest, locale, catalog, urlOf);
       const raw = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap, sizes });
       const { html, errors } = chrome.applyChrome(raw.replace(/\r/g, ""), rel);   // ⭐ 双步第二段
       chromeErrors.push(...errors);
-      const prevRaw = exists ? await readFile(env, cfg, rel) : null;
-      const out = matchEol(prevRaw, html);
-      if (isDefault) previewContent = out;
+      const out = matchEol(exists ? await readFile(env, cfg, rel) : null, html);
+      if (isPreviewTarget) previewContent = out;
       files.push({ path: rel, content: out });
     } else {
       // draft/archived：删已存在的线上页；默认 locale 仍渲染一份供 dryRun 预览（不进 files=不提交）
-      if (isDefault) {
+      if (isDefault && isPreviewTarget) {
         const related = genRelated(entry, manifest, locale, catalog, urlOf);
         const raw = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap, sizes });
         const { html, errors } = chrome.applyChrome(raw.replace(/\r/g, ""), rel);
         chromeErrors.push(...errors);
         previewContent = matchEol(exists ? await readFile(env, cfg, rel) : null, html);
       }
-      if (exists) files.push({ path: rel, delete: true });   // 线上页存在则删（下架/存草稿）
+      if (exists) files.push({ path: rel, delete: true });
+    }
+  };
+
+  const prevEntry = (man0 as any[]).find((e: any) => e.id === prod.id);
+  for (const locale of locales.enabled) {
+    const dir = locDir[locale];
+    const isDefault = locale === locales.default;
+    const oldRel = dir ? `${dir}/${prod.category}/${prod.id}.html` : `${prod.category}/${prod.id}.html`;
+    await renderTo(oldRel, locale, isDefault, isDefault);           // 预览仍取旧址那份（对外可见的那套）
+    await renderTo(productPagePath(entry, dir), locale, isDefault, false);
+
+    // ⭐ 改标题 → slug 变 → 旧 slug 的新址文件成孤儿。**regen 只产不删，删它的职责在这里**
+    //    （我是知道 path 变了的那一方 —— 是我算的）。旧 path 从**写新 manifest 之前**的
+    //    `man0` 取，不需要 `former_slugs`。
+    // ⚠️ 孤儿现在无害（新址带 noindex，Function 优先，永远不被服务），但 sitemap 扫全文件系统 ——
+    //    5b 第二步去 noindex 时，孤儿会**混进首次提交给 Google 的那批地址**，而它们每条都是 301。
+    if (prevEntry && prevEntry.path && prevEntry.path !== entry.path) {
+      const orphan = productPagePath(prevEntry, dir);
+      if (ctx.pagesList.has(orphan)) files.push({ path: orphan, delete: true });
     }
   }
 
