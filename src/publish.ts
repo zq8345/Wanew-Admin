@@ -14,6 +14,7 @@ import { makeChrome } from "../vendor/chrome.js";
 // @ts-ignore js 模块
 import { ghConfig, commitFiles as rawCommitFiles, readFile } from "../vendor/github.js";
 import { afford, spent } from "./subreq";
+import { byteLen } from "./bytes";
 
 // ⭐ 提交前的子请求预检 —— **咽喉点就是这个 import**。
 // 本文件有 7 处 `commitFiles(...)`，index.ts 还有 4 处；**一处都不用改**：换掉这个名字，
@@ -39,7 +40,7 @@ const commitCost = (files: any[]): number => {
   const writes = files.filter((f: any) => !f.delete);
   // ⚠️ 字节数不是字符长度：`"中".length === 1` 而 UTF-8 是 3 字节。
   //    用 .length 会在中文内容上把体积**低估到三分之一**，于是该走退路的判成内联。
-  const bytes = writes.reduce((a: number, f: any) => a + new TextEncoder().encode(String(f.content ?? "")).length, 0);
+  const bytes = writes.reduce((a: number, f: any) => a + byteLen(f.content), 0);
   return bytes <= INLINE_LIMIT ? COMMIT_SUBREQ : COMMIT_SUBREQ + writes.length;
 };
 
@@ -283,7 +284,7 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
     status: prod.status,
     // bytes=真字节数（TextEncoder）——.length 是 UTF-16 码元数，与磁盘字节对照会差出多字节字符数
     // （批3-1 的"361B 行尾差"定性就是这么错的：字符数 vs 字节数、单位不一致的对照）。
-    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0,
+    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? byteLen(f.content) : 0,
       ...(f.path.endsWith(".html") ? { eol: f.content.includes("\r\n") ? "CRLF" : "LF",
         hasHeader: f.content.includes("main-header"), hasSwitcher: f.content.includes("lang-switch"), hasFooter: f.content.includes("site-footer") } : {}),
       // json 产物在 dry 时回传内容（产品+index 共两个，≤70KB）——供 diff 定性 json 序列化差异（🟡终审项），联调长期有用
@@ -631,7 +632,7 @@ export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, payload: { e
   if (opts.dryRun) return {   // dryRun=预览：返回 en 首页渲染 HTML（前端注 base 新标签）+ 将写文件
     dry: true,
     previewHtml: enPage ? enPage.content : null,
-    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })),
+    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? byteLen(f.content) : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })),
     locales: RENDER_SET,
   };
   const r = await commitFiles(env, cfg, files, `admin: homepage content update (${opts.email})`);
@@ -711,7 +712,7 @@ export async function publishContact(env: Env, cfg: any, ctx: Ctx, edits: Contac
   if (opts.dryRun) return {
     dry: true,
     previewHtml: enPage ? enPage.content : null,
-    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })),
+    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? byteLen(f.content) : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })),
     locales: RENDER_SET,
   };
   const r = await commitFiles(env, cfg, files, `admin: contact info update (${opts.email})`);
@@ -801,7 +802,7 @@ export async function publishService(env: Env, cfg: any, ctx: Ctx, edits: Servic
   if (opts.dryRun) return {
     dry: true,
     previewHtml: enPage ? enPage.content : null,
-    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })),
+    files: files.map((f: any) => ({ path: f.path, bytes: f.content ? byteLen(f.content) : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })),
     locales: RENDER_SET,
   };
   const r = await commitFiles(env, cfg, files, `admin: guides(/service/) copy update (${opts.email})`);
@@ -879,7 +880,7 @@ export async function publishPageMeta(env: Env, cfg: any, ctx: Ctx, slug: string
   }
   if (chromeErrors.length) return { error: "chrome 注入报错（未提交）", detail: chromeErrors.slice(0, 5) };
   const enPage = files.find((f) => f.path === `${slug}/index.html`);
-  if (opts.dryRun) return { dry: true, previewHtml: enPage ? enPage.content : null, files: files.map((f: any) => ({ path: f.path, bytes: f.content ? new TextEncoder().encode(f.content).length : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })), locales: RENDER_SET };
+  if (opts.dryRun) return { dry: true, previewHtml: enPage ? enPage.content : null, files: files.map((f: any) => ({ path: f.path, bytes: f.content ? byteLen(f.content) : 0, ...(f.path.endsWith(".json") ? { content: f.content } : {}) })), locales: RENDER_SET };
   const r = await commitFiles(env, cfg, files, `admin: SEO meta update ${slug} (${opts.email})`);
   return { ...r, files: files.map((f) => f.path) };
 }

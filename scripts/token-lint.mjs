@@ -82,6 +82,39 @@ if (!mirrorVars) {
   console.log(`✅ 成本模型 PASS：固定 ${base} 次${blobPath ? " + 超限退路(按 5+文件数 计)" : ""}${vLimit ? ` · 阈值两边一致(${vLimit.trim()})` : ""}。`);
 }
 
+// ── 字节 vs 字符：防第四次 ────────────────────────────────────────────────────
+// 2026-07-28 同一个 bug 家族一天出现三次（blob header 长度 / 内联体积判断 / 只用 ASCII 测），
+// 全在处理同一批中文数据的系统里。`"中".length === 1` 而 UTF-8 是 3 字节。
+//
+// ⚠️ **通用规则做不到** —— 静态分不清 `.length` 是数组还是字符串，硬做只会制造噪音。
+//    所以只盯这个失败形状真正出现的位置：**内容变量**（content/html/raw/body）上的 `.length`。
+//    覆盖面窄是**故意的**：一条噪音大的规则会被加豁免，最后等于没有。
+{
+  // ⚠️ 名单里只放**在本仓恒为字符串**的那几个。第一版把 `body` 也放了进来 ——
+  //    而 gitsha.ts 里 `body` 是 `Uint8Array`，它的 `.length` **本来就是字节数、代码是对的**。
+  //    正确代码被报红 = 噪音，而噪音会被加豁免，最后规则等于没有。**误报要修规则，不要加豁免。**
+  const NAMES = /\b(content|html|rawHtml|prevRaw)\b\s*(?:\?\?[^.]*)?\.length\b/;
+  const offenders = [];
+  for (const f of ["src/publish.ts", "src/index.ts", "src/gitsha.ts", "src/subreq.ts", "src/bytes.ts"]) {
+    const lines = readFileSync(path.join(ROOT, f), "utf8").split("\n");
+    lines.forEach((l, i) => {
+      // ⚠️ 必须剥掉**行尾**注释，不只是整行注释：`gitsha.ts` 里那行代码是对的，
+      //    但它的行尾注释写着"⚠️ 字节数，不是 content.length" —— **规则把讲这个 bug 的文字当成了这个 bug。**
+      //    检查器读的应该是代码，不是它旁边关于代码的说明。
+      const code = l.replace(/\/\/.*$/, "");
+      if (!code.trim() || code.trim().startsWith("*")) return;
+      if (NAMES.test(code)) offenders.push(`${f}:${i + 1}  ${l.trim().slice(0, 90)}`);
+    });
+  }
+  if (offenders.length) {
+    console.error(`🔴 ${offenders.length} 处在内容变量上用了 .length —— 那是 UTF-16 码元数，不是字节数。`);
+    console.error(`   → 中文内容会被低估到约三分之一；纯 ASCII 测不出来。改用 byteLen()（src/bytes.ts）。`);
+    offenders.forEach((o) => console.error(`     ${o}`));
+    process.exit(1);
+  }
+  console.log(`✅ 字节纪律 PASS：内容变量上 0 处 .length（体积/长度一律走 byteLen）。`);
+}
+
 if (bad) {
   console.error(`\n🔴 ${bad} 处在 admin 自有样式里定义了 --w3-* 品牌令牌。`);
   process.exit(1);
