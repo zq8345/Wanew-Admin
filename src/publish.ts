@@ -58,6 +58,8 @@ import type { Env } from "./index";
 export interface Ctx {
   template: string; site: any; locales: any; catalog: any; categories: any;
   manifest: any[]; manifestRaw: string | null; partial: string; pagesList: Set<string>;
+  // 仓库真实文件集（递归 tree）。**null = 拿不到，不是没有** —— 见 loadCtx 里那段。
+  repoFiles: Set<string> | null;
   locDir: Record<string, string>; catmap: Record<string, string>;
   // 形态/品类轴单源（#52 block2）：forms = data/forms.json 的 forms[]（[{key,name}]，数组顺序=/type 页序=chip 序）；
   // formKey = 官网同款派生 {name→key}（render.js cardHtml/regenListPage 穿参、chrome.js makeChrome 内部同式派生）。
@@ -130,6 +132,13 @@ export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
   }
   const listedPages = new Set<string>(JSON.parse(pagesRaw));
   const pagesList = treePaths || listedPages;
+  // 🔴 `repoFiles` 与 `pagesList` **必须分开**，即使正常情况下是同一个 Set。
+  //    回落时 `pagesList` 是 `pages-list.json` —— 那里面**一张图片都没有**（实测 611 条、图片 0 条）。
+  //    拿它当"文件存不存在"的通用真源去查缩略图，会一律得到"不存在" →
+  //    **每保存一个产品 thumb 就退回原图**，正是 650 那个退化，而且是批量的。
+  //    所以回落时 `repoFiles` 是 **null = 我不知道**，而不是一个会说"没有"的空集。
+  //    ⚠️ **"查不到"和"不存在"必须能被区分** —— 消费方遇到 null 应当保持原值不动，而不是当作没有。
+  const repoFiles: Set<string> | null = treePaths;
   const locDir = localeDirs(locales);
   const forms = JSON.parse(formsRaw).forms || [];
   const formKey = formKeyOf(forms);
@@ -142,7 +151,7 @@ export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
     locDir,
     forms,   // #52 block2：品类 nav 计数吃 forms.json 单源（不传=计数全 0，不崩但错）
   });
-  return { template, site, locales, catalog, categories, manifest, manifestRaw: manRaw ?? null, partial, pagesList, locDir, catmap: catmapOf(categories), forms, formKey, sizes, chrome };
+  return { template, site, locales, catalog, categories, manifest, manifestRaw: manRaw ?? null, partial, pagesList, repoFiles, locDir, catmap: catmapOf(categories), forms, formKey, sizes, chrome };
 }
 
 // body h1 消毒：模板已把产品标题渲成 canonical <h1>（render.js {{TITLE}}），body 正文里再出现 <h1>
