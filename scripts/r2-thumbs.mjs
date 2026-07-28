@@ -88,8 +88,77 @@ if (CHECK) {
   process.exit(0);
 }
 
+// ── `--sizes <r2-urls.json>`：尺寸元数据（供 regen 合并进 dimAttr 的查找表）───────────
+// 覆盖**产品数据里全部 R2 图**（首图 + 详情页画廊），不是只有被生成过缩略图的首图。
+// 输入是"产品数据里出现过的 R2 原图 URL"清单，用消费方 render.js 的 resolveImg 采集。
+if (args.includes("--sizes")) {
+  const listPath = args[args.indexOf("--sizes") + 1] || "";
+  if (!listPath) { console.error("🔴 --sizes 需要一个 URL 清单文件"); process.exit(1); }
+  const rawList = readFileSync(listPath, "utf8");
+  let urls = JSON.parse(rawList);
+  if (!Array.isArray(urls) || urls.length < 10) { console.error(`🔴 清单异常：${urls.length} 条，不出结论`); process.exit(1); }
+  urls = [...new Set(urls)];
+  const IMGBASE = "https://img.wanew.com/";
+  if (!urls.every((u) => u.startsWith(IMGBASE))) { console.error("🔴 清单里混进了非 R2 URL —— 只该收 img.wanew.com"); process.exit(1); }
+  console.log(`尺寸采集：${urls.length} 张 R2 原图（去重后）\n`);
+
+  // 逐张**取真字节 + 解码**。不查任何既有表 —— 表就是这么来的，拿表证表是恒真式。
+  const measure = async (u) => {
+    const r = await fetch(u);
+    if (!r.ok) return { err: `HTTP ${r.status}` };
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (!buf.length) return { err: "空响应" };           // ⚠️ 空字节喂给 sharp 会抛，抛了就不进表——但先明确拦一次
+    try { const m = await sharp(buf).metadata(); return m.width && m.height ? { w: m.width, h: m.height } : { err: "无宽高" }; }
+    catch (e) { return { err: String(e).slice(0, 40) }; }
+  };
+
+  const sizes = {}; let okN = 0, errN = 0, thumbN = 0; const errs = [];
+  for (let i = 0; i < urls.length; i += 8) {
+    const batch = urls.slice(i, i + 8);
+    const res = await Promise.all(batch.map(async (u) => {
+      const orig = await measure(u);
+      // ⚠️ 缩略图那条**只在对象真的存在时才出现** —— 173 张画廊图没有缩略图，
+      //    绝不为了"两组形状整齐"给不存在的对象编一条：编出来的尺寸没有对应文件，
+      //    真有人去取就是 404，而表看起来完整无缺。
+      const tUrl = u.replace(/\.[a-z0-9]+$/i, "") + ".thumb.webp";
+      let thumb = null;
+      const head = await fetch(tUrl, { method: "HEAD" }).catch(() => null);
+      if (head && head.ok) { const m = await measure(tUrl); if (!m.err) thumb = m; }
+      return { u, tUrl, orig, thumb };
+    }));
+    for (const r of res) {
+      if (r.orig.err) { errN++; errs.push(`${r.orig.err}  ${r.u.slice(-52)}`); continue; }
+      sizes[r.u] = [r.orig.w, r.orig.h];                       // 原图 URL → **原图**尺寸（详情页画廊查这个）
+      okN++;
+      if (r.thumb) { sizes[r.tUrl] = [r.thumb.w, r.thumb.h]; thumbN++; }   // 缩略图 URL → **缩略图**尺寸（列表卡查这个）
+    }
+    process.stdout.write(`\r   已量 ${Math.min(i + 8, urls.length)}/${urls.length}`);
+  }
+  console.log("");
+  if (errN) { console.log(`   ⚠️ 量不到 ${errN} 张（不进表——错的宽高比比没有更糟）：`); errs.slice(0, 6).forEach((e) => console.log("     " + e)); }
+  if (okN < urls.length * 0.9) { console.error(`🔴 只量到 ${okN}/${urls.length}，材料可疑，不出结论`); process.exit(1); }
+
+  const doc = {
+    _note: "R2(img.wanew.com) 图片的真实宽高，供 render.js 的 dimAttr 注 width/height 防 CLS。" +
+      "⚠️ 顶层不是扁平表：查找表在 【.sizes】 里（media-sizes.json 是扁平的，这份不是；接线时忘了取 .sizes 会静默 0 命中）。" +
+      "官网 regen 只扫 static/ 且【全量覆写】data/media-sizes.json，所以 R2 这部分单出一份、由 regen 合并进 sizes（别写进那个文件，会被冲掉）。" +
+      "⚠️ 键是 dimAttr 查询时用的【完整 URL 原样】：原图 URL 配【原图】尺寸（详情页画廊用），缩略图 URL 配【缩略图】尺寸（列表卡用）。" +
+      "两者比例几乎相同，配错了今天不会有任何症状，直到换一张比例不同的图——所以两组分开量、分开写。" +
+      "⚠️ 缩略图那一条【只在对象真的存在时才有】：画廊图没有缩略图，不会为了形状整齐给它编一条。" +
+      "覆盖范围 = 产品数据里出现过的全部 R2 图（首图 + 详情页画廊），不是只有首图。" +
+      "只收真取到字节并解码成功的，量不到的不进表：错的宽高比比没有更糟。",
+    _generated_by: "wanew-admin/scripts/r2-thumbs.mjs --sizes（逐张取真字节 sharp 解码，不查任何既有表）",
+    sizes,
+  };
+  const sp = `${TMP}/r2-media-sizes.json`;
+  writeFileSync(sp, JSON.stringify(doc, null, 2) + "\n");
+  console.log(`\n✅ 尺寸元数据：${Object.keys(sizes).length} 条 = 原图 ${okN} + 缩略图 ${thumbN}  → ${sp}`);
+  console.log(`   （缩略图 ${thumbN} 条 = R2 里真实存在的缩略图数；画廊图没有缩略图是预期的）`);
+  process.exit(0);
+}
+
 // 目标清单：外部传入（由 img-audit 产出），避免脚本自己猜该处理哪些
-if (!LIST) { console.error("🔴 必须 --list <r2-targets.json> 或 --check <清单路径>"); process.exit(1); }
+if (!LIST) { console.error("🔴 必须 --list <r2-targets.json> / --check <清单> / --sizes <URL清单>"); process.exit(1); }
 const raw = readFileSync(LIST, "utf8");
 if (raw.length < 50) { console.error("🔴 清单材料无效：" + raw.length + "B"); process.exit(1); }
 let targets = JSON.parse(raw);
@@ -210,36 +279,10 @@ if (WRITE) {
   console.log(`   进清单 ${hit} · 未进 ${miss}（未进的 regen 会回落原图）`);
   console.log(`   清单已生成：${path}  → 提交到官网仓 data/r2-thumbs.json`);
 
-  // ── 尺寸元数据（同一次测量产出，不另跑一遍）─────────────────────────────
-  // 官网 regen 只扫 `static/` 生成 media-sizes.json 且**全量覆写**，R2 的尺寸它量不到，
-  // 我也不能写进那个文件（会被下次 regen 冲掉 = 又一个"两个写入方"）。所以单出一份、由 regen 合并。
-  //
-  // ⚠️ **两个 key 都要，且各配各自的真实尺寸** —— 消费方 `dimAttr(src, sizes)` 用 **src 原样**查：
-  //    · 卡片 `dimAttr(e.thumb, …)` → regen 接管后 e.thumb 是**缩略图 URL** → 配**缩略图尺寸**
-  //    · 详情页 `dimAttr(resolveImg(im), …)` → **原图 URL** → 配**原图尺寸**
-  //    只给原图那一组，卡片就查不到 → 不写 width/height → **这 28 张的防 CLS 白做**（且无症状）。
-  //    ⚠️ 绝不能把缩略图尺寸配到原图 key 上：`fit:inside` 下两者比例几乎相同，
-  //       **写错了在今天不会有任何症状，直到有人换一张比例不同的图** —— 所以两组分开算、分开写。
-  const IMGBASE = "https://img.wanew.com/";
-  const sizes = {};
-  const inManifest = new Set(out);
-  for (const r of report) {
-    if (r.err) continue;
-    const [sw, sh] = r.srcDim.split("×").map(Number);
-    const [tw, th] = r.outDim.split("×").map(Number);
-    sizes[IMGBASE + r.key] = [sw, sh];                                   // 原图 URL → **原图**尺寸
-    if (inManifest.has(r.thumbKey)) sizes[IMGBASE + r.thumbKey] = [tw, th];  // 缩略图 URL → **缩略图**尺寸
-  }
-  const sizesDoc = {
-    _note: "R2(img.wanew.com) 图片的真实宽高，供 render.js 的 dimAttr 注 width/height 防 CLS。" +
-      "官网 regen 只扫 static/ 且【全量覆写】data/media-sizes.json，所以 R2 这部分单出一份、由 regen 合并进 sizes（别写进那个文件，会被冲掉）。" +
-      "⚠️ 键是 dimAttr 查询时用的**完整 URL 原样**：原图 URL 配【原图】尺寸（详情页图库用），缩略图 URL 配【缩略图】尺寸（列表卡用）。" +
-      "两者比例几乎相同，配错了今天不会有任何症状，直到换一张比例不同的图——所以两组分开量、分开写。" +
-      "只收真读出来的（sharp 解析成功），量不到的不进表：错的宽高比比没有更糟。",
-    _generated_by: "wanew-admin/scripts/r2-thumbs.mjs（与缩略图同一次运行产出，不分两步跑）",
-    sizes,
-  };
-  const sp = `${TMP}/r2-media-sizes.json`;
-  writeFileSync(sp, JSON.stringify(sizesDoc, null, 2) + "\n");
-  console.log(`   尺寸元数据：${Object.keys(sizes).length} 条（原图 ${report.filter((r) => !r.err).length} + 缩略图 ${inManifest.size}）→ ${sp}`);
+  // ⚠️ 尺寸元数据**不在这里产出** —— 见文件末尾的 `--sizes` 模式。
+  //    这里能量到的只有"被生成过缩略图的那批"= **产品首图**；而 dimAttr 要覆盖的是产品数据里
+  //    **全部** R2 图（首图 + 详情页画廊，共 201 张）。在这里顺手写一份 56 条的，
+  //    会得到**两个产出口径的同名文件**：一份 201 条、一份 56 条，长得一模一样。
+  //    谁拷了窄的那份，173 张画廊图就静默没有 width/height —— **文件在、内容对、只是少了一大半。**
+  console.log(`   ⚠️ 尺寸元数据请单独跑：node scripts/r2-thumbs.mjs --sizes <r2-urls.json>（覆盖全部 R2 图，非只首图）`);
 }
