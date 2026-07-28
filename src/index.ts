@@ -16,6 +16,13 @@ export interface Env {
 
 const app = new Hono<{ Bindings: Env }>();
 
+// ---- 子请求计数域（必须在最外层）----
+// Workers 免费版每次调用 50 次子请求。2026-07-28：改品类显示名要 108 次，在第 39 个产品那里
+// 中途炸成 `Too many subrequests`，而错误一路被压成 "commit failed"，查了两天。
+// 这层给**每次请求**开一个独立计数（AsyncLocalStorage —— 模块级计数器会被同 isolate 的并发请求串味），
+// 让写入路径在**花掉之前**问得出"还剩多少"。见 src/subreq.ts。
+app.use("*", (c, next) => withBudget(next));
+
 // ---- M4 fail-closed auth（照获客后台标准）----
 // admin.wanew.com 在 Cloudflare Access（wanew-admin 应用，已预挂）背后：未登录请求边缘就被拦；
 // 到达 Worker 的请求必须带 Cf-Access-Authenticated-User-Email —— 没有 = 不明来路（如误开 workers.dev
@@ -53,6 +60,9 @@ import { ghConfig, readFile } from "../vendor/github.js";
 // FORM_KEY 常量迁到 data/forms.json（#52 block2，官网删了该 export、改 formKey 穿参）。
 import { resolveImg } from "../vendor/render.js";
 import { gscQuery } from "./gsc";
+import { withBudget, spent, remaining, SUBREQ_LIMIT } from "./subreq";
+// ⭐ 提交一律走 publish.ts 的带闸版本（它包着 vendor 的原版），不再直接 import vendor —— 绕过闸=没有闸
+import { commitFiles as commitGuarded } from "./publish";
 
 const operator = (c: any) => c.req.header("cf-access-authenticated-user-email") || "dev-bypass";
 
@@ -360,7 +370,7 @@ app.put("/api/admin/categories", async (c) => {
       if (anyRemain) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, anyRemain));
     }
     const tag = [added.length ? `加机型 ${added.join(",")}` : "", removed.length ? `删机型 ${removed.join(",")}` : ""].filter(Boolean).join(" / ");
-    const r = await (await import("../vendor/github.js") as any).commitFiles(c.env, cfg, files, `admin: categories update${tag ? ` (${tag})` : ""} (${operator(c)})`);
+    const r = await commitGuarded(c.env, cfg, files, `admin: categories update${tag ? ` (${tag})` : ""} (${operator(c)})`);
     // ⚠️ 诚实边界（契约 §1）：官网没有 CI，新机型的页面由 regen.mjs（需 fs）生成 —— edge 跑不了。
     // 数据已提交，但 /{slug}/ 页面要等官网跑一次 build 才出现。别让用户以为立刻可见。
     const note = added.length
@@ -404,7 +414,7 @@ app.put("/api/admin/models", async (c) => {
   try {
     const ctx2 = { ...ctx, locales: loc };
     for (const slug of changed) if (ctx.catmap[slug] !== undefined) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug));
-    const r = await (await import("../vendor/github.js") as any).commitFiles(c.env, cfg, files, `admin: model_display update (${operator(c)})`);
+    const r = await commitGuarded(c.env, cfg, files, `admin: model_display update (${operator(c)})`);
     return c.json({ ok: true, rebaked: changed, filesWritten: files.length, ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
@@ -895,14 +905,17 @@ app.put("/api/admin/forms", async (c) => {
     if (renamed.length) {
       // 改显示名 → 连带改产品 form（扫全部产品含草稿/下架），与 forms.json 同一次 commit
       const rf = await formRenameFiles(c.env, cfg, ctx, renamed);
+      // 预算拒绝不是"故障"，是**在写之前主动停手** —— 用 409 和一句人能照着做的话，
+      // 别混进 502 的"扫描失败"里（那会让人以为 GitHub 出问题了，往错的方向查）。
+      if ((rf as any).budget) return c.json({ error: "改显示名超出单次调用上限（未提交，仓库未改动）", detail: rf.error, spent: spent(), limit: SUBREQ_LIMIT }, 409);
       if (rf.error) return c.json({ error: "扫描产品失败（未提交）", detail: rf.error }, 502);
       touched = rf.touched; scanned = rf.scanned;
-      r = await (await import("../vendor/github.js") as any).commitFiles(
+      r = await commitGuarded(
         c.env, cfg, [...rf.files, formsFile],
         `admin: forms update (改显示名 ${renamed.map((x) => `${x.from}→${x.to}`).join(",")}${touched ? ` · 连带 ${touched} 产品` : ""}) (${operator(c)})`);
     } else {
       const tag = [added.length ? `加 ${added.join(",")}` : "", removed.length ? `删 ${removed.join(",")}` : ""].filter(Boolean).join(" / ") || "排序";
-      r = await (await import("../vendor/github.js") as any).commitFiles(c.env, cfg, [formsFile], `admin: forms update (${tag}) (${operator(c)})`);
+      r = await commitGuarded(c.env, cfg, [formsFile], `admin: forms update (${tag}) (${operator(c)})`);
     }
     // ⚠️ 诚实边界（契约 §1）：加品类的 /type/{key}/ 页、以及排序后的 chip 顺序/计数，都由官网
     // build（regen.mjs + chrome-sync）产出 —— edge 跑不了。数据已入库 ≠ 页面已变。

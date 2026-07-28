@@ -12,7 +12,22 @@ import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf, ren
 // @ts-ignore js 模块
 import { makeChrome } from "../vendor/chrome.js";
 // @ts-ignore js 模块
-import { ghConfig, commitFiles, readFile } from "../vendor/github.js";
+import { ghConfig, commitFiles as rawCommitFiles, readFile } from "../vendor/github.js";
+import { afford, spent } from "./subreq";
+
+// ⭐ 提交前的子请求预检 —— **咽喉点就是这个 import**。
+// 本文件有 7 处 `commitFiles(...)`，index.ts 还有 4 处；**一处都不用改**：换掉这个名字，
+// 全部调用点自动过闸。（在 11 个地方各写一段预检，第 12 个加进来时必然漏。）
+//
+// 🔴 拒绝必须发生在**发出第一个写请求之前**。半路炸的代价不是"失败"，是**可能留下半残**：
+//    commitFiles 是 blob×N → tree → commit → PATCH，只有最后一次 PATCH 动分支，
+//    所以今天这次没留残留 —— **但那是断点位置的运气，不是设计的保证。**
+export async function commitFiles(env: Env, cfg: any, files: any[], message: string) {
+  const need = 2 + files.filter((f: any) => !f.delete).length + 3;   // ref+commit 读 · 每个文件一个 blob · tree+commit+patch
+  const no = afford(need, `提交 ${files.length} 个文件`);
+  if (no) throw new Error(`调用次数超限（未提交，仓库未改动）\n${no}`);
+  return rawCommitFiles(env, cfg, files, message);
+}
 // ⭐ locale→目录规则直接 import 真源（纯 ESM 零 Node 依赖）。第一版我凭注释复刻、漏了 locales.dir
 //   覆盖字段——读真源当场抓包（批㉔ 列名教训：复刻必对真源；能 import 就绝不复刻）。
 // @ts-ignore js 模块
@@ -457,6 +472,13 @@ export async function formRenameFiles(env: Env, cfg: any, ctx: Ctx, renames: { f
     const arr: any = await res.json();
     if (Array.isArray(arr)) ids = arr.filter((f: any) => /^\d+\.json$/.test(f.name)).map((f: any) => Number(f.name.replace(".json", "")));
   } catch (e: any) { return { files: [], touched: 0, scanned: 0, error: `github fetch error: ${String(e).slice(0, 160)}` }; }
+
+  // 🔴 在**读那 68 个产品之前**就把账算完 —— 这一步才是超限的来源（2026-07-28 实测：
+  //    读到第 39 个时 `Too many subrequests`）。上面的目录列表只花了 1 次，是算这笔账的必要代价。
+  //    最坏情况：每个产品都要改（blob = scanned + forms.json + products-index）。
+  const worst = ids.length + (ids.length + 2) + 5;
+  const no = afford(worst, `改显示名要逐个读 ${ids.length} 个产品（含草稿/下架），再连带重写引用它的那些`);
+  if (no) return { files: [], touched: 0, scanned: ids.length, error: no, budget: true } as any;
 
   let touched = 0;
   for (const id of ids) {
