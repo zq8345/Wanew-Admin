@@ -56,6 +56,77 @@ import { gscQuery } from "./gsc";
 
 const operator = (c: any) => c.req.header("cf-access-authenticated-user-email") || "dev-bypass";
 
+// ── 写入链路自检 ────────────────────────────────────────────────────────────
+// 起因：品类保存连着两天 `commit failed`，而"commit failed"是**我们自己的措辞** ——
+// 它响亮地失败，却不携带任何可行动的信息，于是只能靠猜。这个端点把整条链路**逐段拆开**，
+// 每段都报 **GitHub 的原始状态码和原文**。
+//
+// ⚠️ 它**只读**，唯一的写调用是建一个 **游离 blob**：blob 不被任何 tree/commit 引用，
+//    分支一个字节不动，GitHub 会自行回收。但它**需要写权限**——所以能真验写权限，
+//    而不改变仓库任何可见状态。（"验写权限"和"真的写点什么"必须分开，否则自检本身就是副作用。）
+//
+// 也是总工问的那个"链路断了能不能自检"的答案：**不用等 Joe 试了才发现。**
+app.get("/api/admin/diag", async (c) => {
+  const cfg = ghConfig(c.env);
+  if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
+  const t0 = Date.now();
+  const steps: any[] = [];
+  let calls = 0;
+  const H = { Authorization: `Bearer ${(c.env as any).GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" };
+  // 原样记录服务器说了什么 —— 不归纳、不翻译、不截成"失败"两个字
+  const raw = async (name: string, url: string, init?: any) => {
+    const t = Date.now();
+    try {
+      calls++;
+      const r = await fetch(url, { ...(init || {}), headers: H });
+      const body = await r.text();
+      const step = { name, status: r.status, ok: r.ok, ms: Date.now() - t, calls, body: r.ok ? undefined : body.slice(0, 300) };
+      steps.push(step);
+      return { ok: r.ok, status: r.status, body };
+    } catch (e: any) {
+      // ⚠️ 子请求上限、网络中断都在这里抛 —— 抛出的原话同样要原样留着
+      steps.push({ name, status: 0, ok: false, ms: Date.now() - t, calls, throw: String(e).slice(0, 300) });
+      return { ok: false, status: 0, body: String(e) };
+    }
+  };
+  const base = `https://api.github.com/repos/${cfg.owner}/${cfg.name}`;
+
+  // ① 读一个文件：读权限
+  await raw("read/site.json", `${base}/contents/data/site.json?ref=${cfg.branch}`);
+  // ② 列产品目录：改品类那条路的第一步
+  const list = await raw("list/data/products", `${base}/contents/data/products?ref=${cfg.branch}`);
+  let ids: string[] = [];
+  try { const arr = JSON.parse(list.body); if (Array.isArray(arr)) ids = arr.filter((f: any) => /^\d+\.json$/.test(f.name)).map((f: any) => f.name); } catch { /* 解析不了就当 0 个，下一步会如实报 */ }
+
+  // ③ ⭐ 逐个读全部产品 —— **这就是改品类比保存产品多出来的那 68 次调用**。
+  //    若因子请求上限被掐断，会**停在某个序号上**，那个序号本身就是答案。
+  let readOk = 0; let firstFail: any = null;
+  for (const n of ids) {
+    const t = Date.now();
+    try {
+      calls++;
+      const r = await fetch(`${base}/contents/data/products/${n}?ref=${cfg.branch}`, { headers: H });
+      if (r.ok) { readOk++; await r.arrayBuffer(); }
+      else if (!firstFail) firstFail = { at: readOk + 1, file: n, status: r.status, body: (await r.text()).slice(0, 240), ms: Date.now() - t };
+    } catch (e: any) {
+      if (!firstFail) firstFail = { at: readOk + 1, file: n, status: 0, throw: String(e).slice(0, 240), calls, ms: Date.now() - t };
+      break;   // 抛了就别继续硬撞，第一次抛出的位置才是信息
+    }
+  }
+  steps.push({ name: "read/all-products", total: ids.length, ok: readOk, calls, firstFail });
+
+  // ④ 写权限：建一个游离 blob（不被引用，分支不变，GitHub 自行回收）
+  await raw("write/dangling-blob", `${base}/git/blobs`, { method: "POST", body: JSON.stringify({ content: "wanew-admin diag", encoding: "utf-8" }) });
+
+  const failed = steps.filter((s) => s.ok === false || s.firstFail);
+  return c.json({
+    verdict: failed.length ? "🔴 有环节失败——看 steps 里的 status/body 原文" : "✅ 读、列、全量读、写权限四项都通",
+    totalCalls: calls, totalMs: Date.now() - t0,
+    note: "唯一的写调用是游离 blob（无引用，分支未变）。若『全量读』停在某个序号上，那个序号就是子请求上限。",
+    steps,
+  });
+});
+
 app.get("/api/admin/products", async (c) => {
   const cfg = ghConfig(c.env);
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
