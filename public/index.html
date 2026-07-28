@@ -524,7 +524,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       <button class="cat-add" onclick="catAdd()" title="加机型：新 URL 段、不影响现有机型">＋ 添加机型</button>
       <div class="buildnote" id="cat-build-note" style="display:none"></div>
       <!-- Joe：规则说明读一次就够，不该每次挡在数据前面 → 并进按钮下方这段脚注的首句（两张卡同一种处理）。文案未改。 -->
-      <p class="muted" style="font-size:12px;margin-top:10px">每个机型一个显示名（官网列表/导航/详情/瓦片统一用它）；URL 段一期不可改。保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。<b>加机型</b>：数据即时入库，<b>页面需官网构建后出现</b>。<b>删机型</b>：点行末 ✕ 标记、保存时后端守卫（有产品会拒删）。URL 段一经创建不可改（改=断链接）。</p>
+      <p class="muted" style="font-size:12px;margin-top:10px">每个机型一个显示名（官网列表/导航/详情/瓦片统一用它）。保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。<b>加机型</b>：数据即时入库，<b>页面需官网构建后出现</b>。<b>删机型</b>：管理态点行末 ✕ 标记、保存时后端守卫（有产品会拒删）。<span title="每个机型有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" style="cursor:help;border-bottom:1px dotted var(--w3-text3)">网址标识不可改 ?</span></p>
     </div>
 
     <!-- 形态/品类轴（可编辑：data/forms.json 单源·契约 §3/§4）-->
@@ -543,7 +543,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       </table>
       <button class="cat-add" onclick="formAdd()" title="加品类：新 /type/ URL 段、不影响现有品类">＋ 添加品类</button>
       <div class="buildnote" id="form-build-note" style="display:none"></div>
-      <p class="muted" style="font-size:12px;margin-top:10px">每个品类一个显示名（也是产品的形态值）；URL 段 /type/… 一期不可改。真源=官网 <span class="tnum">data/forms.json</span>。<b>顺序</b>决定 /type 页与筛选 chip 的排列。<b>改显示名</b>会连带修改引用它的所有产品（含草稿/下架），页面不需重建。<b>加/删/排序</b>的数据即时入库，但 <b>/type/ 页面与导航计数需官网构建后生效</b>。URL 段一经创建不可改（改=断链接）。</p>
+      <p class="muted" style="font-size:12px;margin-top:10px">每个品类一个显示名（也是产品的形态值）。真源=官网 <span class="tnum">data/forms.json</span>。<b>顺序</b>决定品类页与筛选 chip 的排列。<b>改显示名</b>会连带修改引用它的所有产品（含草稿/下架），页面不需重建。<b>加/删/排序</b>的数据即时入库，但<b>品类页与导航计数需官网构建后生效</b>。<span title="每个品类有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" style="cursor:help;border-bottom:1px dotted var(--w3-text3)">网址标识不可改 ?</span></p>
     </div>
 
     </div><!-- /.cat-2col -->
@@ -903,10 +903,11 @@ function paintCats() {
     <tr${c._new ? ' class="cat-new"' : ""}>
       <td class="c-ord"><span class="ord-grp"><button class="ico" onclick="catMove(${i},-1)" ${i === 0 ? "disabled" : ""} title="上移">↑</button><button class="ico" onclick="catMove(${i},1)" ${i === catsEdit.length - 1 ? "disabled" : ""} title="下移">↓</button></span></td>
       <td><div class="cat-namewrap">
-        <input class="cat-name" value="${esc(c.name)}" oninput="catsEdit[${i}].name=this.value" placeholder="显示名（如 Performance Gen 4）">
+        <input class="cat-name" value="${esc(c.name)}" oninput="catsEdit[${i}].name=this.value" placeholder="显示名（如 Performance Gen 4）"
+               title="${esc(c.name || c.slug)}${c._new ? "" : `　·　网址标识：${esc(c.slug)}（一经创建不可改，改了会断现有链接）`}">
         ${c._new
-          ? `<input class="cat-slugin" value="${esc(c.slug)}" oninput="catsEdit[${i}].slug=this.value.trim()" placeholder="url-段（如 performance-gen-4）" title="新机型的 URL 段：小写字母/数字/连字符。定了就不能再改（改=断链接）">`
-          : `<span class="cat-slug" title="URL 标识（一期不可改：改了会断现有链接）">/${esc(c.slug)}/</span>`}
+          ? `<input class="cat-slugin" value="${esc(c.slug)}" oninput="catsEdit[${i}].slug=this.value.trim()" placeholder="网址标识（如 performance-gen-4）" title="新机型的网址标识：小写字母/数字/连字符。定了就不能再改（改=断链接）">`
+          : ""}
       </div></td>
       <td class="c-act">${(catManage || c._new) ? `<button class="ico ico-del" onclick="catDel(${i})" title="${c._new ? "撤掉这行未保存的新机型" : "删机型（保存后生效；有产品会被拒删、需先迁移）"}">✕</button>` : ""}</td>
     </tr>`).join("") || `<tr><td colspan="3" class="muted">无机型</td></tr>`;
@@ -1002,10 +1003,11 @@ function paintForms() {
     <tr${f._new ? ' class="cat-new"' : ""}>
       <td class="c-ord"><span class="ord-grp"><button class="ico" onclick="formMove(${i},-1)" ${i === 0 ? "disabled" : ""} title="上移">↑</button><button class="ico" onclick="formMove(${i},1)" ${i === formsEdit.length - 1 ? "disabled" : ""} title="下移">↓</button></span></td>
       <td><div class="cat-namewrap">
-        <input class="cat-name" value="${esc(f.name)}" oninput="formsEdit[${i}].name=this.value" placeholder="显示名（如 Adapters）">
+        <input class="cat-name" value="${esc(f.name)}" oninput="formsEdit[${i}].name=this.value" placeholder="显示名（如 Adapters）"
+               title="${esc(f.name || f.key)}${f._new ? "" : `　·　网址标识：${esc(f.key)}（一经创建不可改，改了会断现有链接）`}">
         ${f._new
-          ? `<input class="cat-slugin" value="${esc(f.key)}" oninput="formsEdit[${i}].key=this.value.trim()" placeholder="url-段（如 adapters）" title="新品类的 URL 段：小写字母/数字/连字符。定了就不能再改">`
-          : `<span class="cat-slug" title="URL 标识（一期不可改：改了会断 /type/ 链接）">/type/${esc(f.key)}/</span>`}
+          ? `<input class="cat-slugin" value="${esc(f.key)}" oninput="formsEdit[${i}].key=this.value.trim()" placeholder="网址标识（如 adapters）" title="新品类的网址标识：小写字母/数字/连字符。定了就不能再改">`
+          : ""}
       </div></td>
       <td class="cat-cnt tnum">${f._new ? "—" : f.count + " 个"}</td>
       <td class="c-act">${(formManage || f._new) ? `<button class="ico ico-del" onclick="formDel(${i})" title="${f._new ? "撤掉这行未保存的新品类" : "删品类（保存后生效；有产品会被拒删、需先迁移）"}">✕</button>` : ""}</td>
