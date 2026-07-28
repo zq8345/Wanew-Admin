@@ -5,6 +5,7 @@
 //   vendor/render.js  ← functions/_lib/render.js   （产品页渲染 + 列表 regen）
 //   vendor/chrome.js  ← functions/_lib/chrome.js   （三语站壳 makeChrome）
 //   vendor/github.js  ← functions/_lib/github.js   （GitHub API 原子提交/读文件）
+//   vendor/page-paths.js ← functions/_lib/page-paths.js（产品→页面路径/slug 派生）
 //   vendor/locale-dirs.mjs ← scripts/locale-dirs.mjs（locale 目录映射）
 // 权威真源永远在官网仓；本仓只持镜像，杜绝 W1b 那种 fork-drift。
 //
@@ -27,6 +28,7 @@ const MAP = [
   ["vendor/render.js", "functions/_lib/render.js"],
   ["vendor/chrome.js", "functions/_lib/chrome.js"],
   ["vendor/github.js", "functions/_lib/github.js"],
+  ["vendor/page-paths.js", "functions/_lib/page-paths.js"],
   ["vendor/locale-dirs.mjs", "scripts/locale-dirs.mjs"],
   // ⭐ W4：设计令牌真源。官网 skin/css/w3.css 有 122KB，其中绝大部分是**官网的组件样式**——
   // 整份镜像进 admin 会把营销站的组件 CSS 一起拖进后台（体积 + 选择器打架）。所以这条走**切片**：
