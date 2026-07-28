@@ -585,7 +585,7 @@ export function mergeHome(homeJson: any, edits: HomeEdit[], allowedKeys: Set<str
 
 export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, payload: { edits?: HomeEdit[]; featured?: (number | string)[] | null }, opts: { email: string; dryRun?: boolean }) {
   const edits = payload.edits || [];
-  const { locales, catalog, manifest, locDir, chrome, sizes } = ctx;
+  const { locales, catalog, manifest, locDir, chrome, sizes, forms } = ctx;
   // 首页专属输入（loadCtx 未加载的单独读；publish 时读最新=对官网并发改动自愈）
   const [homeRaw, homeTpl, tilesRaw, sharedRaw, featRaw] = await Promise.all([
     readFile(env, cfg, "data/pages/home.json"),
@@ -632,7 +632,7 @@ export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, payload: { e
     const rel = dir ? `${dir}/index.html` : "index.html";
     const isExtra = (locales.render_extra || []).includes(locale);
     if (!ctx.pagesList.has(rel) && !isExtra) continue;   // enabled 缺页不创建；render_extra(zh)从模板播种
-    const h0 = renderHome(homeTpl, { locale, catalog: cat, tiles, modelDisplay: locales.model_display, urlOf, exists: pageExists, dirOf, enabled: locales.enabled, products: manifest, featured, internal_noindex: INTERNAL, sizes } as any /* 真源签名，tsc 对 js 默认参数(internal_noindex=[])推断为 never[]，同 regenListPage 走 as any */);
+    const h0 = renderHome(homeTpl, { locale, catalog: cat, tiles, modelDisplay: locales.model_display, urlOf, exists: pageExists, dirOf, enabled: locales.enabled, products: manifest, featured, formOrder: forms, internal_noindex: INTERNAL, sizes } as any /* 真源签名，tsc 对 js 默认参数(internal_noindex=[])推断为 never[]，同 regenListPage 走 as any */);
     const { html, errors } = chrome.applyChrome((h0 as string).replace(/\r/g, ""), rel);   // ⭐双步第二段
     chromeErrors.push(...errors);
     const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;

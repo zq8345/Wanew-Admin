@@ -289,7 +289,7 @@ export function setTileAlts(html, locale, catalog, modelDisplay) {
 // 机型卡按【存在性】过滤,不是按一张写死的清单:一张卡只在它指向的页面于该语种存在时才出现。
 // 这不是我发明的规则 —— 它精确预测了 pt 首页的现状(7 张,正好是有 pt 页的 7 个分类)。en 8 张。
 // 好处是它自己会长:等 /pt/performance-gen-2/ 建出来,pt 首页自动就有第 8 张,没人需要记得。
-export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, exists, dirOf, enabled, products, featured, internal_noindex = [], sizes }) {
+export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, exists, dirOf, enabled, products, featured, formOrder, internal_noindex = [], sizes }) {
   const sfx = catalog["card.alt.category"];
   const suffix = sfx[locale] ?? sfx.en;
   const cards = tiles
@@ -306,7 +306,7 @@ export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, e
   // 按【形态多样性】轮询的一组(至多 8 件,每件带真实缩略图+本地化标题+详情链接),不写死 id,
   // 产品增删自动跟随。en 侧不发前缀,pt/es 侧存在则前缀(urlOf 复用),alt 派生(entryTitle+altOf)。
   if (out.includes("{{PRODUCT_STRIP}}")) {
-    const strip = pickHomeProducts(products || [], 8, featured).map((e) => {
+    const strip = pickHomeProducts(products || [], 8, featured, formOrder).map((e) => {
       const title = entryTitle(e, locale);
       const href = urlOf(`/${e.category}/${e.id}`, locale);
       return `<a class="w3-pstrip__card" href="${href}">\n` +
@@ -341,7 +341,21 @@ export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, e
 // catalog dump). If data/pages/home-featured.json supplies ids, use exactly those in order (that is
 // the curation, made against real photo quality). Only when no curated list is wired does it fall
 // back to the diversity round-robin below. `featured` is the id array (or null) passed by the caller.
-export function pickHomeProducts(entries, cap = 8, featured = null) {
+/* ⚠️ **下面的轮转分桶当前走不到,而它仍然值得钉死。**
+   首页 strip 由 home-featured.json 的【显式 ids】驱动 —— 实测四语种的 strip 与那 8 个 id
+   逐位相同,所以 featured 那个分支永远命中,轮转是 fallback。
+   > **"死"是当前状态,不是性质。** home-featured 哪天空了或 id 全失效,它立刻变活,
+   > 而那时不会有人记得它按字母序排。**改的是 fallback 的正确性,不是首页的展示逻辑。**
+   🔴 原来是 `[...byForm.keys()].sort()` = 字母序,而 data/forms.json 的【数组顺序】
+      才是这个站的形态次序(regen.mjs 里「order = /type page + chip order」,后台那列「顺序」也是它)。
+      两者当前**恰好同序**,只因为每个 key 恰好是 name 首词的小写:
+        cables < cases < mounts < networking < power
+      来一个 "Antenna Mounts" / key "mounts",两个序当场分家。
+      > **一个"恰好相等"的性质,和一个"必然相等"的性质,今天长得一样,明天不一样。**
+   ⚠️ formOrder 里 key 与 name **都**登记进 rank,所以 C 步把 e.form 归一化成 key 之后
+      这段不需要跟着改 —— 分桶键是显示名还是 key,排序结果都一样。
+      不传 formOrder 时退回字母序,与改动前逐字一致(向后兼容,调用方漏传不会炸)。 */
+export function pickHomeProducts(entries, cap = 8, featured = null, formOrder = null) {
   if (Array.isArray(featured) && featured.length) {
     const byId = new Map(entries.filter((e) => e.thumb).map((e) => [e.id, e]));
     const picked = featured.map((id) => byId.get(Number(id))).filter(Boolean);
@@ -355,7 +369,17 @@ export function pickHomeProducts(entries, cap = 8, featured = null) {
     byForm.get(k).push(e);
   }
   for (const list of byForm.values()) list.sort((a, b) => a.id - b.id);
-  const forms = [...byForm.keys()].sort();
+  const rank = new Map();
+  (Array.isArray(formOrder) ? formOrder : []).forEach((f, i) => {
+    if (f && typeof f === "object") { if (f.key) rank.set(f.key, i); if (f.name) rank.set(f.name, i); }
+    else if (f) rank.set(f, i);
+  });
+  const forms = [...byForm.keys()].sort((a, b) => {
+    const ra = rank.has(a) ? rank.get(a) : Infinity;
+    const rb = rank.has(b) ? rank.get(b) : Infinity;
+    // 清单里没登记的排最后,彼此之间仍按字母序 —— 保证顺序是全序,不依赖 sort 的稳定性
+    return ra !== rb ? ra - rb : String(a).localeCompare(String(b));
+  });
   const out = [];
   for (let round = 0; out.length < cap; round++) {
     let progressed = false;
