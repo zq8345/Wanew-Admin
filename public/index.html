@@ -298,6 +298,20 @@ button.ico-del:hover:not(:disabled){color:var(--w3-err);border-color:rgba(255,15
 .grow .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grow .gid{font-size:10.5px;color:var(--w3-text3);font-variant-numeric:tabular-nums;flex:none}
 .gempty{padding:16px 13px;color:var(--w3-text3);font-size:12.5px}
+/* 产品：适配终端多选 + 长/短标题对照 */
+.cmwrap{display:flex;flex-wrap:wrap;gap:7px}
+.cmw{display:inline-flex;align-items:center;gap:7px;height:29px;padding:0 12px;border:1px solid var(--w3-line);background:var(--w3-bg2);color:var(--w3-text2);border-radius:999px;cursor:pointer;font-size:12.5px;user-select:none}
+.cmw:hover{border-color:var(--w3-line2);color:var(--w3-text)}
+.cmw.on{background:rgba(125,177,255,.14);border-color:var(--w3-accent);color:var(--w3-text);font-weight:600}
+.cmw input{display:none}
+.cmw .tick{width:12px;text-align:center;color:var(--w3-text3);font-size:11px}
+.cmw.on .tick{color:var(--w3-accent)}
+.tlens{margin-top:9px;border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);background:var(--w3-bg2);padding:10px 12px;font-size:12px;line-height:1.55}
+.tlens .r{display:flex;gap:9px;padding:3px 0}
+.tlens .k{flex:none;width:74px;color:var(--w3-text3);font-size:11px}
+.tlens .v{flex:1;min-width:0;color:var(--w3-text2)}
+.tlens .v b{color:var(--w3-text);font-weight:600}
+.missing-sum{display:inline-block;margin-left:6px;font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(201,130,10,.16);border:1px solid rgba(201,130,10,.45);color:#ffc078;white-space:nowrap}
 .cat-add{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;height:auto;padding:10px;margin-top:12px;border:1px dashed var(--w3-line2);background:transparent;color:var(--w3-text3);border-radius:var(--dz-radius-s);font-size:13px}
 .cat-add:disabled{opacity:.7;cursor:not-allowed}
 .cat-add:hover:not(:disabled){border-color:var(--w3-accent);color:var(--w3-accent)}
@@ -397,7 +411,15 @@ button.ico-del:hover:not(:disabled){color:var(--w3-err);border-color:rgba(255,15
     </div>
     <div class="card">
       <h3>内容（英文主稿）</h3>
-      <div class="field"><label>标题 *</label><input id="e-title"></div>
+      <div class="field"><label>标题 *  <span class="muted" style="font-weight:400;font-size:11px">长标题：给 &lt;title&gt; 和搜索引擎用，关键词写全没关系</span></label><input id="e-title" oninput="paintTitleLens()"><div class="cc" id="e-title-cc"><span class="n"></span><span class="bar" style="visibility:hidden"><i></i></span><span class="hint"></span></div></div>
+      <div class="field"><label>短名（页面标题 / 列表卡）  <span class="muted" style="font-weight:400;font-size:11px">买家看到的那行——写人话，别堆关键词</span></label>
+        <input id="e-cardtitle" placeholder="留空＝沿用上面的长标题（现状不变）" oninput="paintTitleLens()">
+        <div class="cc" id="e-ct-cc"><span class="n"></span><span class="bar" style="visibility:hidden"><i></i></span><span class="hint"></span></div>
+        <div id="e-title-lens"></div>
+      </div>
+      <div class="field"><label>适配终端  <span class="muted" style="font-weight:400;font-size:11px">买家最先问的问题；留空＝官网不显示徽章</span></label>
+        <div id="e-compat" class="cmwrap"></div>
+      </div>
       <div class="field"><label>描述 description_html *</label><textarea id="e-desc" class="desc"></textarea></div>
       <div class="field"><label>摘要 summary_html（列表卡/详情顶部）</label><textarea id="e-summary"></textarea></div>
       <p class="muted" style="margin:4px 0 0;font-size:12px">⚠️ 葡/西翻译由本地翻译流程维护——此处保存只更新英文，<b>不会覆盖已有 pt/es 翻译</b>（merge 保护）。</p>
@@ -721,7 +743,7 @@ function renderRows() {
     <tr>
       <td><input type="checkbox" ${sel.has(p.id) ? "checked" : ""} onchange="toggleSel(${p.id},this.checked)"></td>
       <td>${p.thumb ? `<img class="thumb" src="${esc(imgUrl(p.thumb))}" loading="lazy">` : ""}</td>
-      <td>${title}</td>
+      <td>${title}${p.excerpt ? "" : `<span class="missing-sum" title="没写摘要——列表卡和详情页顶部会空一块，建议补">缺摘要</span>`}</td>
       <td><span title="${STATUS_TIP[p.status || "published"]}">${STATUS_BADGE[p.status] || STATUS_BADGE.published}</span></td>
       <td class="muted">${p.id}</td>
       <td><span class="pill">${esc(catName(p.category))}</span></td>
@@ -2024,12 +2046,47 @@ async function openEdit(id) {
     : "保存将重渲染三语详情+受影响列表（已存在的），一次原子 commit，≈1分钟后上线。";
 }
 
+// 适配终端多选：**选项源直接用机型清单**（cats = categories.json，分类页同一份）——不另造一套，
+// 否则又是双源。存的是 slug，显示的是机型显示名；改显示名不动产品数据。
+function paintCompat(selected) {
+  const box = $("#e-compat"); if (!box) return;
+  const sel = new Set(selected || []);
+  box.innerHTML = (cats || []).map((c) => `
+    <label class="cmw${sel.has(c.slug) ? " on" : ""}" title="${esc(c.slug)}">
+      <input type="checkbox" data-cw="${esc(c.slug)}" ${sel.has(c.slug) ? "checked" : ""} onchange="this.closest('.cmw').classList.toggle('on', this.checked)">
+      <span class="tick">${sel.has(c.slug) ? "✓" : "＋"}</span>${esc(c.display || c.slug)}
+    </label>`).join("") || `<span class="muted" style="font-size:12px">机型清单未加载</span>`;
+}
+const compatData = () => [...document.querySelectorAll("#e-compat input[data-cw]:checked")].map((i) => i.dataset.cw);
+// 长/短标题对照：让"页面上显示什么、搜索引擎看到什么"当场可见（这正是 h1 堆关键词的根源——看不见）
+function paintTitleLens() {
+  const box = $("#e-title-lens"); if (!box) return;
+  const long = ($("#e-title").value || "").trim(), short = ($("#e-cardtitle").value || "").trim();
+  const shown = short || long;
+  const cc = (id, v, tip) => {
+    const el = $(id); if (!el) return;
+    el.querySelector(".n").textContent = `${v.length} 字符`;
+    el.querySelector(".hint").textContent = tip;
+    el.className = "cc" + (tip.startsWith("偏长") ? " warn" : "");
+  };
+  cc("#e-title-cc", long, long.length > 120 ? "偏长——但长标题堆关键词没问题，它只进 <title>" : "");
+  cc("#e-ct-cc", short, !short ? "留空＝沿用长标题" : short.length > 60 ? "偏长——短名越短越好认" : "");
+  box.innerHTML = `<div class="tlens">
+    <div class="r"><span class="k">页面 h1</span><span class="v"><b>${esc(shown)}</b>${short ? "" : ` <span class="muted">（沿用长标题）</span>`}</span></div>
+    <div class="r"><span class="k">列表卡</span><span class="v">${esc(shown.length > 46 ? shown.slice(0, 46) + "…" : shown)}</span></div>
+    <div class="r"><span class="k">&lt;title&gt;</span><span class="v muted">${esc(long)}<span style="color:var(--w3-text3)"> —— 长标题始终用在这里，${short ? "填了短名也不影响 SEO" : "关键词写全没问题"}</span></span></div>
+  </div>`;
+}
+
 function fillForm(p) {
   const en = p.i18n.en;
   $("#e-title").value = en.title || ""; $("#e-summary").value = en.summary_html || "";
   $("#e-desc").value = en.description_html || ""; $("#e-mtitle").value = en.meta_title === en.title ? "" : (en.meta_title || "");
   $("#e-mdesc").value = en.meta_description || "";
   $("#e-cat").value = p.category || ""; $("#e-form").value = p.form || "";
+  $("#e-cardtitle").value = en.card_title || "";
+  paintCompat(p.compatible_with || []);
+  paintTitleLens();
   renderGallery(p.images || []);
   renderVideos(p.videos || []);
   // 🔴终审要求②：编辑页回填自检——「数据有值 → 控件必须回填成功」，断链当场吼（防 e-form 类回归）。
@@ -2046,8 +2103,10 @@ function collectForm() {
     category: $("#e-cat").value, form: $("#e-form").value || null,
     i18n: { en: {
       title: $("#e-title").value.trim(), summary_html: $("#e-summary").value,
+      card_title: $("#e-cardtitle").value.trim(),   // 空=后端不落盘=官网回落长标题
       description_html: $("#e-desc").value, meta_title: $("#e-mtitle").value.trim(), meta_description: $("#e-mdesc").value.trim(),
     } },
+    compatible_with: compatData(),
     images: galleryData(), videos: videoData(),
     robots: cur?.robots ?? null, jsonld_product: cur?.jsonld_product ?? null, jsonld_breadcrumb: cur?.jsonld_breadcrumb ?? null,
   };

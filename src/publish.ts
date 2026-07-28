@@ -106,6 +106,13 @@ export function validateProduct(body: any, id: number, categories: any, existing
   for (const im of body.images) {
     if (!im || (typeof im.key !== "string" && typeof im.src !== "string")) return { error: "each image needs key or src" };
   }
+  // 适配终端（可选）：机型 slug 数组。**选项源=categories.json 的机型清单**（分类页同一份），
+  // 存 slug 不存显示名——改机型显示名不该动到 68 个产品的数据（那正是双源会犯的错）。
+  // 空/缺省=官网不显示徽章=现状不破。**绝不从描述散文里自动抽**（那是推断，会抽错）。
+  if (body.compatible_with !== undefined && !Array.isArray(body.compatible_with)) return { error: "compatible_with must be an array" };
+  const compat: string[] = [...new Set((body.compatible_with || []).map((x: any) => String(x)))] as string[];
+  const badCompat = compat.filter((s) => !CATEGORIES.includes(s));
+  if (badCompat.length) return { error: `适配终端必须是现有机型：${badCompat.join(",")}（可选值 ${CATEGORIES.join("/")}）` };
   // 视频（可选·v1）：每条需 key|src(R2 mp4)；poster/title/alt 可选。缺省字段=零迁移（现有产品无 videos → 渲染不变）。
   if (body.videos !== undefined && !Array.isArray(body.videos)) return { error: "videos must be an array" };
   for (const v of body.videos || []) {
@@ -118,6 +125,9 @@ export function validateProduct(body: any, id: number, categories: any, existing
     // meta_title 是派生字段（render.js:20 "deliberately NOT read from data — DERIVED"）——
     // 只在用户显式自定义(≠title)时落盘；否则不存（🟡终审 diff 抓出旧白名单把派生值显式化 +166B）
     ...(en.meta_title && en.meta_title !== en.title ? { meta_title: en.meta_title } : {}),
+    // 短名（人话标题）：h1 与列表卡用它，长 title 留给 <title>/meta（SEO 不丢）。
+    // **空就不落盘**——官网侧回落 title=现状不破（存量 68 个产品一个字节都不动）。
+    ...(typeof en.card_title === "string" && en.card_title.trim() ? { card_title: en.card_title.trim() } : {}),
     meta_description: en.meta_description || "",
   };
   // 状态机：draft/published/archived。body.status 合法则用；否则沿用旧值；再否则 published
@@ -125,6 +135,8 @@ export function validateProduct(body: any, id: number, categories: any, existing
   const status = (["draft", "published", "archived"].includes(body.status) ? body.status : (existing?.status ?? "published"));
   const prod = {
     id, category: body.category, form, status, robots: body.robots ?? (existing?.robots ?? null),
+    // 非空才落盘=零迁移（现有 68 个产品无此字段 → 官网回落现状、渲染逐字节不变）
+    ...(compat.length ? { compatible_with: compat } : {}),
     i18n,
     images: body.images.map((im: any) => (im.key !== undefined ? { key: im.key, alt: im.alt || "" } : { src: im.src, alt: im.alt || "" })),
     // 视频（非空才落盘=零迁移）：key|src + poster(可选) + title(可选单值,v1 非 i18n) + alt
@@ -159,14 +171,15 @@ function matchJson(existingRaw: string | null | undefined, obj: any): string {
 export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, opts: { isNew: boolean; oldCategory?: string; email: string; dryRun?: boolean }) {
   const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome, formKey, sizes } = ctx;
   const thumb = prod.images[0] ? resolveImg(prod.images[0], site.img_base) : "";
-  const entry: any = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, thumb, excerpt: excerptOf(prod) };
+  const entry: any = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, ...(prod.i18n.en.card_title ? { card_title: prod.i18n.en.card_title } : {}), thumb, excerpt: excerptOf(prod) };
   // ⭐ manifest entry 的 i18n（pt/es 卡片标题/摘要）——抄 regen.mjs:47-53 同源逻辑。
   //   漏它的代价（字节对照抓出的真雷）：每次保存，该品在 pt/es 列表卡片退化英文（Δ59/44B 实测）。
   for (const loc of locales.enabled) {
     if (loc === locales.default) continue;
     const t = prod.i18n[loc] && prod.i18n[loc].title;
+    const ct = prod.i18n[loc] && prod.i18n[loc].card_title;
     const x = excerptOf(prod, loc);
-    if (t || x !== entry.excerpt) (entry.i18n ??= {})[loc] = { ...(t ? { title: t } : {}), ...(x ? { excerpt: x } : {}) };
+    if (t || ct || x !== entry.excerpt) (entry.i18n ??= {})[loc] = { ...(t ? { title: t } : {}), ...(ct ? { card_title: ct } : {}), ...(x ? { excerpt: x } : {}) };
   }
   // ⭐ 状态机：published=进 index+渲染页；draft/archived=不进 index、删已存在的线上页（保留 {id}.json）。
   //   （prod.status 缺省 published=零迁移。官网只渲 products-index.json→draft/archived 天然不渲染/不被爬。）
@@ -337,11 +350,11 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
     // manifest：移旧条目；live 则加新条目（entry 抄 publishProduct 逻辑）
     manifest = manifest.filter((e: any) => e.id !== id);
     const thumb = prod.images?.[0] ? resolveImg(prod.images[0], site.img_base) : "";
-    const entry: any = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, thumb, excerpt: excerptOf(prod) };
+    const entry: any = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, ...(prod.i18n.en.card_title ? { card_title: prod.i18n.en.card_title } : {}), thumb, excerpt: excerptOf(prod) };
     for (const loc of locales.enabled) {
       if (loc === locales.default) continue;
-      const t = prod.i18n[loc] && prod.i18n[loc].title; const x = excerptOf(prod, loc);
-      if (t || x !== entry.excerpt) (entry.i18n ??= {})[loc] = { ...(t ? { title: t } : {}), ...(x ? { excerpt: x } : {}) };
+      const t = prod.i18n[loc] && prod.i18n[loc].title; const x = excerptOf(prod, loc); const ct = prod.i18n[loc] && prod.i18n[loc].card_title;
+      if (t || ct || x !== entry.excerpt) (entry.i18n ??= {})[loc] = { ...(t ? { title: t } : {}), ...(ct ? { card_title: ct } : {}), ...(x ? { excerpt: x } : {}) };
     }
     if (isLive) manifest.push(entry);
     affectedCats.add(oldCat); affectedCats.add(prod.category);
