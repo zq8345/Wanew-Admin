@@ -89,7 +89,14 @@ a:hover{text-decoration:underline}
 .dz-user-foot{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12.5px;color:var(--w3-text2);border-radius:var(--dz-radius-s);cursor:pointer}
 .dz-user-foot:hover{background:var(--w3-panel2)}
 .dz-user-foot .av{width:20px;height:20px;border-radius:50%;background:var(--w3-panel2);border:1px solid var(--w3-line2);display:grid;place-items:center;font-size:11px;color:var(--w3-text);flex-shrink:0}
-.dz-user-foot .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 当前登录人必须看得全——"我现在是谁的身份在操作"是基本信息，截断成 joe@wanew.com… 等于没写。
+   184px 侧栏放不下一行邮箱，就让它换行，不截断。 */
+.dz-user-foot .who{white-space:normal;word-break:break-all;line-height:1.35;min-width:0}
+.dz-user-foot{align-items:flex-start}
+.dz-user-foot .av{flex:none;margin-top:1px}
+.dz-logout{display:flex;align-items:center;gap:7px;padding:6px 10px;margin-top:2px;font-size:12.5px;
+  color:var(--w3-text3)!important;border-radius:var(--dz-radius-s);text-decoration:none}
+.dz-logout:hover{background:var(--w3-panel2);color:var(--dz-err)!important;text-decoration:none}
 .dz-deploy{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12px;color:var(--w3-text3)}
 .dz-deploy .dot{width:7px;height:7px;border-radius:50%;background:var(--dz-ok);box-shadow:0 0 6px var(--dz-ok);flex-shrink:0}
 

@@ -386,7 +386,11 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       <div class="dz-nav-item" data-view="audit" onclick="showAudit()"><span class="ic">▤</span> 审计日志</div>
       <div class="dz-nav-item" data-view="settings" onclick="showSettings()"><span class="ic">⚙</span> 设置</div>
       <div class="dz-nav-item" data-view="team" onclick="showTeam()"><span class="ic">◑</span> 团队</div>
-      <div class="dz-user-foot"><span class="av">◐</span> <span class="who" id="who"></span></div>
+      <div class="dz-user-foot" id="who-row"><span class="av">◐</span> <span class="who" id="who"></span></div>
+      <!-- 退出：**真链接**不是 JS 点击处理。JS 出错时按钮会静默失效、用户以为退了其实没退——
+           那比没有按钮更危险。会话归 Cloudflare Access 管，清本地任何状态都没用，必须打它的登出端点。
+           用应用级（只退这个后台），不用团队级（那会把 Joe 从所有内部系统一起踢出去，代价过大）。 -->
+      <a class="dz-logout" href="/cdn-cgi/access/logout" title="结束当前 Cloudflare Access 会话（只退出本后台，不影响其它内部系统）">⇥ 退出登录</a>
     </div>
   </nav>
   <main class="dz-main">
@@ -709,7 +713,9 @@ function msg(t, err) { const m = $("#msg"); m.textContent = t; m.className = "ms
 (async function init() {
   try {
     const w = await fetch("/api/_whoami").then((r) => r.json());
-    $("#who").textContent = (w.operator || "dev") + " · " + w.repo;
+    // 只放身份（登录人），不再拼仓名——184px 侧栏里两段会把邮箱挤成 joe@wanew.com…；仓名在「设置」页有
+    $("#who").textContent = w.operator || "dev";
+    const wr = $("#who-row"); if (wr) wr.title = (w.operator || "dev") + " · " + w.repo;
     window._imgBase = w.imgBase || "";
     // 批㉚：图片 URL 统一解析（总工定罪:#650 等老品 images[].src 是官网相对路径,实体只在
     // wanew.com 域,admin 域直用必 404）。key→图床 IMG_BASE;"/"开头→挂官网域;http(s) 绝对原样。
