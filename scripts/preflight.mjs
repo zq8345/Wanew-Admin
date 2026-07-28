@@ -10,6 +10,7 @@
 //     ② 有漂移则 sync，并提示必须复核导出签名 + 跑行为自查
 //     ③ 真跑三闸（tsc / vendor 守卫 / 令牌纪律），全绿才 exit 0
 import { execFileSync } from "child_process";
+import { readFileSync } from "fs";
 
 const run = (args, cwdOk = true) => {
   try { return { code: 0, out: execFileSync(process.execPath, args, { encoding: "utf8" }) }; }
@@ -39,7 +40,29 @@ if (drifted) {
   console.log("\n② 无漂移，跳过同步");
 }
 
-console.log("\n③ 跑三闸");
+// ③ ⭐ 输入一致性：闸跑在【工作区】，发版跑在【提交】——**两个不同的输入**。
+// 只验工作区的话，"同步了但没提交"会让我这边全绿、总工 checkout 提交后闸红（真踩过一次）。
+// 这不是"闸不干活"，是**闸干了活但验的不是将被发布的那份东西**——更隐蔽。
+// 所以逐个比对：镜像文件的【工作区字节】必须等于【HEAD 里的字节】。
+console.log("\n③ 输入一致性：我验的这份 = 总工要发的那份？");
+const MIRRORS = ["vendor/render.js", "vendor/chrome.js", "vendor/github.js", "vendor/locale-dirs.mjs", "public/w3-tokens.css"];
+let mismatch = 0;
+for (const f of MIRRORS) {
+  let wt, head;
+  try { wt = readFileSync(f); } catch { console.error(`   🔴 ${f} 工作区缺失`); mismatch++; continue; }
+  try { head = execFileSync("git", ["show", `HEAD:${f}`], { encoding: "buffer", maxBuffer: 1 << 26 }); }
+  catch { console.error(`   🔴 ${f} 不在 HEAD 里（新文件未提交？）`); mismatch++; continue; }
+  if (Buffer.compare(wt, head) === 0) console.log(`   ✓ ${f}  工作区 == HEAD  (${wt.length}B)`);
+  else { console.error(`   🔴 ${f}  工作区 ${wt.length}B ≠ HEAD ${head.length}B —— **同步了但没提交**`); mismatch++; }
+}
+if (mismatch) {
+  console.error(`\n🔴 ${mismatch} 个镜像的工作区与 HEAD 不一致。`);
+  console.error(`   闸绿的是工作区，总工发的是提交 —— 现在报 deploy 会在他那边红。`);
+  console.error(`   → git add ${MIRRORS.join(" ")} && commit`);
+  process.exit(1);
+}
+
+console.log("\n④ 跑三闸");
 let bad = 0;
 const tsc = runNpx(["tsc", "--noEmit"]);
 console.log(`   tsc            exit=${tsc.code}`); if (tsc.code) { show(tsc); bad++; }

@@ -414,7 +414,12 @@ export function renderPage(tpl, { locale, catalog, urlOf, path = "/", dirOf, ena
     // ⚠️ 存在性是规则:某语种没有这个页(比如 es-hold 扣留的产品),就【不发】它的 alternate,
     //   否则是在声明一个 404。这和切换器、body 内链用的是同一条规则,不是这里新发明的。
     HREFLANG: isInternal
-      ? `<meta name="robots" content="noindex, follow" />`   // zh: 内部页,不收录、零 hreflang
+      // zh: 内部页,不收录、零 hreflang。
+      // ⚠️ 幂等:模板里若已自带 robots(page-video.html 就有一条 —— 那是 en/es/pt 的 video 页
+      //    noindex 的【唯一】来源,不能删),这里再发一条就成了重复标签。实测 zh/video 曾有 2 条。
+      //    重复的 noindex 不改变行为,但**它是"两个机制管同一件事"的可见症状** —— 下一次
+      //    只要有人改其中一个,两条就会互相矛盾,而那时才发现有两条。
+      ? (/<meta\s+name="robots"/i.test(tpl) ? "" : `<meta name="robots" content="noindex, follow" />`)
       : `<!-- hreflang alternates (derived from locales.json + page existence) -->\n` +
       enabled
         // urlOf 把 p 原样还回来 = "该语种没有这个页" —— 复用它,不另造一个 exists 参数。
@@ -506,7 +511,7 @@ export function assertNoTokens(out, locale) {
 //
 // ⚠️ 只碰 catalog 真正拥有的那几处:机型 chip 的名字(Mini/Standard…)是 model_display,
 //    属于 fallback 里的型号名、不翻;形态 chip(Mounts & Brackets…)在 chrome 里,已经有主了。
-export function setListLabels(html, { locale, catalog, model }) {
+export function setListLabels(html, { locale, catalog, model, formKey }) {
   const t = (key) => {
     const e = catalog[key];
     if (!e) throw new Error(`setListLabels: catalog 缺 key ${key}`);
@@ -525,6 +530,16 @@ export function setListLabels(html, { locale, catalog, model }) {
     (m, a, b) => a + t("body.banner.subtitle") + b);
   if (model) {
     const h1 = t("list.banner.model").replace("{model}", model);
+    out = out.replace(/(<h1 class="page-header__title">)[^<]*(<\/h1>)/, `$1${h1}$2`);
+  } else if (formKey) {
+    // 形态页(/type/X)。**与机型页是两个模式,不是一个键两种填法**:
+    //   机型页「Starlink {model} Accessories」· 形态页「Starlink {形态}」——【没有】Accessories。
+    // 复用 list.banner.model 会凭空给形态页加上 Accessories,改变现有 en 文案,所以是两个键。
+    // {form} 取 header.* 的现成类目译文(与 nav、首页类目卡、筛选 chip 同一套键)——
+    // **不新造类目名**,全站类目口径仍然单一。
+    // 修的是:此前只有 <title> 走了 catalog、H1 没走,于是 es/pt/zh 的形态页顶着英文 H1
+    // (2026-07-28 实测:四语的 /type/cables/ 全是 "Starlink Cables")。
+    const h1 = t("list.banner.form").replace("{form}", t(formKey));
     out = out.replace(/(<h1 class="page-header__title">)[^<]*(<\/h1>)/, `$1${h1}$2`);
   }
   // 筛选栏两个标签:第一个是机型轴、第二个是形态轴 —— 顺序由页面结构固定,不是我猜的。
