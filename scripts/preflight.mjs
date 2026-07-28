@@ -84,7 +84,7 @@ console.log(`   令牌纪律        exit=${tok.code}`); if (tok.code) { show(tok
 //    但**一段永远返回"通过"的校验代码，也能让这道闸变绿。**真正的判据仍是运行时的 SHA 比对本身。
 console.log("\n⑤ 上线就绪：内联 content 有没有配套校验");
 {
-  const gh = readFileSync(path.join(ROOT, "vendor/github.js"), "utf8");
+  const gh = readFileSync("vendor/github.js", "utf8");
   const fn = (gh.match(/export async function commitFiles[\s\S]*?\n\}/) || [""])[0];
   const inline = /type: "blob", content:/.test(fn);        // 用了内联 content 吗
   // ⚠️ 算 SHA 的函数在 commitFiles **外面**（辅助函数），所以这里找的是**对它的调用**，
