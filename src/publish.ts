@@ -33,30 +33,6 @@ export interface Ctx {
   chrome: { applyChrome: (html: string, path: string) => { html: string; errors: string[] } ; localizeUrl: (p: string, loc: string) => string };
 }
 
-// 列表卡缩略图：实测列表页图片有 ~61% 是"下载了用不上的像素"（自然宽中位 1500px，
-// 卡片最大只渲染到 460px）。回填脚本已在 R2 生成 `<base>.thumb.webp`（长边 960 = 460×2）。
-// 这里让 manifest 的 thumb 指向它 —— **官网侧不用改**，它照旧渲染 e.thumb。
-//
-// ⚠️ 回落（没有缩略图 → 用原图）是**安全网不是常规路径**：全量回填后它本该几乎不发生。
-//    所以回落时必须留日志 —— 否则"某批图没生成缩略图"会**静默地永远慢下去**：不报错、不崩，
-//    只是一直差一点，而每个人都以为那就是它本来的样子。
-const thumbKeyOf = (src: string) => src.replace(/\.[a-z0-9]+$/i, "") + ".thumb.webp";
-export async function preferThumb(env: Env, url: string, imgBase: string): Promise<string> {
-  if (!url || /\.thumb\.webp$/i.test(url)) return url;
-  // 只处理自家图床（R2）的图；站点 /static/… 那半归官网，不在这儿判
-  if (!imgBase || !url.startsWith(imgBase)) return url;
-  const key = url.slice(imgBase.length).replace(/^\//, "");
-  const tk = thumbKeyOf(key);
-  try {
-    const hit = await (env as any).IMAGES?.head?.(tk);
-    if (hit) return imgBase.replace(/\/$/, "") + "/" + tk;
-    console.warn(`[thumb-fallback] 无缩略图，回落原图：${key}（全量回填后不该出现——若成批出现说明回填漏了这批）`);
-  } catch (e) {
-    console.warn(`[thumb-fallback] 判存在失败，回落原图：${key} — ${String(e).slice(0, 80)}`);
-  }
-  return url;
-}
-
 // 形态轴派生：与官网 chrome.js:50 逐字同式（Object.fromEntries(forms.map(f=>[f.name,f.key]))）——
 // 旧 render.js FORM_KEY 常量正是这个形状，故迁移后行为字节等价。单源=data/forms.json。
 export const formKeyOf = (forms: any[]): Record<string, string> =>
@@ -194,7 +170,7 @@ function matchJson(existingRaw: string | null | undefined, obj: any): string {
 // → 一个原子 commit（= 一次 Pages 部署）。
 export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, opts: { isNew: boolean; oldCategory?: string; email: string; dryRun?: boolean }) {
   const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome, formKey, sizes } = ctx;
-  const thumb = prod.images[0] ? await preferThumb(env, resolveImg(prod.images[0], site.img_base), site.img_base) : "";
+  const thumb = prod.images[0] ? resolveImg(prod.images[0], site.img_base) : "";
   const entry: any = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, ...(prod.i18n.en.card_title ? { card_title: prod.i18n.en.card_title } : {}), thumb, excerpt: excerptOf(prod) };
   // ⭐ manifest entry 的 i18n（pt/es 卡片标题/摘要）——抄 regen.mjs:47-53 同源逻辑。
   //   漏它的代价（字节对照抓出的真雷）：每次保存，该品在 pt/es 列表卡片退化英文（Δ59/44B 实测）。
@@ -373,7 +349,7 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
     files.push({ path: `data/products/${id}.json`, content: matchJson(raw, prod) });
     // manifest：移旧条目；live 则加新条目（entry 抄 publishProduct 逻辑）
     manifest = manifest.filter((e: any) => e.id !== id);
-    const thumb = prod.images?.[0] ? await preferThumb(env, resolveImg(prod.images[0], site.img_base), site.img_base) : "";
+    const thumb = prod.images?.[0] ? resolveImg(prod.images[0], site.img_base) : "";
     const entry: any = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, ...(prod.i18n.en.card_title ? { card_title: prod.i18n.en.card_title } : {}), thumb, excerpt: excerptOf(prod) };
     for (const loc of locales.enabled) {
       if (loc === locales.default) continue;
