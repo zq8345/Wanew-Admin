@@ -36,12 +36,29 @@ const MAP = [
   ["public/w3-tokens.css", "skin/css/w3.css", sliceRootBlock],
 ];
 
-// 切片器：从上游 CSS 里取出 `:root{…}` 块（必须唯一，否则拒绝——多个块意味着上游改了结构，
-// 这时"取第一个"会静默取错，不如红出来让人看一眼）。
+// 切片器：取上游 CSS 的**基础** `:root{…}` 块 —— 即**花括号深度为 0** 的那个。
+// 深度 >0 的 :root 是嵌在 `@media` 里的响应式覆写（上游 2026-07-28 起有两个这样的块，
+// 覆写 --w3-fs-* 字号档）。admin 不消费 --w3-fs-*，且后台是固定宽度的桌面工具，不需要那套断点。
+// ⚠️ 判据用真实括号深度而不是"取第一个"或正则猜：**基础块必须恰好一个**，多了照样拒绝
+//    （那意味着上游把令牌拆成了多块，得有人看一眼再决定怎么合）。
 function sliceRootBlock(buf, upstream) {
   const text = buf.toString("utf8");
-  const all = text.match(/:root\s*\{[\s\S]*?\}/g) || [];
-  if (all.length !== 1) throw new Error(`${upstream} 里 :root 块有 ${all.length} 个（期望恰好 1 个）——上游结构变了，切片规则需重定`);
+  const base = [];
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text.startsWith(":root", i)) {
+      const open = text.indexOf("{", i);
+      if (open > -1 && text.slice(i + 5, open).trim() === "") {
+        // 找到配对的右括号（令牌块内部不含嵌套括号）
+        const close = text.indexOf("}", open);
+        if (close > -1 && depth === 0) base.push(text.slice(i, close + 1));
+      }
+    }
+    if (text[i] === "{") depth++;
+    else if (text[i] === "}") depth = Math.max(0, depth - 1);
+  }
+  const all = base;
+  if (all.length !== 1) throw new Error(`${upstream} 里**顶层** :root 块有 ${all.length} 个（期望恰好 1 个）——上游结构变了，切片规则需重定`);
   return Buffer.from(
     `/* 自动生成·勿手改 —— 官网 ${upstream} 的 :root 令牌层逐字节切片。\n` +
     `   改令牌请去官网仓改，然后 \`npm run vendor:sync\`。\n` +

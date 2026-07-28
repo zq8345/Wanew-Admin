@@ -40,6 +40,12 @@ a{color:var(--w3-accent);text-decoration:none}
 a:hover{text-decoration:underline}
 .tnum{font-variant-numeric:tabular-nums}
 .muted{color:var(--w3-text3)}
+/* W4：收重复出现的一次性样式。**只收重复的** —— 一次性布局若逐个建类，会得到一堆只用一次的类，
+   那比 inline 更糟（同样的一次性样式多一层间接）。§3 的规则是"每类组件只有一种实现"，不是"零 inline"。 */
+.h3sub{font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--w3-text3)}  /* 卡片标题里的副标签：解掉 h3 的大写/字距 */
+.note{font-size:12px;color:var(--w3-text3);margin:0 0 12px}                                        /* 工具栏下方的说明段 */
+.ta-r{text-align:right}                                                                            /* 数字列右对齐（配 .tnum 用） */
+.hint-q{cursor:help;border-bottom:1px dotted var(--w3-text3)}                                       /* 带 tooltip 的问号提示 */
 
 /* ── 顶栏 ── */
 .dz-header{height:var(--dz-header-h);display:flex;align-items:center;gap:16px;padding:0 16px;

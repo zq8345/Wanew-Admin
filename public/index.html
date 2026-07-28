@@ -423,7 +423,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       <button class="danger" onclick="bulkDelete()">彻底删除</button>
       <button onclick="clearSel()">取消选择</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:0 0 8px">批量操作走一次原子 commit（一次 Pages 重建、审计一条）。下架=软下架可恢复；彻底删除不可恢复。</p>
+    <p class="note">批量操作走一次原子 commit（一次 Pages 重建、审计一条）。下架=软下架可恢复；彻底删除不可恢复。</p>
     <table>
       <thead><tr>
         <th style="width:30px"><input type="checkbox" id="selAll" onchange="toggleAll(this.checked)"></th>
@@ -462,13 +462,13 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
     </div>
     <div class="card">
       <h3>内容（英文主稿）</h3>
-      <div class="field"><label>标题 *  <span class="muted" style="font-weight:400;font-size:11px">长标题：给 &lt;title&gt; 和搜索引擎用，关键词写全没关系</span></label><input id="e-title" oninput="paintTitleLens()"><div class="cc" id="e-title-cc"><span class="n"></span><span class="bar" style="visibility:hidden"><i></i></span><span class="hint"></span></div></div>
-      <div class="field"><label>短名（页面标题 / 列表卡）  <span class="muted" style="font-weight:400;font-size:11px">买家看到的那行——写人话，别堆关键词</span></label>
+      <div class="field"><label>标题 *  <span class="h3sub">长标题：给 &lt;title&gt; 和搜索引擎用，关键词写全没关系</span></label><input id="e-title" oninput="paintTitleLens()"><div class="cc" id="e-title-cc"><span class="n"></span><span class="bar" style="visibility:hidden"><i></i></span><span class="hint"></span></div></div>
+      <div class="field"><label>短名（页面标题 / 列表卡）  <span class="h3sub">买家看到的那行——写人话，别堆关键词</span></label>
         <input id="e-cardtitle" placeholder="留空＝沿用上面的长标题（现状不变）" oninput="paintTitleLens()">
         <div class="cc" id="e-ct-cc"><span class="n"></span><span class="bar" style="visibility:hidden"><i></i></span><span class="hint"></span></div>
         <div id="e-title-lens"></div>
       </div>
-      <div class="field"><label>适配终端  <span class="muted" style="font-weight:400;font-size:11px">买家最先问的问题；留空＝官网不显示徽章</span></label>
+      <div class="field"><label>适配终端  <span class="h3sub">买家最先问的问题；留空＝官网不显示徽章</span></label>
         <div id="e-compat" class="cmwrap"></div>
       </div>
       <div class="field"><label>描述 description_html *</label><textarea id="e-desc" class="desc"></textarea></div>
@@ -510,7 +510,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
     <!-- 机型轴（可编辑：categories.json.display + locales.model_display，统一为一个显示名）-->
     <div id="cat-tab-model" class="card cat-block">
       <div class="dz-toolbar">
-        <h3 style="margin:0">机型 <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">Model</span></h3>
+        <h3 style="margin:0">机型 <span class="h3sub">Model</span></h3>
         <div class="spacer"></div>
         <button id="cat-manage-btn" onclick="toggleCatManage()" title="进入管理态才显示删除按钮（防误删）">🔧 管理</button>
         <button class="primary" onclick="saveCats()">💾 保存</button>
@@ -524,13 +524,13 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       <button class="cat-add" onclick="catAdd()" title="加机型：新 URL 段、不影响现有机型">＋ 添加机型</button>
       <div class="buildnote" id="cat-build-note" style="display:none"></div>
       <!-- Joe：规则说明读一次就够，不该每次挡在数据前面 → 并进按钮下方这段脚注的首句（两张卡同一种处理）。文案未改。 -->
-      <p class="muted" style="font-size:12px;margin-top:10px">每个机型一个显示名（官网列表/导航/详情/瓦片统一用它）。保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。<b>加机型</b>：数据即时入库，<b>页面需官网构建后出现</b>。<b>删机型</b>：管理态点行末 ✕ 标记、保存时后端守卫（有产品会拒删）。<span title="每个机型有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" style="cursor:help;border-bottom:1px dotted var(--w3-text3)">网址标识不可改 ?</span></p>
+      <p class="muted" style="font-size:12px;margin-top:10px">每个机型一个显示名（官网列表/导航/详情/瓦片统一用它）。保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。<b>加机型</b>：数据即时入库，<b>页面需官网构建后出现</b>。<b>删机型</b>：管理态点行末 ✕ 标记、保存时后端守卫（有产品会拒删）。<span title="每个机型有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" class="hint-q">网址标识不可改 ?</span></p>
     </div>
 
     <!-- 形态/品类轴（可编辑：data/forms.json 单源·契约 §3/§4）-->
     <div id="cat-tab-form" class="card cat-block">
       <div class="dz-toolbar">
-        <h3 style="margin:0">品类 / 形态 <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">Type</span></h3>
+        <h3 style="margin:0">品类 / 形态 <span class="h3sub">Type</span></h3>
         <div class="spacer"></div>
         <button id="form-manage-btn" onclick="toggleFormManage()" title="进入管理态才显示删除按钮（防误删）">🔧 管理</button>
         <button class="primary" onclick="saveForms()">💾 保存</button>
@@ -543,7 +543,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       </table>
       <button class="cat-add" onclick="formAdd()" title="加品类：新 /type/ URL 段、不影响现有品类">＋ 添加品类</button>
       <div class="buildnote" id="form-build-note" style="display:none"></div>
-      <p class="muted" style="font-size:12px;margin-top:10px">每个品类一个显示名（也是产品的形态值）。真源=官网 <span class="tnum">data/forms.json</span>。<b>顺序</b>决定品类页与筛选 chip 的排列。<b>改显示名</b>会连带修改引用它的所有产品（含草稿/下架），页面不需重建。<b>加/删/排序</b>的数据即时入库，但<b>品类页与导航计数需官网构建后生效</b>。<span title="每个品类有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" style="cursor:help;border-bottom:1px dotted var(--w3-text3)">网址标识不可改 ?</span></p>
+      <p class="muted" style="font-size:12px;margin-top:10px">每个品类一个显示名（也是产品的形态值）。真源=官网 <span class="tnum">data/forms.json</span>。<b>顺序</b>决定品类页与筛选 chip 的排列。<b>改显示名</b>会连带修改引用它的所有产品（含草稿/下架），页面不需重建。<b>加/删/排序</b>的数据即时入库，但<b>品类页与导航计数需官网构建后生效</b>。<span title="每个品类有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" class="hint-q">网址标识不可改 ?</span></p>
     </div>
 
     </div><!-- /.cat-2col -->
@@ -559,7 +559,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       <button id="btn-home-preview" onclick="previewHome()" title="渲染首页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
       <button class="primary" id="btn-home-save" onclick="saveHome()">🚀 保存首页</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:0 0 12px">编辑首页 Hero 区文案（en / pt-BR / es-MX 三语）。保存=重烘焙首页并提交官网仓，≈1分钟上线。⚠️ 只改被编辑的语言、保留其余（i18n merge 防翻译擦除）；保存前可「预览」看真实渲染。</p>
+    <p class="note">编辑首页 Hero 区文案（en / pt-BR / es-MX 三语）。保存=重烘焙首页并提交官网仓，≈1分钟上线。⚠️ 只改被编辑的语言、保留其余（i18n merge 防翻译擦除）；保存前可「预览」看真实渲染。</p>
     <div id="home-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
     <div id="home-featured-box"></div>
   </div>
@@ -574,7 +574,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       <button id="btn-contact-preview" onclick="previewContact()" title="渲染联系页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
       <button class="primary" id="btn-contact-save" onclick="saveContact()">🚀 保存联系方式</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:0 0 12px">编辑官网联系页的联系方式（电话 / WhatsApp / 微信 / 邮箱 / 地址 / 工时 / 地图）。这些是<b>语言无关值、四语共用</b>；标签文案（"电话""扫码加微信"等四语）由官网维护、此处不改。保存=重烘焙 /contact/ 页（三语+zh）提交官网仓，≈1分钟上线；保存前可「预览」看真实渲染。</p>
+    <p class="note">编辑官网联系页的联系方式（电话 / WhatsApp / 微信 / 邮箱 / 地址 / 工时 / 地图）。这些是<b>语言无关值、四语共用</b>；标签文案（"电话""扫码加微信"等四语）由官网维护、此处不改。保存=重烘焙 /contact/ 页（三语+zh）提交官网仓，≈1分钟上线；保存前可「预览」看真实渲染。</p>
     <div id="contact-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
@@ -588,7 +588,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       <button id="btn-guides-preview" onclick="previewGuides()" title="渲染攻略页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
       <button class="primary" id="btn-guides-save" onclick="saveGuides()">🚀 保存攻略页</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:0 0 12px" id="guides-help">编辑 /service/ 攻略落地页的<b>页头文案 + 10 张攻略卡片的标题/摘要</b>（四语）。⚠️ 本编辑器<b>只能改这些文案</b>——攻略文章正文、卡片增删属二期（需数据模型）。保存=重烘焙 /service/（四语）提交官网仓，≈1分钟上线；保存前可「预览」。</p>
+    <p class="note" id="guides-help">编辑 /service/ 攻略落地页的<b>页头文案 + 10 张攻略卡片的标题/摘要</b>（四语）。⚠️ 本编辑器<b>只能改这些文案</b>——攻略文章正文、卡片增删属二期（需数据模型）。保存=重烘焙 /service/（四语）提交官网仓，≈1分钟上线；保存前可「预览」。</p>
     <div id="guides-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
@@ -602,7 +602,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       <button id="btn-seo-preview" onclick="previewSeo()" title="渲染此页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
       <button class="primary" id="btn-seo-save" onclick="saveSeo()">🚀 保存此页 SEO</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:0 0 12px">编辑信息页的 <b>meta 标题 / 描述</b>（四语）。⚠️ 仅这些安全页（<b>service 归「攻略」编辑器、About 系等官网重排定型后解锁</b>）；<b>canonical / OG / hreflang 由系统派生、不可手改</b>（改了破坏多语规范）。保存=重烘焙该页四语提交官网仓，≈1分钟上线。</p>
+    <p class="note">编辑信息页的 <b>meta 标题 / 描述</b>（四语）。⚠️ 仅这些安全页（<b>service 归「攻略」编辑器、About 系等官网重排定型后解锁</b>）；<b>canonical / OG / hreflang 由系统派生、不可手改</b>（改了破坏多语规范）。保存=重烘焙该页四语提交官网仓，≈1分钟上线。</p>
     <div class="dz-tabs" id="seo-tabs"></div>
     <div id="seo-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
@@ -639,7 +639,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       <button class="primary" onclick="mediaBulkMove()">📁 移入所选文件夹</button>
       <button onclick="mediaClearSel()">清除选择</button>
     </div>
-    <p class="muted" style="font-size:12px;margin:0 0 12px">R2 图床（对外 img.wanew.com）。文件夹是内部归类（纯元数据，不移动 R2 对象、可随时改）。勾选多张可一次性批量归类。标签(干净/营销)与文件夹独立、可叠加筛选。⚠️ 删除图片=直接删 R2、不可撤销；删文件夹只清归类、图片保留退回未归类。</p>
+    <p class="note">R2 图床（对外 img.wanew.com）。文件夹是内部归类（纯元数据，不移动 R2 对象、可随时改）。勾选多张可一次性批量归类。标签(干净/营销)与文件夹独立、可叠加筛选。⚠️ 删除图片=直接删 R2、不可撤销；删文件夹只清归类、图片保留退回未归类。</p>
     <div id="media-grid" class="mgrid"><div class="card muted">加载中… <span class="spin"></span></div></div>
     <div id="folder-modal" class="vp-overlay" style="display:none">
       <div class="vp-box" style="width:min(360px,90vw)">
@@ -1114,7 +1114,7 @@ function paintHome() {
     langTabBar(homeLocales, "#home-fields") +
     HOME_HERO_KEYS.map((k) => {
       const vals = homeData[k.key] || {};
-      return `<div class="card hk ${k.cls}"><h3>${esc(k.label)} <span class="rank">${esc(k.rank)}</span> <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">${esc(k.hint)}</span></h3>` +
+      return `<div class="card hk ${k.cls}"><h3>${esc(k.label)} <span class="rank">${esc(k.rank)}</span> <span class="h3sub">${esc(k.hint)}</span></h3>` +
         langFields(k.key, vals, homeLocales, "data-hk", "") + `</div>`;
     }).join("");
   wireHomeFields();
@@ -1177,7 +1177,7 @@ function paintFeatured() {
   // 拖拽排序保留（他刚学会的），↑↓ 兜底保留；移出按钮按新规矩只在「管理」态出现。
   box.innerHTML = `<div class="card">
     <div class="dz-toolbar">
-      <h3 style="margin:0">精选产品 · 首页 <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">最多 8 个、按顺序显示；不选=首页自动按形态轮询挑</span></h3>
+      <h3 style="margin:0">精选产品 · 首页 <span class="h3sub">最多 8 个、按顺序显示；不选=首页自动按形态轮询挑</span></h3>
       <div class="spacer"></div>
       <button id="feat-manage-btn" onclick="toggleFeatManage()" title="进入管理态才显示移出按钮（防误删）">${featManage ? "✓ 管理中" : "🔧 管理"}</button>
       <button class="primary" ${homeFeatured.length >= 8 ? "disabled" : ""} onclick="openPicker()" title="${homeFeatured.length >= 8 ? "已满 8 个，先移出一个" : "从图片网格里挑"}">＋ 添加产品（${homeFeatured.length}/8）</button>
@@ -1336,10 +1336,10 @@ async function loadContact() {
   paintContact();
 }
 function paintContact() {
-  $("#contact-fields").innerHTML = `<div class="card"><h3>联系方式字段 <span class="muted" style="font-weight:400;font-size:11px">data/contact-info.json · 11 个语言无关值</span></h3>` +
+  $("#contact-fields").innerHTML = `<div class="card"><h3>联系方式字段 <span class="h3sub">data/contact-info.json · 11 个语言无关值</span></h3>` +
     CONTACT_FIELDS.map((f) => {
       const v = contactData[f.key] || "";
-      const lbl = `<label>${esc(f.label)} <span class="muted" style="font-weight:400;font-size:11px">${esc(f.key)}</span></label>`;
+      const lbl = `<label>${esc(f.label)} <span class="h3sub">${esc(f.key)}</span></label>`;
       if (f.qr) {
         const src = v ? (/^https?:\/\//.test(v) ? v : "https://wanew.com" + v) : "";   // 根相对=wanew.com；全 URL=直用
         return `<div class="field">${lbl}
@@ -1442,7 +1442,7 @@ function paintGuides() {
   h += `<div class="card"><h3>页头 / SEO</h3>`;
   for (const k of Object.keys(guidesMeta)) h += `<div style="margin-bottom:8px"><div class="muted" style="font-size:12px;margin-bottom:3px">${esc(GUIDES_META_LABEL[k] || k)}</div>${guidesFieldBlock(k, guidesMeta[k])}</div>`;
   h += `</div>`;
-  h += `<div class="card"><h3>攻略卡片文案 <span class="muted" style="font-weight:400;font-size:11px">${guidesCards.length} 张 · shared.json（仅这些键可写）</span></h3>`;
+  h += `<div class="card"><h3>攻略卡片文案 <span class="h3sub">${guidesCards.length} 张 · shared.json（仅这些键可写）</span></h3>`;
   guidesCards.forEach((c, i) => {
     const en = c.title.en || c.titleKey;
     h += `<details${i === 0 ? " open" : ""} style="border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);margin-bottom:8px;padding:8px 10px">
@@ -1488,7 +1488,7 @@ function paintGuidesLib() {
       : `<div class="gsec">${shown.map(row).join("")}</div>`);
   box.innerHTML = `
     <div class="card">
-      <h3>攻略内容库 <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">${arts.length} 篇 · ${topics.length} 个轴</span></h3>
+      <h3>攻略内容库 <span class="h3sub">${arts.length} 篇 · ${topics.length} 个轴</span></h3>
       <p style="font-size:12.5px;line-height:1.65;color:var(--w3-text2);margin:0 0 4px">这里可以<b>搜索、按轴筛选、打开线上页</b>。<b>改内容（编/删/新建文章）还没接</b>——等官网 Guides 结构定稿后一次做对，避免刚做完就被改版推翻。</p>
       <p style="font-size:11.5px;color:var(--w3-text3);margin:0">文章正文与分轴目前由官网仓维护（<span class="tnum">data/pages/guides-manifest.json</span>）。</p>
     </div>
@@ -1951,7 +1951,7 @@ async function loadSettings() {
 function paintSettings(d) {
   const loc = d.locales || {};
   const chips = (arr) => (arr && arr.length ? arr.map((x) => `<span class="chip">${esc(x)}</span>`).join(" ") : '<span class="muted">—</span>');
-  const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:16px;padding:5px 0;border-bottom:1px solid var(--w3-line)"><span class="muted">${k}</span><span style="text-align:right">${v}</span></div>`;
+  const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:16px;padding:5px 0;border-bottom:1px solid var(--w3-line)"><span class="muted">${k}</span><span class="ta-r">${v}</span></div>`;
   $("#settings-body").innerHTML = `
     <div class="edit-grid">
       <div class="card">
@@ -2046,11 +2046,11 @@ function paintGsc(d) {
     return `<tr>
       <td class="muted tnum">${i + 1}</td>
       <td style="font-size:12.5px;max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.key)}">${esc(r.key || "—")}${kind === "variant" ? ` <span class="gax" style="background:var(--dz-err-bg);color:var(--dz-err)" title="这是把品牌名 wanew 打错的搜索词，不是需求词">拼错的品牌名</span>` : kind === "brand" ? ` <span class="gax" title="搜品牌名找过来的，属已知客">品牌词</span>` : ""}</td>
-      <td class="tnum" style="text-align:right">${num(r.clicks)}</td>
-      <td class="tnum muted" style="text-align:right">${num(r.impressions)}</td>
-      <td style="text-align:right">${delta(r)}</td>
-      <td class="tnum muted" style="text-align:right">${pct(r.ctr)}</td>
-      <td class="tnum muted" style="text-align:right">${r.position != null ? r.position.toFixed(1) : "—"}</td>
+      <td class="tnum ta-r">${num(r.clicks)}</td>
+      <td class="tnum muted ta-r">${num(r.impressions)}</td>
+      <td class="ta-r">${delta(r)}</td>
+      <td class="tnum muted ta-r">${pct(r.ctr)}</td>
+      <td class="tnum muted ta-r">${r.position != null ? r.position.toFixed(1) : "—"}</td>
     </tr>`;
   };
   const rows = shown.map(rowHtml).join("") || `<tr><td colspan="7" class="muted">无数据</td></tr>`;
@@ -2063,8 +2063,8 @@ function paintGsc(d) {
       ${stat("◎", t.position != null ? t.position.toFixed(1) : "—", "平均排名")}
     </div>
     ${gscSpark(d.trend)}
-    <div class="card"><h3>${esc(GSC_DIM_LABEL[d.dim] || d.dim)} Top ${shown.length}${noise.length ? `<span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px"> · 已${gscHideNoise ? "隐藏" : "显示"} ${noise.length} 个拼错的品牌名 <button class="af-toggle" onclick="gscToggleNoise()">${gscHideNoise ? "显示" : "隐藏"}</button></span>` : ""}</h3>
-      <table><thead><tr><th style="width:40px">#</th><th>${esc(GSC_DIM_LABEL[d.dim] || d.dim)}</th><th style="width:66px;text-align:right">点击</th><th style="width:78px;text-align:right">曝光</th><th style="width:70px;text-align:right" title="曝光相对上一个等长周期的变化">环比</th><th style="width:62px;text-align:right">CTR</th><th style="width:62px;text-align:right">排名</th></tr></thead>
+    <div class="card"><h3>${esc(GSC_DIM_LABEL[d.dim] || d.dim)} Top ${shown.length}${noise.length ? `<span class="h3sub"> · 已${gscHideNoise ? "隐藏" : "显示"} ${noise.length} 个拼错的品牌名 <button class="af-toggle" onclick="gscToggleNoise()">${gscHideNoise ? "显示" : "隐藏"}</button></span>` : ""}</h3>
+      <table><thead><tr><th style="width:40px">#</th><th>${esc(GSC_DIM_LABEL[d.dim] || d.dim)}</th><th style="width:66px" class="ta-r">点击</th><th style="width:78px" class="ta-r">曝光</th><th style="width:70px" class="ta-r" title="曝光相对上一个等长周期的变化">环比</th><th style="width:62px" class="ta-r">CTR</th><th style="width:62px" class="ta-r">排名</th></tr></thead>
       <tbody>${rows}</tbody></table>
       ${isQuery && noise.length ? `<p class="muted" style="font-size:11.5px;margin:10px 0 0">「拼错的品牌名」= 别人把 <b>wanew</b> 打错的搜索词（denew / naew…）。它们说明有人在找我们、但<b>不是</b>可以拿来做内容的需求词，所以默认折起来。</p>` : ""}
     </div>`;
@@ -2106,7 +2106,7 @@ async function loadTeam() {
   catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadTeam()">重试</button></div>`; }
 }
 function paintTeam(d) {
-  const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:16px;padding:5px 0;border-bottom:1px solid var(--w3-line)"><span class="muted">${k}</span><span style="text-align:right">${v}</span></div>`;
+  const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:16px;padding:5px 0;border-bottom:1px solid var(--w3-line)"><span class="muted">${k}</span><span class="ta-r">${v}</span></div>`;
   $("#team-body").innerHTML = `
     <div class="card">
       <h3>当前会话</h3>
