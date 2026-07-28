@@ -55,23 +55,42 @@ export async function gscQuery(saKeyJson: string, dim: string, days: number, row
   const end = new Date(Date.now() - 3 * 86400000);   // GSC ~2-3 天延迟
   const start = new Date(end.getTime() - (days - 1) * 86400000);
   const api = `https://searchconsole.googleapis.com/webmasters/v3/sites/${siteUrl}/searchAnalytics/query`;
-  const call = async (dimensions: string[], lim?: number) => {
+  // 上一个等长窗口（紧邻当前窗口之前）：用来算"在爬升还是在掉"，光看绝对值看不出方向
+  const prevEnd = new Date(start.getTime() - 86400000);
+  const prevStart = new Date(prevEnd.getTime() - (days - 1) * 86400000);
+  const call = async (dimensions: string[], lim?: number, s: Date = start, e: Date = end) => {
     const res = await fetch(api, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ startDate: ymd(start), endDate: ymd(end), dimensions, rowLimit: dimensions.length ? (lim || rowLimit) : 1 }),
+      body: JSON.stringify({ startDate: ymd(s), endDate: ymd(e), dimensions, rowLimit: dimensions.length ? (lim || rowLimit) : 1 }),
     });
     if (!res.ok) throw new Error(`searchAnalytics ${res.status}: ${(await res.text()).slice(0, 140)}`);
     return (await res.json()) as any;
   };
-  // totals + 选定维度 top + date 维度日序列(趋势小图)——一趟并行
-  const [totalsResp, dimResp, dateResp] = await Promise.all([call([]), call([dim]), call(["date"], days)]);
+  // totals + 选定维度 top + date 日序列 + 上一窗口（totals 与同维度）——一趟并行
+  const [totalsResp, dimResp, dateResp, prevTotalsResp, prevDimResp] = await Promise.all([
+    call([]), call([dim]), call(["date"], days),
+    call([], 1, prevStart, prevEnd), call([dim], rowLimit, prevStart, prevEnd),
+  ]);
   const t = (totalsResp.rows && totalsResp.rows[0]) || { clicks: 0, impressions: 0, ctr: 0, position: 0 };
   const rows = (dimResp.rows || []).map((r: any) => ({ key: (r.keys && r.keys[0]) || "", clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
   const trend = (dateResp.rows || []).map((r: any) => ({ date: (r.keys && r.keys[0]) || "", clicks: r.clicks || 0, impressions: r.impressions || 0 }));
+  // 环比：同一 key 在上一窗口的曝光/点击（新词=上期没有）
+  const pt = (prevTotalsResp.rows && prevTotalsResp.rows[0]) || { clicks: 0, impressions: 0, ctr: 0, position: 0 };
+  const prevByKey: Record<string, any> = {};
+  for (const r of prevDimResp.rows || []) prevByKey[(r.keys && r.keys[0]) || ""] = r;
+  const rows2 = rows.map((r: any) => {
+    const p = prevByKey[r.key];
+    return { ...r, prevClicks: p ? p.clicks : 0, prevImpressions: p ? p.impressions : 0, isNew: !p };
+  });
   return {
     range: { start: ymd(start), end: ymd(end), days },
+    prevRange: { start: ymd(prevStart), end: ymd(prevEnd) },
     totals: { clicks: t.clicks || 0, impressions: t.impressions || 0, ctr: t.ctr || 0, position: t.position || 0 },
-    dim, rows, trend,
+    prevTotals: { clicks: pt.clicks || 0, impressions: pt.impressions || 0, ctr: pt.ctr || 0, position: pt.position || 0 },
+    // 样本充分性：窗口要了 N 天，实际有数据的只有 daysWithData 天。新域刚收录时二者差很多，
+    // 界面必须说出来——否则"28 天"这个标签会让人以为看的是 28 天的规律。
+    daysWithData: trend.length,
+    dim, rows: rows2, trend,
   };
 }

@@ -1802,6 +1802,39 @@ function paintSettings(d) {
 
 // ---------- GSC 搜索表现看板（P2·只读）----------
 const GSC_DIM_LABEL = { query: "查询词", page: "落地页", country: "国家/地区", device: "设备" };
+// 品牌名拼写变体（denew/ganew/genew/naew/neew…）：这些是别人把 "wanew" 打错，不是需求词。
+// 直接混在 TOP 里会让人以为"这就是我们的关键词"。用编辑距离判定：与品牌词距离 1~2 且本身不是品牌词。
+const BRAND_WORDS = ["wanew", "wanew com", "wanewcom"];
+// 实测出现过、但编辑距离 >2 抓不到的变体（来自 GSC 真实报表）。宁可列已观察到的，
+// 也不把阈值放宽到 3——放宽会误伤真需求词（把真词藏起来比留着噪音更糟）。
+const BRAND_VARIANT_SEEDS = ["neew", "nwew", "wanwe", "waenw"];
+function editDist(a, b) {
+  const m = a.length, n = b.length;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j), cur = new Array(n + 1);
+  for (let i = 1; i <= m; i++) {
+    cur[0] = i;
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    [prev, cur] = [cur, prev];
+  }
+  return prev[n];
+}
+// 返回 "" | "brand"（就是品牌词本身）| "variant"（拼错的品牌词）
+function brandKind(q) {
+  const s = String(q || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!s) return "";
+  if (BRAND_WORDS.includes(s)) return "brand";
+  if (BRAND_VARIANT_SEEDS.includes(s)) return "variant";
+  const toks = s.split(" ");
+  // 单 token 且与 wanew 距离 ≤2 → 拼写变体；多词组合里含品牌词=品牌相关，不算噪音
+  if (toks.length === 1) {
+    const d = editDist(toks[0], "wanew");
+    if (d === 0) return "brand";
+    if (d <= 2 && toks[0].length >= 4) return "variant";
+  }
+  if (toks.some((t) => t === "wanew")) return "brand";
+  return "";
+}
+let gscHideNoise = true;   // 默认把噪音折起来——它们不该占据"我们的关键词"这个位置
 async function showGsc() { showView("gsc"); await loadGsc(); }
 async function loadGsc() {
   const box = $("#gsc-body");
@@ -1821,16 +1854,35 @@ function paintGsc(d) {
   const pct = (x) => (x != null ? (x * 100).toFixed(1) + "%" : "—");
   const num = (x) => (x != null ? Math.round(x).toLocaleString() : "—");
   const stat = (ic, val, lbl) => `<div class="card"><div class="ic">${ic}</div><div><div class="num tnum">${val}</div><div class="lbl">${lbl}</div></div></div>`;
-  const rows = (d.rows || []).map((r, i) => `
-    <tr>
+  const all = d.rows || [];
+  const isQuery = d.dim === "query";
+  const noise = isQuery ? all.filter((r) => brandKind(r.key) === "variant") : [];
+  const shown = gscHideNoise ? all.filter((r) => !noise.includes(r)) : all;
+  // 环比：曝光的变化方向（新词单独标）。没有上期数据就不硬算百分比。
+  const delta = (r) => {
+    if (!d.prevRange) return "";
+    if (r.isNew) return `<span style="color:var(--w3-ok);font-size:11px">新出现</span>`;
+    const a = r.impressions || 0, b = r.prevImpressions || 0;
+    if (!b) return `<span class="muted" style="font-size:11px">—</span>`;
+    const dd = Math.round(((a - b) / b) * 100);
+    if (dd === 0) return `<span class="muted" style="font-size:11px">持平</span>`;
+    return `<span style="color:${dd > 0 ? "var(--w3-ok)" : "var(--w3-err)"};font-size:11px">${dd > 0 ? "↑" : "↓"}${Math.abs(dd)}%</span>`;
+  };
+  const rowHtml = (r, i) => {
+    const kind = isQuery ? brandKind(r.key) : "";
+    return `<tr>
       <td class="muted tnum">${i + 1}</td>
-      <td style="font-size:12.5px;max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.key)}">${esc(r.key || "—")}</td>
+      <td style="font-size:12.5px;max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.key)}">${esc(r.key || "—")}${kind === "variant" ? ` <span class="gax" style="background:rgba(255,157,157,.18);color:var(--w3-err)" title="这是把品牌名 wanew 打错的搜索词，不是需求词">拼错的品牌名</span>` : kind === "brand" ? ` <span class="gax" title="搜品牌名找过来的，属已知客">品牌词</span>` : ""}</td>
       <td class="tnum" style="text-align:right">${num(r.clicks)}</td>
       <td class="tnum muted" style="text-align:right">${num(r.impressions)}</td>
+      <td style="text-align:right">${delta(r)}</td>
       <td class="tnum muted" style="text-align:right">${pct(r.ctr)}</td>
       <td class="tnum muted" style="text-align:right">${r.position != null ? r.position.toFixed(1) : "—"}</td>
-    </tr>`).join("") || `<tr><td colspan="6" class="muted">无数据</td></tr>`;
+    </tr>`;
+  };
+  const rows = shown.map(rowHtml).join("") || `<tr><td colspan="7" class="muted">无数据</td></tr>`;
   $("#gsc-body").innerHTML = `
+    ${gscHealth(d)}
     <div class="dstat">
       ${stat("◔", num(t.clicks), "点击")}
       ${stat("◑", num(t.impressions), "曝光")}
@@ -1838,10 +1890,22 @@ function paintGsc(d) {
       ${stat("◎", t.position != null ? t.position.toFixed(1) : "—", "平均排名")}
     </div>
     ${gscSpark(d.trend)}
-    <div class="card"><h3>${esc(GSC_DIM_LABEL[d.dim] || d.dim)} Top ${(d.rows || []).length}</h3>
-      <table><thead><tr><th style="width:44px">#</th><th>${esc(GSC_DIM_LABEL[d.dim] || d.dim)}</th><th style="width:80px;text-align:right">点击</th><th style="width:90px;text-align:right">曝光</th><th style="width:70px;text-align:right">CTR</th><th style="width:70px;text-align:right">排名</th></tr></thead>
+    <div class="card"><h3>${esc(GSC_DIM_LABEL[d.dim] || d.dim)} Top ${shown.length}${noise.length ? `<span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px"> · 已${gscHideNoise ? "隐藏" : "显示"} ${noise.length} 个拼错的品牌名 <button class="af-toggle" onclick="gscToggleNoise()">${gscHideNoise ? "显示" : "隐藏"}</button></span>` : ""}</h3>
+      <table><thead><tr><th style="width:40px">#</th><th>${esc(GSC_DIM_LABEL[d.dim] || d.dim)}</th><th style="width:66px;text-align:right">点击</th><th style="width:78px;text-align:right">曝光</th><th style="width:70px;text-align:right" title="曝光相对上一个等长周期的变化">环比</th><th style="width:62px;text-align:right">CTR</th><th style="width:62px;text-align:right">排名</th></tr></thead>
       <tbody>${rows}</tbody></table>
+      ${isQuery && noise.length ? `<p class="muted" style="font-size:11.5px;margin:10px 0 0">「拼错的品牌名」= 别人把 <b>wanew</b> 打错的搜索词（denew / naew…）。它们说明有人在找我们、但<b>不是</b>可以拿来做内容的需求词，所以默认折起来。</p>` : ""}
     </div>`;
+}
+function gscToggleNoise() { gscHideNoise = !gscHideNoise; loadGsc(); }
+// 数据够不够下判断——不够就直说，别让"近 28 天"这个标签把 3 天的数据包装成规律
+function gscHealth(d) {
+  const want = (d.range && d.range.days) || 0, got = d.daysWithData || 0;
+  const clicks = (d.totals || {}).clicks || 0, imps = (d.totals || {}).impressions || 0;
+  const bad = [];
+  if (want && got && got < want * 0.5) bad.push(`窗口选了 <b>${want} 天</b>，但只有 <b>${got} 天</b>有数据——站点刚被收录，这不是 ${want} 天的规律。`);
+  if (clicks < 10) bad.push(`累计点击 <b>${clicks}</b> 次，样本太小：CTR 和排名的波动大多是偶然，别据此调方向。`);
+  if (!bad.length) return "";
+  return `<div class="buildnote" style="display:flex"><span>⚠️</span><div><b>数据量还不足以下判断</b><br>${bad.join("<br>")}<br><span style="color:var(--w3-text3)">${imps ? `目前累计曝光 ${imps.toLocaleString()} 次。` : ""}建议先看「热门落地页」维度确认哪些页被爬到，等样本积累起来再看查询词。</span></div></div>`;
 }
 // GSC 趋势小图：曝光/点击日序列双线（各自比例，纯 SVG）
 function gscSpark(trend) {
