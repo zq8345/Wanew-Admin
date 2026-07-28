@@ -21,7 +21,37 @@ const app = new Hono<{ Bindings: Env }>();
 // 中途炸成 `Too many subrequests`，而错误一路被压成 "commit failed"，查了两天。
 // 这层给**每次请求**开一个独立计数（AsyncLocalStorage —— 模块级计数器会被同 isolate 的并发请求串味），
 // 让写入路径在**花掉之前**问得出"还剩多少"。见 src/subreq.ts。
-app.use("*", (c, next) => withBudget(next));
+app.use("*", (c, next) => withBudget(async () => {
+  await next();
+  // ── 失败留痕（事后可定因）────────────────────────────────────────────────
+  // 审计日志是从 **git commits** 派生的 → **失败不产生 commit，就一行都不留**。
+  // 07-27/28 Joe 连着两天保存失败，审计日志干干净净；今天能定因，只因为他恰好截了图。
+  // **下一次不一定有人截图。**
+  //
+  // ⭐ 装在中间件而不是 12 个 catch 里：那 12 处各自捕获后**返回 502 而不是抛出**，
+  //    所以这里看的是**响应**不是异常 —— 这样连"在 commitFiles 之前就炸了"的那类
+  //    （比如这次：读第 39 个产品时超限，根本没走到提交）也一并盖住。第 13 个端点自动纳入。
+  //
+  // ⭐ 记的是**服务器原话**（响应体原样），不是我们自己的措辞。
+  //    再带上光看错误看不出来的那几项：花了多少子请求、有没有重定向、是谁、哪条路径。
+  //    这次的教训正是：`Too many subrequests` 被压成 `commit failed`，查了两天。
+  //
+  // ⚠️ 零子请求：console 而已。**失败时配额可能已经耗尽**，此刻再去写 R2 只会一起失败——
+  //    "仅在失败路径上执行"的代码必须零放大，否则它只在系统已不健康时才加重病情。
+  const m = c.req.method;
+  if (m !== "GET" && m !== "HEAD" && c.res && c.res.status >= 400) {
+    let body = "";
+    try { body = (await c.res.clone().text()).slice(0, 600); } catch { body = "(响应体读不出来)"; }
+    console.error(JSON.stringify({
+      evt: "write_failed",
+      method: m, path: new URL(c.req.url).pathname, status: c.res.status,
+      operator: c.req.header("cf-access-authenticated-user-email") || "(无)",
+      subrequests: spent(), limit: SUBREQ_LIMIT,
+      redirected: redirectedUrls(),          // 非空 = 计数偏低，"为什么没超却炸了"的线索
+      response: body,                        // ⭐ 原话，不是我们的措辞
+    }));
+  }
+}));
 
 // ---- M4 fail-closed auth（照获客后台标准）----
 // admin.wanew.com 在 Cloudflare Access（wanew-admin 应用，已预挂）背后：未登录请求边缘就被拦；
@@ -60,7 +90,7 @@ import { ghConfig, readFile } from "../vendor/github.js";
 // FORM_KEY 常量迁到 data/forms.json（#52 block2，官网删了该 export、改 formKey 穿参）。
 import { resolveImg } from "../vendor/render.js";
 import { gscQuery } from "./gsc";
-import { withBudget, spent, remaining, SUBREQ_LIMIT } from "./subreq";
+import { withBudget, spent, remaining, redirectedUrls, SUBREQ_LIMIT } from "./subreq";
 // ⭐ 提交一律走 publish.ts 的带闸版本（它包着 vendor 的原版），不再直接 import vendor —— 绕过闸=没有闸
 import { commitFiles as commitGuarded } from "./publish";
 

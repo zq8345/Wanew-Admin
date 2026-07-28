@@ -10,6 +10,14 @@
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
 
+  // 失败要**事后可查**：审计日志是从 git commits 派生的，而一次失败**不产生 commit**——
+  // 于是 07-27/28 Joe 连着两天保存失败，审计日志里干干净净。今天能定因只因为他恰好截了图。
+  // 开了它，写入失败会以结构化 JSON 落进 Workers Logs（`wrangler tail` / 控制台可查）。
+  // ⭐ 选 console 而不是写 R2：**失败时配额可能已经耗尽**，再花一次子请求去记录会直接失败——
+  //    "只在失败路径上跑的代码"必须零放大，否则它只在系统已经不健康时才加重病情。console 不花子请求，也不会失败。
+  // ⚠️ 保留期有限（免费档约数天），**不是长期归档**；要长期留痕得另想办法。
+  "observability": { "enabled": true },
+
   // UI 壳（批3 电商风列表+编辑页）。run_worker_first：auth 中间件先跑，静态页也在 Access+M4 门后。
   "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
 
