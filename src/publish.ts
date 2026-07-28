@@ -615,7 +615,13 @@ export function parseAuditMessage(msg: string): { operator: string; operation: s
 // ⚠️ 标签(contact.json)是官网维护的 i18n，本编辑器不碰；只改语言无关值。Pages 只 serve 预烘焙 HTML，
 // 故必须自己 renderPage 重烘焙、不能只写 json（同首页 CMS）。
 export interface ContactEdit { key: string; value: string; }
-export const CONTACT_KEYS = ["phone_display", "phone_tel", "whatsapp", "whatsapp_link", "wechat_id", "wechat_qr", "email", "address", "hours", "response", "map_link"];
+// ⚠️ 这份白名单管的是「**什么能被编辑**」，不是「什么能活下来」—— 见 publishContact 里的深拷贝：
+//    不在名单里的键**照样留在文件里**，只是改不动。（产品 JSON 那份白名单语义相反，见 docs/contracts/。）
+//    所以摘掉一个键 = 从此没有任何入口能改它，**包括 API** —— 这正是要的：控件摘了而端点还收，
+//    就留下一条只有 API 能走的暗路，照样能往一个官网不消费的字段里写值。
+// ⚠️ 没有 hours / response：官网联系页不消费（模板中 `cfg.hours` 唯一一处在 HTML 注释里）。
+//    要恢复必须**先让官网模板真的消费**，再加回这里。
+export const CONTACT_KEYS = ["phone_display", "phone_tel", "whatsapp", "whatsapp_link", "wechat_id", "wechat_qr", "email", "address", "map_link"];
 
 export async function publishContact(env: Env, cfg: any, ctx: Ctx, edits: ContactEdit[], opts: { email: string; dryRun?: boolean }) {
   const { locales, catalog, chrome, locDir } = ctx;

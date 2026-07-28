@@ -1322,10 +1322,13 @@ const CONTACT_FIELDS = [
   { key: "wechat_qr", label: "微信二维码图", ph: "/static/upload/... 或 图库 URL", qr: true },
   { key: "email", label: "邮箱", ph: "hello@wanew.com" },
   { key: "address", label: "地址", ph: "No. 62, Baotian 1st Road, …", big: true },
-  { key: "hours", label: "工作时间", ph: "Mon–Fri 9:00–18:00 (GMT+8)" },
-  { key: "response", label: "响应时效", ph: "within 1 business day" },
   { key: "map_link", label: "地图链接", ph: "https://www.google.com/maps/…", big: true },
 ];
+// ⚠️ 这里**没有** hours / 响应时效：官网联系页不消费它们（模板里 `cfg.hours` 那一处在 HTML 注释里，
+//    `cfg.response` 连注释都没有；线上未解析 token = 0）。数据本身官网稍后会删。
+//    **留着输入框比留着死字段更糟** —— 死字段没人看得见，能填的输入框会主动骗人：Joe 改了营业时间、
+//    存进了 JSON、页面纹丝不动，等他发现不一致时查的方向已经全错了。
+//    要恢复必须**先让官网模板真的消费**，再加回这里 —— 顺序反了就又开出一个骗人的窗口。
 let contactData = {};
 async function showContact() { showView("contact"); await loadContact(); }
 async function loadContact() {
