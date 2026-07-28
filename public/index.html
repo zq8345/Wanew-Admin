@@ -386,11 +386,18 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
       <div class="dz-nav-item" data-view="audit" onclick="showAudit()"><span class="ic">▤</span> 审计日志</div>
       <div class="dz-nav-item" data-view="settings" onclick="showSettings()"><span class="ic">⚙</span> 设置</div>
       <div class="dz-nav-item" data-view="team" onclick="showTeam()"><span class="ic">◑</span> 团队</div>
-      <div class="dz-user-foot" id="who-row"><span class="av">◐</span> <span class="who" id="who"></span></div>
-      <!-- 退出：**真链接**不是 JS 点击处理。JS 出错时按钮会静默失效、用户以为退了其实没退——
-           那比没有按钮更危险。会话归 Cloudflare Access 管，清本地任何状态都没用，必须打它的登出端点。
-           用应用级（只退这个后台），不用团队级（那会把 Joe 从所有内部系统一起踢出去，代价过大）。 -->
-      <a class="dz-logout" href="/cdn-cgi/access/logout" title="结束当前 Cloudflare Access 会话（只退出本后台，不影响其它内部系统）">⇥ 退出登录</a>
+      <!-- 账号菜单：用原生 <details>/<summary> —— **展开收起零 JS**，键盘天然可达（summary 可聚焦、
+           Enter/空格开合）。Esc 与点击外部关闭是叠在上面的**增强**：那段 JS 挂了，菜单只是不自动收，
+           用户看得见、能再点一次关掉；而退出动作本身**始终是真 <a href>**，不依赖任何 JS。
+           这就是上一轮那条约束的分界：**导航动作不许靠 JS（失败静默），交互展开可以（失败可见）**。 -->
+      <details class="dz-acct" id="acct">
+        <summary class="dz-user-foot" id="who-row" title="点击展开账号菜单">
+          <span class="av">◐</span> <span class="who" id="who"></span><span class="caret">⌄</span>
+        </summary>
+        <!-- 会话归 Cloudflare Access 管，清本地任何状态都没用，必须打它的登出端点。
+             用应用级（只退这个后台），不用团队级（那会把 Joe 从所有内部系统一起踢出去，代价过大）。 -->
+        <a class="dz-logout" href="/cdn-cgi/access/logout" title="结束当前 Cloudflare Access 会话（只退出本后台，不影响其它内部系统）">⇥ 退出登录</a>
+      </details>
     </div>
   </nav>
   <main class="dz-main">
@@ -708,13 +715,26 @@ let products = [], cats = [], sel = new Set(), cur = null; // cur = 正在编辑
 
 function msg(t, err) { const m = $("#msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ""); m.style.display = "block"; clearTimeout(msg._t); msg._t = setTimeout(() => m.style.display = "none", err ? 7000 : 3500); }
 
+// 账号菜单的**增强层**（非必需）：Esc 关、点外部关。
+// <details> 本身已提供开合与键盘可达；这段挂了菜单只是不自动收（点一下还能关），是可见的降级。
+// ⚠️ 退出那一项是真 <a href>，不经过这里——导航动作绝不依赖 JS。
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  const d = document.getElementById("acct");
+  if (d && d.open) { d.open = false; const s = d.querySelector("summary"); if (s) s.focus(); }
+});
+document.addEventListener("click", (e) => {
+  const d = document.getElementById("acct");
+  if (d && d.open && !d.contains(e.target)) d.open = false;
+});
+
 // ---------- 启动 ----------
 (async function init() {
   try {
     const w = await fetch("/api/_whoami").then((r) => r.json());
     // 只放身份（登录人），不再拼仓名——184px 侧栏里两段会把邮箱挤成 joe@wanew.com…；仓名在「设置」页有
     $("#who").textContent = w.operator || "dev";
-    const wr = $("#who-row"); if (wr) wr.title = (w.operator || "dev") + " · " + w.repo;
+    const wr = $("#who-row"); if (wr) wr.title = (w.operator || "dev") + " · " + w.repo + "（点击展开账号菜单）";
     window._imgBase = w.imgBase || "";
     // 批㉚：图片 URL 统一解析（总工定罪:#650 等老品 images[].src 是官网相对路径,实体只在
     // wanew.com 域,admin 域直用必 404）。key→图床 IMG_BASE;"/"开头→挂官网域;http(s) 绝对原样。

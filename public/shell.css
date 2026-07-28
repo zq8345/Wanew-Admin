@@ -94,9 +94,19 @@ a:hover{text-decoration:underline}
 .dz-user-foot .who{white-space:normal;word-break:break-all;line-height:1.35;min-width:0}
 .dz-user-foot{align-items:flex-start}
 .dz-user-foot .av{flex:none;margin-top:1px}
-.dz-logout{display:flex;align-items:center;gap:7px;padding:6px 10px;margin-top:2px;font-size:12.5px;
-  color:var(--w3-text3)!important;border-radius:var(--dz-radius-s);text-decoration:none}
-.dz-logout:hover{background:var(--w3-panel2);color:var(--dz-err)!important;text-decoration:none}
+/* 账号菜单：<details> 原生开合。收起态仍完整显示"我是谁"，只把退出这个低频高危项收进去。 */
+.dz-acct{position:relative}
+.dz-acct > summary{cursor:pointer;list-style:none;user-select:none}
+.dz-acct > summary::-webkit-details-marker{display:none}
+.dz-acct > summary:hover{background:var(--w3-panel2);border-radius:var(--dz-radius-s)}
+.dz-acct > summary:focus-visible{outline:2px solid var(--w3-accent);outline-offset:-2px;border-radius:var(--dz-radius-s)}
+.dz-acct .caret{margin-left:auto;color:var(--w3-text3);font-size:11px;flex:none;transition:transform .12s var(--dz-ease)}
+.dz-acct[open] .caret{transform:rotate(180deg)}
+.dz-logout{display:flex;align-items:center;gap:7px;padding:7px 10px;margin:3px 0 0 27px;font-size:12.5px;
+  color:var(--w3-text3)!important;border-radius:var(--dz-radius-s);text-decoration:none;
+  border:1px solid var(--w3-line);background:var(--w3-bg2)}
+.dz-logout:hover{background:var(--dz-err-bg);border-color:var(--dz-err-line);color:var(--dz-err)!important;text-decoration:none}
+.dz-logout:focus-visible{outline:2px solid var(--w3-accent);outline-offset:1px}
 .dz-deploy{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12px;color:var(--w3-text3)}
 .dz-deploy .dot{width:7px;height:7px;border-radius:50%;background:var(--dz-ok);box-shadow:0 0 6px var(--dz-ok);flex-shrink:0}
 
