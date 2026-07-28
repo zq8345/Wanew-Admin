@@ -23,12 +23,21 @@ import path from "path";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = "https://raw.githubusercontent.com/zq8345/Wanew/main";
-// vendor 本地文件 ↔ 官网仓权威路径（1:1）
+// ⭐ 「哪些文件必须被镜像」的权威清单在**官网仓**：data/vendor-manifest.json。
+//    原来这份名单在这里，于是它只能抓"我镜像的文件变了"，**抓不到"有一个我该镜像的文件出现了"**
+//    —— 官网新增 page-paths.js 时我的守卫一声不吭，是总工口头提醒才补上的。
+//    ⚠️ 这份清单**不镜像**，每次 check 实时取：镜像下来会把"官网新增了该镜像的文件"这个信号
+//    延迟一轮，而那正是它要解决的问题。它不是被消费的代码，是**该消费哪些代码的元数据**。
+const MANIFEST_PATH = "data/vendor-manifest.json";
+
+// vendor 本地文件 ↔ 官网仓权威路径（1:1）。⚠️ 这里只定"上游路径 → 本地落点 + 切片器"，
+// **该不该镜像由上面那份清单说了算**，两者由 check 时的对账强制一致。
 const MAP = [
   ["vendor/render.js", "functions/_lib/render.js"],
   ["vendor/chrome.js", "functions/_lib/chrome.js"],
   ["vendor/github.js", "functions/_lib/github.js"],
   ["vendor/page-paths.js", "functions/_lib/page-paths.js"],
+  ["vendor/manifest-entry.js", "functions/_lib/manifest-entry.js"],
   ["vendor/locale-dirs.mjs", "scripts/locale-dirs.mjs"],
   // ⭐ W4：设计令牌真源。官网 skin/css/w3.css 有 122KB，其中绝大部分是**官网的组件样式**——
   // 整份镜像进 admin 会把营销站的组件 CSS 一起拖进后台（体积 + 选择器打架）。所以这条走**切片**：
@@ -91,6 +100,35 @@ if (mode === "sync") {
 
 // mode === "check"
 let drift = 0, err = 0;
+
+// ── 先对账清单：官网说该镜像的，我镜像了吗 ────────────────────────────────────
+// 这一步治的是**逐字节比对治不了的那一半**：比对只覆盖名单里的文件，
+// 而"官网新增了一个我该镜像的文件"根本不在名单里 —— 沉默只覆盖它检查的那一维。
+// ⚠️ 清单实时取，取不到就**红**（fail-closed）；但报错要说清是"取不到清单"，
+//    **不是"你少镜像了文件"** —— 查不到 ≠ 不存在，这条今天刚立。
+try {
+  const res = await fetch(`${BASE}/${MANIFEST_PATH}`, { headers: { "cache-control": "no-cache" } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const man = JSON.parse(await res.text());
+  const want = (man.files || []).filter((f) => f.mirror).map((f) => f.path);
+  if (!want.length) throw new Error("清单里 mirror:true 的文件数为 0，形状可能变了");
+  const have = MAP.map(([, upstream]) => upstream);
+  const missing = want.filter((p) => !have.includes(p));
+  const extra = have.filter((p) => !want.includes(p));
+  // ⚠️ 两个方向的风险**不对称**，所以不一刀切成同一级：
+  //   · 清单要求、我没有  → **红**：我在消费一份官网认为该同步的东西而我根本没同步它
+  //   · 我有、清单没表态  → **黄**：多镜像一份的最坏结果是白同步，而逐字节守卫仍然盯着它
+  //     （当前就有一条：`skin/css/w3.css` 是 CSS 切片，不是 _lib 模块，清单没给它表态）
+  //   把"多一份"也判红，会让这道闸在**官网补一行之前一直红**，而红久了就会被绕过。
+  if (missing.length) { console.error(`🔴 官网清单要求镜像但我没有：${missing.join(", ")}\n   → 加进 MAP 并 \`npm run vendor:sync\``); err += missing.length; }
+  if (extra.length) console.log(`⚠️ 我镜像了但官网清单未表态：${extra.join(", ")}（不拦；请官网在 ${MANIFEST_PATH} 里补一行）`);
+  if (!missing.length) console.log(`✓ 清单对账  官网要求的 ${want.length} 个应镜像文件本地全有`);
+} catch (e) {
+  console.error(`🔴 **取不到官网镜像清单**（${MANIFEST_PATH}）：${e.message}`);
+  console.error(`   ⚠️ 这是"查不到"，不是"你少镜像了文件" —— 网络/权限问题，不要据此去改 MAP。`);
+  err++;
+}
+
 for (const [local, upstream, transform] of MAP) {
   let localBuf;
   try {
