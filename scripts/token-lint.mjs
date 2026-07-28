@@ -7,11 +7,20 @@
 // 所以这条不变量必须单独有闸：admin 自有的一律 `--dz-*` 前缀。
 //
 //   node scripts/token-lint.mjs   → 违规 exit 1（列出文件:行），干净 exit 0
-import { readFileSync } from "fs";
+import { readFileSync as _readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import path from "path";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+// ⚠️ **闸读的是磁盘，而磁盘上的字节和仓库里的不是同一个东西。**
+//    本仓 core.autocrlf=true —— `git ls-files --eol` 显示 i/lf w/crlf：仓里 LF，检出到工作树变 CRLF。
+//    我自己写出来的文件是 LF，从仓里全新检出的是 CRLF，**同一个 commit 两套字节**。
+//    2026-07-28 实测后果：剥行尾注释那条正则在 CRLF 下**整条匹配失败**
+//    （正则的点号不匹配 CR，无 m 标志的行尾锚只认字符串真正的结尾）→ 注释一个字没剥掉 →
+//    那句写着"字节数，不是 content dot length"的**注释本身**命中了规则 → 正确代码被判红。
+//    ⇒ **在入口一次归一**，而不是让每条规则各自记得处理行尾（第三条规则必然忘）。
+const readFileSync = (f, enc) => (enc ? _readFileSync(f, enc).split("\r\n").join("\n") : _readFileSync(f));
 // 被检查的是 admin 自有样式；public/w3-tokens.css 是镜像（本来就该定义 --w3-*），豁免。
 const FILES = ["public/shell.css", "public/index.html"];
 const MIRROR = "public/w3-tokens.css";
