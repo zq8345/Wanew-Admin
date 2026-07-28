@@ -40,6 +40,35 @@ if (!mirrorVars) {
   process.exit(1);
 }
 
+// ── 子请求成本模型 vs vendor 真实实现 ────────────────────────────────────────
+// 预算闸拿一个常数当"提交要花多少次子请求"。那个常数**描述的是 vendor/github.js 的实现**，
+// 而那个文件是官网的镜像 —— **它会在我不知情的时候变**（2026-07-28 就变了一次：
+// 逐文件 blob POST 换成 tree 内联 content，写入侧从 `2+文件数+3` 变成固定 5）。
+//
+// 🔴 模型过时的后果不是"少了一道保护"，是**反过来挡住正常保存**：
+//    按旧模型，保存产品（33 文件）会被算成需要 38 次而被自己的闸拒掉，实际只花 5 次。
+//    **一个模型过时了的安全装置，就是停机器。**
+// 所以这里机器核对，不靠记性：数 commitFiles 里的 `await gh(` 调用点，并确认循环里没有网络请求。
+{
+  const gh = readFileSync(path.join(ROOT, "vendor/github.js"), "utf8");
+  const fn = (gh.match(/export async function commitFiles[\s\S]*?\n\}/) || [""])[0];
+  const calls = (fn.match(/await gh\(/g) || []).length;
+  const loopFetch = /for \(const f of files\)[\s\S]*?await gh\(/.test(fn);
+  const model = Number((readFileSync(path.join(ROOT, "src/publish.ts"), "utf8").match(/const COMMIT_SUBREQ = (\d+)/) || [])[1]);
+  if (!fn) { console.error("🔴 在 vendor/github.js 里找不到 commitFiles —— 成本模型无法核对"); process.exit(1); }
+  if (loopFetch) {
+    console.error(`🔴 commitFiles 的文件循环里又出现了网络请求 —— 写入开销重新变成"每文件一次"。`);
+    console.error(`   → 预算模型 COMMIT_SUBREQ 不再是常数，src/publish.ts 必须跟着改。`);
+    process.exit(1);
+  }
+  if (calls !== model) {
+    console.error(`🔴 成本模型对不上：vendor/github.js 的 commitFiles 有 ${calls} 次子请求，src/publish.ts 写的是 ${model}。`);
+    console.error(`   → 官网改了提交实现。模型偏大会**误拒正常保存**，偏小会重新撞上限。改 COMMIT_SUBREQ。`);
+    process.exit(1);
+  }
+  console.log(`✅ 成本模型 PASS：commitFiles 实测 ${calls} 次子请求，与 COMMIT_SUBREQ=${model} 一致（循环内无网络请求）。`);
+}
+
 if (bad) {
   console.error(`\n🔴 ${bad} 处在 admin 自有样式里定义了 --w3-* 品牌令牌。`);
   process.exit(1);

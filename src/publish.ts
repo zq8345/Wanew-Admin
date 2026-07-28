@@ -22,9 +22,15 @@ import { afford, spent } from "./subreq";
 // 🔴 拒绝必须发生在**发出第一个写请求之前**。半路炸的代价不是"失败"，是**可能留下半残**：
 //    commitFiles 是 blob×N → tree → commit → PATCH，只有最后一次 PATCH 动分支，
 //    所以今天这次没留残留 —— **但那是断点位置的运气，不是设计的保证。**
+// ⚠️ 成本模型必须跟着 vendor 的实现走：官网把逐文件 blob POST 换成 tree 内联 content 之后，
+//    写入侧变成**固定 5 次**（ref + head commit + tree + commit + PATCH），**与文件数无关**。
+//    旧模型是 `2 + 文件数 + 3`；若不跟着改，保存产品（33 文件）会被算成需要 38 次而**被我自己的闸拒掉**
+//    —— 实际只花 5 次。**一个模型过时了的安全装置，就是停机器。**
+//    这个常数与 vendor 实现的一致性由 `scripts/token-lint.mjs` 机器核对，不靠记性。
+const COMMIT_SUBREQ = 5;
+
 export async function commitFiles(env: Env, cfg: any, files: any[], message: string) {
-  const need = 2 + files.filter((f: any) => !f.delete).length + 3;   // ref+commit 读 · 每个文件一个 blob · tree+commit+patch
-  const no = afford(need, `提交 ${files.length} 个文件`);
+  const no = afford(COMMIT_SUBREQ, `提交 ${files.length} 个文件`);
   if (no) throw new Error(`调用次数超限（未提交，仓库未改动）\n${no}`);
   return rawCommitFiles(env, cfg, files, message);
 }
