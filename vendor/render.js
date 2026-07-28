@@ -485,6 +485,14 @@ export function setListLabels(html, { locale, catalog, model }) {
     return v;
   };
   let out = html;
+  // ⑬:banner 副标题接回 catalog。此前它【只存在于已构建的 HTML 里】—— 43 个列表页显示着这句话,
+  // 而模板、regenListPage、本函数都不写它,catalog 里那个 body.banner.subtitle 键没有任何消费者。
+  // 后果不是显示错(各语种烘进去的值都是对的),而是**这行字冻住了**:改 catalog 不生效,
+  // 又找不到别处可改 —— i18n-check 文件头称之为"一根没接线的杆"。这里把线接上。
+  // ⚠️ 只在【列表页】生效(本函数只被列表页管线调用);solutions/guides/about 的同名类由
+  //    renderPage 各自的 catalog 驱动,不受影响。
+  out = out.replace(/(<p class="page-header__subtitle">)[^<]*(<\/p>)/,
+    (m, a, b) => a + t("body.banner.subtitle") + b);
   if (model) {
     const h1 = t("list.banner.model").replace("{model}", model);
     out = out.replace(/(<h1 class="page-header__title">)[^<]*(<\/h1>)/, `$1${h1}$2`);

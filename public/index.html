@@ -250,6 +250,33 @@ button.ico-del:hover:not(:disabled){color:var(--w3-err);border-color:rgba(255,15
 .cmpl .dot.ok{background:var(--w3-ok)}
 .cmpl .dot.miss{background:rgba(255,157,157,.45)}
 .cmpl .lg{font-size:10.5px;color:var(--w3-text3);margin-left:4px;font-variant-numeric:tabular-nums}
+/* 首页 Hero：按层级分配视觉重量（主标题最重，眉题/CTA 收小）+ 实时预览 */
+.hk-eyebrow textarea,.hk-cta textarea{font-size:12.5px;min-height:38px}
+.hk-serving textarea{font-size:12.5px;min-height:38px}
+.hk-title textarea{font-size:20px;font-weight:650;line-height:1.32;min-height:64px;letter-spacing:-.01em}
+.hk-sub textarea{font-size:14px;line-height:1.5;min-height:56px}
+.card.hk h3{display:flex;align-items:center;gap:8px}
+.card.hk .rank{font-size:10px;font-weight:600;letter-spacing:.06em;padding:1px 7px;border-radius:999px;background:var(--w3-tile);color:var(--w3-ink)}
+.card.hk-title h3{font-size:13px;color:var(--w3-text)}
+.card.hk-title{border-color:var(--w3-line2)}
+.hero-pv{background:linear-gradient(160deg,#0d1622,#0a0f16);border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);padding:22px 24px;margin-bottom:14px}
+.hero-pv .eb{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--w3-accent);margin-bottom:9px}
+.hero-pv .ti{font-size:27px;line-height:1.2;font-weight:700;color:#fff;margin:0 0 10px;letter-spacing:-.02em}
+.hero-pv .sb{font-size:14px;line-height:1.6;color:#b8c2cc;margin:0 0 14px;max-width:58ch}
+.hero-pv .ct{display:inline-block;background:var(--w3-accent);color:#08111f;font-size:12.5px;font-weight:600;padding:8px 18px;border-radius:5px}
+.hero-pv .sv{font-size:11.5px;color:var(--w3-text3);margin-top:12px}
+.hero-pv .lines{font-size:10.5px;color:var(--w3-text3);margin-top:14px;border-top:1px solid var(--w3-line);padding-top:9px}
+/* 精选产品：缩略图 + 可读名 + 淡 ID + 拖拽排序 */
+.fr{display:flex;align-items:center;gap:10px;padding:7px 8px;border:1px solid transparent;border-bottom-color:var(--w3-line);border-radius:5px;cursor:grab}
+.fr:hover{background:var(--w3-panel2)}
+.fr.dragging{opacity:.4}
+.fr.over{border-color:var(--w3-accent);background:rgba(125,177,255,.07)}
+.fr .grip{color:var(--w3-text3);font-size:13px;cursor:grab;user-select:none;letter-spacing:-2px}
+.fr .pos{width:18px;text-align:right;color:var(--w3-text3);font-size:11px;font-variant-numeric:tabular-nums}
+.fr img{width:38px;height:38px;object-fit:contain;background:var(--w3-tile);border-radius:5px;flex:none}
+.fr .nm{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fr .id{font-size:10.5px;color:var(--w3-text3);font-variant-numeric:tabular-nums;flex:none}
+.fr .ord{display:inline-flex;gap:3px;flex:none}
 .cat-add{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;height:auto;padding:10px;margin-top:12px;border:1px dashed var(--w3-line2);background:transparent;color:var(--w3-text3);border-radius:var(--dz-radius-s);font-size:13px}
 .cat-add:disabled{opacity:.7;cursor:not-allowed}
 .cat-add:hover:not(:disabled){border-color:var(--w3-accent);color:var(--w3-accent)}
@@ -908,6 +935,7 @@ function setLang(btn, scopeSel) {
   const loc = btn.dataset.lang;
   document.querySelectorAll(`${scopeSel} .lf[data-lang]`).forEach((el) => { el.hidden = el.dataset.lang !== loc; });
   if (scopeSel === "#seo-fields") paintSerp();   // 预览跟着当前语言走
+  if (scopeSel === "#home-fields") paintHeroPv();
 }
 // HTML 实体的**双向**转换。官网把这些值原样注进 HTML（render.js:500 直接 `<title>${t}</title>`，
 // 不在渲染期转义）→ 仓里存的就必须是转义态（`Mounts &amp; Power`）。编辑器若把存储态直接显示，
@@ -927,13 +955,16 @@ function langFields(key, vals, locales, dataAttr, extraStyle) {
 }
 
 // ---------- 首页内容 CMS（W5 P1·第一刀=Hero）----------
+// 按在首页上的视觉层级排（主标题最重）。cls 决定编辑框的字号/字重——编辑器里的轻重
+// 与官网上的轻重一致，改的时候就知道自己在改的是"最抢眼的那行"还是"角落一行小字"。
 const HOME_HERO_KEYS = [
-  { key: "home.hero.eyebrow", label: "眉题 (eyebrow)" },
-  { key: "home.hero.title", label: "主标题 (title)" },
-  { key: "home.hero.subtitle", label: "副标题 (subtitle)" },
-  { key: "home.hero.cta", label: "按钮文字 (CTA)" },
-  { key: "home.hero.serving", label: "serving 行" },
+  { key: "home.hero.eyebrow", label: "眉题", hint: "标题上方那行小字", cls: "hk-eyebrow", rank: "小" },
+  { key: "home.hero.title", label: "主标题", hint: "首页最醒目的一行", cls: "hk-title", rank: "最醒目" },
+  { key: "home.hero.subtitle", label: "副标题", hint: "主标题下的说明", cls: "hk-sub", rank: "次要" },
+  { key: "home.hero.cta", label: "按钮文字", hint: "行动按钮上的字", cls: "hk-cta", rank: "小" },
+  { key: "home.hero.serving", label: "serving 行", hint: "按钮下方的补充行", cls: "hk-serving", rank: "小" },
 ];
+const HK = Object.fromEntries(HOME_HERO_KEYS.map((k) => [k.key, k]));
 let homeData = {}, homeLocales = [], homeFeatured = [], origFeatured = [];
 async function showHome() { showView("home"); await loadHomeView(); }
 async function loadHomeView() {
@@ -952,11 +983,53 @@ async function loadHomeView() {
   paintFeatured();
 }
 function paintHome() {
-  $("#home-fields").innerHTML = langTabBar(homeLocales, "#home-fields") +
+  $("#home-fields").innerHTML =
+    `<p class="serp-cap">首页 Hero 预览（当前语言 · 相对字号与官网一致，改多长这里就多长）</p><div class="hero-pv" id="hero-pv"></div>` +
+    langTabBar(homeLocales, "#home-fields") +
     HOME_HERO_KEYS.map((k) => {
       const vals = homeData[k.key] || {};
-      return `<div class="card"><h3>${esc(k.label)}</h3>` + langFields(k.key, vals, homeLocales, "data-hk", "min-height:52px") + `</div>`;
+      return `<div class="card hk ${k.cls}"><h3>${esc(k.label)} <span class="rank">${esc(k.rank)}</span> <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">${esc(k.hint)}</span></h3>` +
+        langFields(k.key, vals, homeLocales, "data-hk", "") + `</div>`;
     }).join("");
+  wireHomeFields();
+}
+// 每个字段挂长度显示（与**线上现值**比，不编造"会被截断"——官网 hero 实测无 line-clamp，
+// 过长是换行撑高而不是截断，所以这里说的是"比线上长多少 / 会占几行"，由预览直接体现）。
+function wireHomeFields() {
+  document.querySelectorAll("#home-fields textarea[data-hk]").forEach((t) => {
+    const key = t.dataset.hk, loc = t.dataset.l;
+    const base = entDecode((homeData[key] || {})[loc] || "").length;
+    const cc = document.createElement("div");
+    cc.className = "cc";
+    cc.innerHTML = `<span class="n"></span><span class="bar" style="visibility:hidden"><i></i></span><span class="hint"></span>`;
+    t.parentElement.appendChild(cc);
+    const upd = () => {
+      const n = t.value.length, d = n - base;
+      cc.className = "cc" + (base && n > base * 1.6 ? " warn" : "");
+      cc.querySelector(".n").textContent = `${n} 字符`;
+      cc.querySelector(".hint").textContent = !base ? (n ? "线上原为空" : "未填写")
+        : d === 0 ? "与线上一致" : `线上 ${base} 字符（${d > 0 ? "+" : ""}${d}）`;
+      if (loc === curHomeLang()) paintHeroPv();
+    };
+    t.addEventListener("input", upd);
+    upd();
+  });
+  paintHeroPv();
+}
+const curHomeLang = () => (document.querySelector("#home-fields .langtab.active") || {}).dataset?.lang || homeLocales[0];
+// 实时 Hero 预览：按官网的相对层级渲染，Joe 能直接看到"改完长什么样、会换几行"
+function paintHeroPv() {
+  const box = $("#hero-pv"); if (!box) return;
+  const loc = curHomeLang();
+  const v = (k) => { const t = document.querySelector(`#home-fields textarea[data-hk="${k}"][data-l="${loc}"]`); return t ? t.value : ""; };
+  const ti = v("home.hero.title"), sb = v("home.hero.subtitle");
+  box.innerHTML = `
+    ${v("home.hero.eyebrow") ? `<div class="eb">${esc(v("home.hero.eyebrow"))}</div>` : ""}
+    <h2 class="ti">${esc(ti) || '<span style="color:#5a6672">（未填主标题）</span>'}</h2>
+    ${sb ? `<p class="sb">${esc(sb)}</p>` : ""}
+    ${v("home.hero.cta") ? `<span class="ct">${esc(v("home.hero.cta"))}</span>` : ""}
+    ${v("home.hero.serving") ? `<div class="sv">${esc(v("home.hero.serving"))}</div>` : ""}
+    <div class="lines">主标题 ${ti.length} 字符 · 副标题 ${sb.length} 字符 —— 官网 hero 不截断文字，过长会换行把版面撑高（这里所见即所得）</div>`;
 }
 function collectHomeEdits() {
   const edits = [];
@@ -976,15 +1049,42 @@ function paintFeatured() {
   const chosen = homeFeatured.map((id) => byId.get(id)).filter(Boolean);
   const avail = products.filter((p) => !homeFeatured.includes(p.id));
   box.innerHTML = `<div class="card"><h3>精选产品 · 首页 Popular products <span class="muted" style="font-weight:400;font-size:11px">最多 8 个、按顺序显示；不选=首页自动按形态轮询挑</span></h3>` +
-    (chosen.length ? chosen.map((p, i) => `
-      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--w3-line)">
-        <button onclick="featMove(${i},-1)" ${i === 0 ? "disabled" : ""}>↑</button><button onclick="featMove(${i},1)" ${i === chosen.length - 1 ? "disabled" : ""}>↓</button>
-        ${p.thumb ? `<img class="thumb" src="${esc(imgUrl(p.thumb))}" style="width:30px;height:30px">` : ""}
-        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.title)}</span>
-        <span class="muted">#${p.id}</span>
-        <button class="danger" onclick="featRemove(${p.id})">移除</button>
-      </div>`).join("") : `<p class="muted">未选精选产品——首页将自动按形态轮询挑 8 个。</p>`) +
+    (chosen.length ? `<div id="feat-list">` + chosen.map((p, i) => `
+      <div class="fr" draggable="true" data-i="${i}"
+           ondragstart="featDragStart(event,${i})" ondragover="featDragOver(event,${i})" ondragleave="featDragLeave(event)" ondrop="featDrop(event,${i})" ondragend="featDragEnd(event)">
+        <span class="grip" title="拖动排序">⠿</span>
+        <span class="pos">${i + 1}</span>
+        ${p.thumb ? `<img src="${esc(imgUrl(p.thumb))}" alt="" loading="lazy">` : `<img alt="" style="opacity:.25">`}
+        <span class="nm" title="${esc(p.title)}">${esc(shortTitle(p.title))}</span>
+        <span class="id">#${p.id}</span>
+        <span class="ord"><button class="ico" onclick="featMove(${i},-1)" ${i === 0 ? "disabled" : ""} title="上移">↑</button><button class="ico" onclick="featMove(${i},1)" ${i === chosen.length - 1 ? "disabled" : ""} title="下移">↓</button></span>
+        <button class="ico ico-del" onclick="featRemove(${p.id})" title="移出精选">✕</button>
+      </div>`).join("") + `</div>` : `<p class="muted">未选精选产品——首页将自动按形态轮询挑 8 个。</p>`) +
     `<div class="field" style="margin-top:10px"><label>添加产品（${homeFeatured.length}/8）</label><select ${homeFeatured.length >= 8 ? "disabled" : ""} onchange="featAdd(this.value);this.value='';"><option value="">＋ 选产品加入…</option>${avail.map((p) => `<option value="${p.id}">${esc(p.title)} (#${p.id})</option>`).join("")}</select></div></div>`;
+}
+// 产品标题很长（"…for Starlink Mini, 3-Axis…"），列表里只需认出是哪个：留前段 + 悬停看全名。
+function shortTitle(s) {
+  const t = String(s || "").trim();
+  if (t.length <= 46) return t;
+  const cut = t.slice(0, 46);
+  const sp = cut.lastIndexOf(" ");
+  return (sp > 24 ? cut.slice(0, sp) : cut) + "…";
+}
+// 拖拽排序（8 条点 ↑↓ 太痛苦）；↑↓ 保留兜底（触屏/键盘/拖拽失灵时仍可用）
+let _featDrag = -1;
+function featDragStart(e, i) { _featDrag = i; e.currentTarget.classList.add("dragging"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); } catch {} }
+function featDragOver(e, i) { e.preventDefault(); if (_featDrag !== i) e.currentTarget.classList.add("over"); try { e.dataTransfer.dropEffect = "move"; } catch {} }
+function featDragLeave(e) { e.currentTarget.classList.remove("over"); }
+function featDragEnd(e) { _featDrag = -1; document.querySelectorAll("#feat-list .fr").forEach((el) => el.classList.remove("dragging", "over")); }
+function featDrop(e, to) {
+  e.preventDefault();
+  const from = _featDrag >= 0 ? _featDrag : Number(e.dataTransfer && e.dataTransfer.getData("text/plain"));
+  featDragEnd(e);
+  if (!Number.isFinite(from) || from === to || from < 0) return;
+  const arr = homeFeatured.slice();
+  arr.splice(to, 0, arr.splice(from, 1)[0]);   // 抽出来插到落点
+  homeFeatured = arr; paintFeatured();
+  msg(`已移到第 ${to + 1} 位 —— 点「保存首页」生效`);
 }
 function featMove(i, d) { const j = i + d; if (j < 0 || j >= homeFeatured.length) return; const t = homeFeatured[i]; homeFeatured[i] = homeFeatured[j]; homeFeatured[j] = t; paintFeatured(); }
 function featRemove(id) { homeFeatured = homeFeatured.filter((x) => x !== id); paintFeatured(); }
