@@ -1,1 +1,3 @@
 vendor/** -text
+# 官网令牌层切片镜像：同 vendor/** 钉死字节，防 autocrlf 造假漂移
+public/w3-tokens.css -text

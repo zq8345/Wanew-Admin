@@ -1,0 +1,39 @@
+/* 自动生成·勿手改 —— 官网 skin/css/w3.css 的 :root 令牌层逐字节切片。
+   改令牌请去官网仓改，然后 `npm run vendor:sync`。
+   admin 自己的 dense 层在 public/shell.css，只允许 --dz-* 前缀（见 scripts/token-lint.mjs）。*/
+:root {
+  --w3-bg: #0a0c0f;
+  --w3-bg2: #0e1114;
+  --w3-panel: #14181d;
+  --w3-panel2: #191e24;
+  --w3-line: rgba(255, 255, 255, 0.08);
+  --w3-line2: rgba(255, 255, 255, 0.16);
+  --w3-text: #eef1f4;
+  --w3-text2: #a9b2bb;
+  --w3-text3: #75808a;
+  --w3-accent: #7db1ff;
+  --w3-tile: #f4f5f7;          /* light stage for white-background product photos */
+  --w3-ink: #14181d;           /* dark text on light surfaces */
+  --w3-radius: 16px;
+  --w3-radius-s: 10px;
+  --w3-header-h: 68px;
+  --w3-ease: cubic-bezier(0.22, 0.61, 0.24, 1);
+  --w3-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.55);
+  --w3-maxw: 1240px;
+
+  /* ---- 治沉闷对比系统 tokens (anti-flat / elevation & contrast — DESIGN.md §2.6, 2026-07-26 Joe/总工) ----
+     北极星 anduril.com:暗得高级 = 分层 + 对比 + 焦点,非暗得平。新增令牌,③起逐块套用,未套前零视觉变化。 */
+  --w3-surface-0: #0a0c0f;   /* 页面基底(= bg) */
+  --w3-surface-1: #0e1114;   /* 凹陷:stat well / 输入框(inset,比基底略深感) */
+  /* ⭐ 2026-07-27 Joe 早上反馈"卡还是暗贴暗没浮出来"→ 加大台阶:暗模式浮起靠【更亮的面+更亮顶边+更实边】
+     比阴影有效(阴影在暗底弱)。surface-2 #171c22→#1e242e(与基底 #0a0c0f 台阶更明显)、顶边高光加亮、边用 line2。 */
+  --w3-surface-2: #1e242e;   /* 卡片:比基底明显抬亮一档(肉眼可辨的台阶),配 elev/edge/边浮起 */
+  --w3-surface-3: #262d38;   /* 抬起 / hover 态(再亮一档) */
+  --w3-elev-card: 0 2px 8px -2px rgba(0,0,0,.55), 0 16px 40px -14px rgba(0,0,0,.7);  /* 卡片浮起柔和双层投影(略强) */
+  --w3-edge-top: inset 0 1px 0 rgba(255,255,255,.09);   /* 顶边内高光(加亮):把卡片从暗底"抬"起来 */
+  --w3-invert-bg: #f4f5f7;   /* 选择性提亮带(信任/证据类)浅底 */
+  --w3-invert-ink: #14181d;  /* 反转带深标题 */
+  --w3-invert-ink2: #56606b; /* 反转带正文 */
+  --w3-invert-accent: #1d63d6; /* 反转带 accent(浅底上 --w3-accent 太浅→用深蓝,与 §2.1 链接色同源) */
+  --w3-well: radial-gradient(circle at 50% 42%, rgba(125,177,255,.13), transparent 70%);  /* 图标空 void 垫底(补白) */
+}

@@ -28,20 +28,40 @@ const MAP = [
   ["vendor/chrome.js", "functions/_lib/chrome.js"],
   ["vendor/github.js", "functions/_lib/github.js"],
   ["vendor/locale-dirs.mjs", "scripts/locale-dirs.mjs"],
+  // ⭐ W4：设计令牌真源。官网 skin/css/w3.css 有 122KB，其中绝大部分是**官网的组件样式**——
+  // 整份镜像进 admin 会把营销站的组件 CSS 一起拖进后台（体积 + 选择器打架）。所以这条走**切片**：
+  // 只镜像它那唯一一个 `:root{…}` 令牌块，仍然是逐字节比对（切片规则确定 ⇒ 守卫强度不打折）。
+  // 落在 public/ 是因为 worker 只服务 public/（页面要能 <link> 它）；仍是逐字节守卫的镜像，
+  // 且已在 .gitattributes 里同 vendor/** 一样标 -text 钉死字节。
+  ["public/w3-tokens.css", "skin/css/w3.css", sliceRootBlock],
 ];
 
-async function fetchUpstream(upstream) {
+// 切片器：从上游 CSS 里取出 `:root{…}` 块（必须唯一，否则拒绝——多个块意味着上游改了结构，
+// 这时"取第一个"会静默取错，不如红出来让人看一眼）。
+function sliceRootBlock(buf, upstream) {
+  const text = buf.toString("utf8");
+  const all = text.match(/:root\s*\{[\s\S]*?\}/g) || [];
+  if (all.length !== 1) throw new Error(`${upstream} 里 :root 块有 ${all.length} 个（期望恰好 1 个）——上游结构变了，切片规则需重定`);
+  return Buffer.from(
+    `/* 自动生成·勿手改 —— 官网 ${upstream} 的 :root 令牌层逐字节切片。\n` +
+    `   改令牌请去官网仓改，然后 \`npm run vendor:sync\`。\n` +
+    `   admin 自己的 dense 层在 public/shell.css，只允许 --dz-* 前缀（见 scripts/token-lint.mjs）。*/\n` +
+    all[0] + "\n", "utf8");
+}
+
+async function fetchUpstream(upstream, transform) {
   const res = await fetch(`${BASE}/${upstream}`, { headers: { "cache-control": "no-cache" } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return Buffer.from(await res.arrayBuffer());
+  const buf = Buffer.from(await res.arrayBuffer());
+  return transform ? transform(buf, upstream) : buf;
 }
 
 const mode = process.argv[2] || "check";
 
 if (mode === "sync") {
   let ok = 0;
-  for (const [local, upstream] of MAP) {
-    const buf = await fetchUpstream(upstream); // 失败即抛，整体非 0 退出
+  for (const [local, upstream, transform] of MAP) {
+    const buf = await fetchUpstream(upstream, transform); // 失败即抛，整体非 0 退出
     writeFileSync(path.join(ROOT, local), buf); // 字节精确写入，不做任何编码转换
     console.log(`↓ ${local}  ←  Wanew:main:${upstream}  (${buf.length}B)`);
     ok++;
@@ -52,7 +72,7 @@ if (mode === "sync") {
 
 // mode === "check"
 let drift = 0, err = 0;
-for (const [local, upstream] of MAP) {
+for (const [local, upstream, transform] of MAP) {
   let localBuf;
   try {
     localBuf = readFileSync(path.join(ROOT, local));
@@ -63,7 +83,7 @@ for (const [local, upstream] of MAP) {
   }
   let upstreamBuf;
   try {
-    upstreamBuf = await fetchUpstream(upstream);
+    upstreamBuf = await fetchUpstream(upstream, transform);
   } catch (e) {
     console.error(`🔴 拉取官网权威版失败 ${upstream}: ${e.message}`);
     err++;

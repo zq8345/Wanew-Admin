@@ -3,11 +3,12 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev --port 8790",
-    "typecheck": "tsc --noEmit && node scripts/vendor.mjs check",
+    "typecheck": "tsc --noEmit && node scripts/vendor.mjs check && node scripts/token-lint.mjs",
     "_comment_deploy": "deploy=总工。闸=typecheck(tsc + vendor 漂移守卫)先绿。account_id已钉死wrangler.jsonc、域已挂zone，账号级令牌即可，详见README.md。",
     "guard:vendor": "node scripts/vendor.mjs check",
     "vendor:sync": "node scripts/vendor.mjs sync",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "guard:tokens": "node scripts/token-lint.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260717.1",
