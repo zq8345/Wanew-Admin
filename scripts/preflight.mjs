@@ -88,7 +88,12 @@ console.log(`   CRLF 自检       exit=${crlf.code}`); if (crlf.code) { show(crl
 //    但**一段永远返回"通过"的校验代码，也能让这道闸变绿。**真正的判据仍是运行时的 SHA 比对本身。
 console.log("\n⑤ 上线就绪：内联 content 有没有配套校验");
 {
-  const gh = readFileSync("vendor/github.js", "utf8");
+  // ⚠️ 归一行尾再匹配。下面用到 `\n}` 这种带行尾的模式，而它**曾经只是因为
+  //    `.gitattributes` 把 vendor 钉成 `-text` 才没炸** —— 那一行于是成了这道闸的承重墙：
+  //    谁把它当冗余删掉，两道闸会同时**静默失效**（不是报错，是找不到 commitFiles 然后放行）。
+  //    归一之后那一行降级为纪律（防假漂移），不再是唯一防线。
+  //    ⇒ 选归一而不是把每条正则改成 `\r?\n`：正则改法要**每条都记得**，归一只做一次。
+  const gh = readFileSync("vendor/github.js", "utf8").split("\r\n").join("\n");
   const fn = (gh.match(/export async function commitFiles[\s\S]*?\n\}/) || [""])[0];
   const inline = /type: "blob", content:/.test(fn);        // 用了内联 content 吗
   // ⚠️ 算 SHA 的函数在 commitFiles **外面**（辅助函数），所以这里找的是**对它的调用**，
