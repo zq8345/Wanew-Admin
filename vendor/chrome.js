@@ -41,11 +41,13 @@ const ANCHORS = [
   ["mobilenav", '<div class="mobile-nav__wrapper">', '<a href="#" data-target="html" class="scroll-to-target scroll-to-top">', false],
 ];
 
-const FORM_KEY = { "Cables": "cables", "Mounts & Brackets": "mounts", "Power & Charging": "power", "Networking": "networking", "Cases & Protection": "cases" };
-
 // localeDirs 规则的最小内联复刻由调用方传入（locDir 映射）——真源仍是 scripts/locale-dirs.mjs / regen。
+// `forms` = data/forms.json 的 forms[] 单源（[{key,name}]），由调用方（chrome-sync / admin worker）读入后传进来，
+// 本模块保持无 fs。缺省 [] 是防御下限（nav 计数会全 0=肉眼可见，非崩溃），真源缺失应由调用方 flag。
 
-export function makeChrome({ catalog, locales, partial, manifest, pageExists, locDir }) {
+export function makeChrome({ catalog, locales, partial, manifest, pageExists, locDir, forms = [] }) {
+  // form-factor bucket name -> data-form key, derived from the single source (not hardcoded).
+  const FORM_KEY = Object.fromEntries(forms.map((f) => [f.name, f.key]));
   const src = partial.replace(/\r/g, "");
   const block = (name) => {
     const m = src.match(new RegExp(`<!-- #block:${name} -->\\n([\\s\\S]*?)\\n<!-- #endblock -->`));

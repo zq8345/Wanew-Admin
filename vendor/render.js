@@ -175,17 +175,17 @@ export function genRelated(prodEntry, entries, locale = "en", catalog, urlOf) {
 }
 
 // ---- List-page regen (/products/ + /{category}/): rebuild the card grid + chip counts ----
-// form-factor bucket name -> data-form key used on the list pages.
-export const FORM_KEY = {
-  "Cables": "cables", "Mounts & Brackets": "mounts", "Power & Charging": "power",
-  "Networking": "networking", "Cases & Protection": "cases",
-};
+// form-factor bucket name -> data-form key. render.js is dual-runtime (Node regen.mjs + the CF
+// Worker at functions/api/admin/[[path]].js) and must NOT touch fs, so the map is not read here —
+// it is threaded in as `formKey` by each caller from the single source data/forms.json. `{}` is a
+// defensive floor only: an unthreaded caller yields empty data-form / 0 chip counts (visibly wrong,
+// caught by forms-integrity-check + the /type/ curl verify), never a crash on the live publish path.
 
-export function cardHtml(e, locale = "en", catalog, urlOf) {
+export function cardHtml(e, locale = "en", catalog, urlOf, formKey = {}) {
   const title = entryTitle(e, locale);
   const alt = altOf(title, locale, catalog);
   const href = urlOf ? urlOf(`/${e.category}/${e.id}`, locale) : `/${e.category}/${e.id}`;
-  return `\n              <div class="col-xl-3 col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="200ms" data-cat="${e.category}" data-form="${FORM_KEY[e.form] || ""}">\n                <div class="blog-one__single">\n                  <a href="${href}">\n                    <div class="blog-one__img">\n                      <img src="${e.thumb}" alt="${alt}" loading="lazy">\n                    </div>\n                    <div class="blog-content">\n                      <h3 class="blog-one__title">${title}</h3>\n                      <p class="blog-one__tt">${entryExcerpt(e, locale)}</p>\n                    </div>\n                  </a>\n                </div>\n              </div>`;
+  return `\n              <div class="col-xl-3 col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="200ms" data-cat="${e.category}" data-form="${formKey[e.form] || ""}">\n                <div class="blog-one__single">\n                  <a href="${href}">\n                    <div class="blog-one__img">\n                      <img src="${e.thumb}" alt="${alt}" loading="lazy">\n                    </div>\n                    <div class="blog-content">\n                      <h3 class="blog-one__title">${title}</h3>\n                      <p class="blog-one__tt">${entryExcerpt(e, locale)}</p>\n                    </div>\n                  </a>\n                </div>\n              </div>`;
 }
 
 function updateChips(html, id, countFn) {
@@ -506,7 +506,7 @@ export function setListTitle(html, name, locale, catalog) {
 // Gen 2 page aggregates the Performance family — it has 0 products of its own and must not be a
 // dead click), or {form} for the /type/ pages. One predicate covers all four so no caller needs a
 // special case, and adding a fifth kind of list page later costs nothing.
-export function regenListPage(html, entries, catFilter, { locale = "en", catalog, urlOf } = {}) {
+export function regenListPage(html, entries, catFilter, { locale = "en", catalog, urlOf, formKey = {} } = {}) {
   const inScope = (e) => {
     if (!catFilter) return true;
     if (Array.isArray(catFilter)) return catFilter.includes(e.category);
@@ -518,7 +518,7 @@ export function regenListPage(html, entries, catFilter, { locale = "en", catalog
   // NB: must be an arrow, not `scope.map(cardHtml)` — map passes (el, index, array), so the bare
   // reference would feed the INDEX in as `locale`. It would even look fine in en (an unknown
   // locale falls back to English), which is the worst kind of wrong: right by accident.
-  const cards = scope.map((e) => cardHtml(e, locale, catalog, urlOf)).join("") + "\n            ";
+  const cards = scope.map((e) => cardHtml(e, locale, catalog, urlOf, formKey)).join("") + "\n            ";
   html = html.replace(
     /(<div class="row" id="productGrid"[^>]*>)(?:\s*<div class="col-xl-3[^"]*"[^>]*data-cat="[^"]*"[^>]*>[\s\S]*?<\/a>\s*<\/div>\s*<\/div>)*\s*(<\/div>)/,
     (m, open, close) => open + cards + close
@@ -528,7 +528,7 @@ export function regenListPage(html, entries, catFilter, { locale = "en", catalog
   // only page carrying modelChips. It's what makes the /type/ pages, whose scope is one form,
   // count 33 cables per model instead of reporting all 64 products over a 33-card grid.
   const countModel = (f) => (f === "all" ? scope.length : scope.filter((e) => e.category === f).length);
-  const countForm = (f) => (f === "all" ? scope.length : scope.filter((e) => FORM_KEY[e.form] === f).length);
+  const countForm = (f) => (f === "all" ? scope.length : scope.filter((e) => formKey[e.form] === f).length);
   html = updateChips(html, "modelChips", countModel);
   html = updateChips(html, "formChips", countForm);
   return html;

@@ -8,7 +8,7 @@
 //     locale/urlOf → 列表卡片 URL 不本地化）。
 // 单真源铁律：render/chrome/github 全部跨目录 import，零复制。
 // @ts-ignore js 模块
-import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf, renderHome, renderPage, FORM_KEY } from "../vendor/render.js";
+import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf, renderHome, renderPage } from "../vendor/render.js";
 // @ts-ignore js 模块
 import { makeChrome } from "../vendor/chrome.js";
 // @ts-ignore js 模块
@@ -23,11 +23,19 @@ export interface Ctx {
   template: string; site: any; locales: any; catalog: any; categories: any;
   manifest: any[]; manifestRaw: string | null; partial: string; pagesList: Set<string>;
   locDir: Record<string, string>; catmap: Record<string, string>;
+  // 形态/品类轴单源（#52 block2）：forms = data/forms.json 的 forms[]（[{key,name}]，数组顺序=/type 页序=chip 序）；
+  // formKey = 官网同款派生 {name→key}（render.js cardHtml/regenListPage 穿参、chrome.js makeChrome 内部同式派生）。
+  forms: { key: string; name: string }[]; formKey: Record<string, string>;
   chrome: { applyChrome: (html: string, path: string) => { html: string; errors: string[] } ; localizeUrl: (p: string, loc: string) => string };
 }
 
+// 形态轴派生：与官网 chrome.js:50 逐字同式（Object.fromEntries(forms.map(f=>[f.name,f.key]))）——
+// 旧 render.js FORM_KEY 常量正是这个形状，故迁移后行为字节等价。单源=data/forms.json。
+export const formKeyOf = (forms: any[]): Record<string, string> =>
+  Object.fromEntries((forms || []).map((f: any) => [f.name, f.key]));
+
 export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
-  const [template, siteRaw, locRaw, catRaw, categoriesRaw, manRaw, partial, pagesRaw] = await Promise.all([
+  const [template, siteRaw, locRaw, catRaw, categoriesRaw, manRaw, partial, pagesRaw, formsRaw] = await Promise.all([
     readFile(env, cfg, "data/templates/product.html"),
     readFile(env, cfg, "data/site.json"),
     readFile(env, cfg, "data/locales.json"),
@@ -36,13 +44,16 @@ export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
     readFile(env, cfg, "data/products-index.json"),
     readFile(env, cfg, "data/templates/_chrome.html"),
     readFile(env, cfg, "data/pages-list.json"),
+    readFile(env, cfg, "data/forms.json"),
   ]);
   // 精确报缺哪个（㉔ 批错误透传教训：别让"果"盖住"因"）。categories/pages-list 随本链发布——
   // 链未 push 前 GitHub 上没有它们，preview 会在此如实报缺（依赖顺序，非缺陷）。
+  // forms.json 列入必需（与官网 [[path]].js loadCtx 同款 fail-closed）：缺了会让品类 nav 计数全 0、
+  // 产品 form 校验全拒——那是"静默错"，不如响亮报缺（契约 §6）。
   const missing = [
     !template && "data/templates/product.html", !siteRaw && "data/site.json", !locRaw && "data/locales.json",
     !catRaw && "data/chrome.json", !categoriesRaw && "data/categories.json", !partial && "data/templates/_chrome.html",
-    !pagesRaw && "data/pages-list.json",
+    !pagesRaw && "data/pages-list.json", !formsRaw && "data/forms.json",
   ].filter(Boolean);
   if (missing.length) { (globalThis as any).__ctxMissing = missing; return null; }
   const site = JSON.parse(siteRaw), locales = JSON.parse(locRaw), catalog = JSON.parse(catRaw);
@@ -50,12 +61,15 @@ export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
   const manifest = manRaw ? JSON.parse(manRaw) : [];
   const pagesList = new Set<string>(JSON.parse(pagesRaw));
   const locDir = localeDirs(locales);
+  const forms = JSON.parse(formsRaw).forms || [];
+  const formKey = formKeyOf(forms);
   const chrome = makeChrome({
     catalog, locales, partial, manifest,
     pageExists: (rel: string) => pagesList.has(rel),
     locDir,
+    forms,   // #52 block2：品类 nav 计数吃 forms.json 单源（不传=计数全 0，不崩但错）
   });
-  return { template, site, locales, catalog, categories, manifest, manifestRaw: manRaw ?? null, partial, pagesList, locDir, catmap: catmapOf(categories), chrome };
+  return { template, site, locales, catalog, categories, manifest, manifestRaw: manRaw ?? null, partial, pagesList, locDir, catmap: catmapOf(categories), forms, formKey, chrome };
 }
 
 // body h1 消毒：模板已把产品标题渲成 canonical <h1>（render.js {{TITLE}}），body 正文里再出现 <h1>
@@ -69,9 +83,10 @@ export function demoteBodyH1(html: string): string {
 }
 
 // 校验 + 白名单 + ⭐merge：编辑时以旧 json 为底，en 从表单、其它 locale 原样保留（防翻译擦除）。
-export function validateProduct(body: any, id: number, categories: any, existing: any | null): { prod?: any; error?: string } {
+export function validateProduct(body: any, id: number, categories: any, existing: any | null, forms: any[]): { prod?: any; error?: string } {
   const CATEGORIES: string[] = (categories?.categories || []).map((c: any) => c.slug);
-  const FORMS = ["Cables", "Mounts & Brackets", "Power & Charging", "Networking", "Cases & Protection"];
+  // 形态白名单=data/forms.json 单源（#52 block2；旧硬编码数组已删——两处打架=品类 split-brain）
+  const FORMS: string[] = (forms || []).map((f: any) => f.name);
   if (!body || typeof body !== "object") return { error: "body must be an object" };
   if (!CATEGORIES.includes(body.category)) return { error: "invalid category" };
   const form = body.form ? String(body.form) : null;
@@ -134,7 +149,7 @@ function matchJson(existingRaw: string | null | undefined, obj: any): string {
 // 发布：manifest upsert + 每个 enabled locale 的详情页（存在性规则）双步渲染 + 受影响列表页 regen
 // → 一个原子 commit（= 一次 Pages 部署）。
 export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, opts: { isNew: boolean; oldCategory?: string; email: string; dryRun?: boolean }) {
-  const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome } = ctx;
+  const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome, formKey } = ctx;
   const thumb = prod.images[0] ? resolveImg(prod.images[0], site.img_base) : "";
   const entry: any = { id: prod.id, category: prod.category, form: prod.form, title: prod.i18n.en.title, thumb, excerpt: excerptOf(prod) };
   // ⭐ manifest entry 的 i18n（pt/es 卡片标题/摘要）——抄 regen.mjs:47-53 同源逻辑。
@@ -200,7 +215,7 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
       const rel = dir ? `${dir}/${base}` : base;
       if (!ctx.pagesList.has(rel)) continue;
       const h = await readFile(env, cfg, rel);
-      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
+      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
     }
   }
   if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
@@ -225,7 +240,7 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
 export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number, opts: { email: string }) {
   const existing = ctx.manifest.find((e: any) => e.id === id);
   if (!existing) return { notFound: true };
-  const { locales, locDir, catalog, chrome } = ctx;
+  const { locales, locDir, catalog, chrome, formKey } = ctx;
   const category = existing.category;
   const manifest = ctx.manifest.filter((e: any) => e.id !== id);
   const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
@@ -245,7 +260,7 @@ export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number,
       const rel = dir ? `${dir}/${base}` : base;
       if (!ctx.pagesList.has(rel)) continue;
       const h = await readFile(env, cfg, rel);
-      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
+      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
     }
   }
   const r = await commitFiles(env, cfg, files, `admin: delete product ${id} (${opts.email})`);
@@ -279,9 +294,9 @@ export function bulkPagePlan(
 // 批量端点：对 ids 逐个应用 op(status/category/form) → 累积所有变更进一个 files[] → 一次 commitFiles。
 export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], op: string, value: string, opts: { email: string }) {
   if (!["status", "category", "form"].includes(op)) return { error: `未知批量操作：${op}` };
-  const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome } = ctx;
+  const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome, formKey } = ctx;
   const CATS: string[] = (ctx.categories?.categories || []).map((c: any) => c.slug);
-  const FORMS = Object.keys(FORM_KEY as Record<string, string>);
+  const FORMS: string[] = (ctx.forms || []).map((f: any) => f.name);   // forms.json 单源
   if (op === "status" && !["draft", "published", "archived"].includes(value)) return { error: "status 非法" };
   if (op === "category" && !CATS.includes(value)) return { error: `机型非法：${value}` };
   if (op === "form" && value && !FORMS.includes(value)) return { error: `形态非法：${value}` };
@@ -343,7 +358,7 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
       const rel = dir ? `${dir}/${base}` : base;
       if (!ctx.pagesList.has(rel)) continue;
       const h = await readFile(env, cfg, rel);
-      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf } as any)) });
+      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey } as any)) });
     }
   }
   const r = await commitFiles(env, cfg, files, `admin: bulk ${op}=${value} ${touched} products (${opts.email})`);
@@ -372,7 +387,7 @@ export function validateCategories(body: any, existing: any): { cats?: any; erro
 
 // 重烘焙一个类目：详情页（三语存在性）双步 + 该类目列表 + 总列表（各语种存在的）。返回 files 数组。
 export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string): Promise<any[]> {
-  const { template, site, locales, catalog, manifest, locDir, catmap, chrome } = ctx;
+  const { template, site, locales, catalog, manifest, locDir, catmap, chrome, formKey } = ctx;
   const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
   const files: any[] = [];
   for (const e of manifest.filter((m: any) => m.category === slug)) {
@@ -398,7 +413,7 @@ export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string)
       const rel = dir ? `${dir}/${base}` : base;
       if (!ctx.pagesList.has(rel)) continue;
       const h = await readFile(env, cfg, rel);
-      if (h) files.push({ path: rel, content: regenListPage(h, manifest, cat, { locale, catalog, urlOf } as any) });
+      if (h) files.push({ path: rel, content: regenListPage(h, manifest, cat, { locale, catalog, urlOf, formKey } as any) });
     }
   }
   return files;

@@ -49,8 +49,9 @@ import { loadCtx, validateProduct, publishProduct, unpublishProduct, publishBulk
 import type { HomeEdit, ContactEdit, ServiceEdit, SeoEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
-// @ts-ignore js 模块 —— FORM_KEY = 形态/品类轴 slug 真源（render.js，守卫盯字节；本仓只读镜像）
-import { FORM_KEY, resolveImg } from "../vendor/render.js";
+// @ts-ignore js 模块（守卫盯字节；本仓只读镜像）。⚠️ 形态/品类轴 slug 真源已从 render.js 的
+// FORM_KEY 常量迁到 data/forms.json（#52 block2，官网删了该 export、改 formKey 穿参）。
+import { resolveImg } from "../vendor/render.js";
 import { gscQuery } from "./gsc";
 
 const operator = (c: any) => c.req.header("cf-access-authenticated-user-email") || "dev-bypass";
@@ -161,7 +162,7 @@ app.post("/api/admin/products", async (c) => {
   if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
   const newId = ctx.manifest.reduce((m: number, e: any) => Math.max(m, e.id), 0) + 1;
   if (!body.status) body.status = "draft";   // 状态机决策①：新建默认草稿（先编辑完再上线，避免半成品泄漏生产）
-  const v = validateProduct(body, newId, ctx.categories, null);
+  const v = validateProduct(body, newId, ctx.categories, null, ctx.forms);
   if (v.error) return c.json({ error: v.error }, 400);
   try {
     const r = await publishProduct(c.env, cfg, ctx, v.prod, { isNew: true, email: operator(c) });
@@ -182,7 +183,7 @@ app.put("/api/admin/products/:id", async (c) => {
   const oldRaw = await readFile(c.env, cfg, `data/products/${id}.json`);
   const existing = oldRaw ? JSON.parse(oldRaw) : null;
   if (!existing) return c.json({ error: "not found" }, 404);
-  const v = validateProduct(body, id, ctx.categories, existing);
+  const v = validateProduct(body, id, ctx.categories, existing, ctx.forms);
   if (v.error) return c.json({ error: v.error }, 400);
   try {
     const r = await publishProduct(c.env, cfg, ctx, v.prod, { isNew: false, oldCategory: existing.category, email: operator(c) });
@@ -319,7 +320,7 @@ app.post("/api/admin/preview/:id", async (c) => {
   if (!ctx) return c.json({ error: "repo ctx missing", missing: (globalThis as any).__ctxMissing }, 500);
   const oldRaw = await readFile(c.env, cfg, `data/products/${id}.json`);
   const existing = oldRaw ? JSON.parse(oldRaw) : null;
-  const v = validateProduct(body, id, ctx.categories, existing);
+  const v = validateProduct(body, id, ctx.categories, existing, ctx.forms);
   if (v.error) return c.json({ error: v.error }, 400);
   // 批3：单真源化——直接调 publishProduct(dryRun) 走同一条管线到 commit 前一步
   // （原内联第二实现已删：thumb 简化造成与真发布路径 361~590B/页 字节差，违单真源铁律）。
@@ -674,11 +675,12 @@ app.put("/api/admin/media/folder-batch", async (c) => {
 app.get("/api/admin/dashboard", async (c) => {
   const cfg = ghConfig(c.env);
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
-  const [prodRaw, catRaw, featRaw, locRaw] = await Promise.all([
+  const [prodRaw, catRaw, featRaw, locRaw, formsRaw] = await Promise.all([
     readFile(c.env, cfg, "data/products-index.json"),
     readFile(c.env, cfg, "data/categories.json"),
     readFile(c.env, cfg, "data/pages/home-featured.json"),
     readFile(c.env, cfg, "data/locales.json"),
+    readFile(c.env, cfg, "data/forms.json"),
   ]);
   const products: any[] = prodRaw ? JSON.parse(prodRaw) : [];
   const categories: any[] = catRaw ? (JSON.parse(catRaw).categories || []) : [];
@@ -688,11 +690,12 @@ app.get("/api/admin/dashboard", async (c) => {
   const featured = featuredIds.map((id) => byId.get(id)).filter(Boolean).map((p: any) => ({ id: p.id, title: p.title, thumb: p.thumb, category: p.category }));
   const byCat: Record<string, number> = {};
   for (const p of products) byCat[p.category] = (byCat[p.category] || 0) + 1;
-  // 形态分布（FORM_KEY 代码顺序；display=form 字符串）
+  // 形态分布（data/forms.json 数组顺序=/type 页序=chip 序；name=产品 form 字符串）
+  const formsList: any[] = formsRaw ? (JSON.parse(formsRaw).forms || []) : [];
   const formCount: Record<string, number> = {};
   for (const p of products) { const f = p.form || ""; if (f) formCount[f] = (formCount[f] || 0) + 1; }
-  const byForm = Object.keys(FORM_KEY as Record<string, string>).map((form) => ({ form, count: formCount[form] || 0 }));
-  const formsCount = Object.keys(FORM_KEY as Record<string, string>).length;
+  const byForm = formsList.map((f: any) => ({ form: f.name, count: formCount[f.name] || 0 }));
+  const formsCount = formsList.length;
   // 媒体数（R2 count，best-effort）
   let mediaCount = 0;
   try {
@@ -731,22 +734,27 @@ app.get("/api/admin/settings", async (c) => {
   });
 });
 
-// ================= W5 P5+：品类/形态轴（只读；display/slug/顺序定义在 render.js 代码，非可编辑数据）=================
-// ⚠️ 机型轴=categories.json(可编辑) vs 形态轴=FORM_KEY(render.js 代码真源)+产品内联 p.form 字符串。
-// 无 forms.json → 改形态显示名/顺序须重构官网 render(碰官网仓)。此端点只读展示：形态显示名/slug/产品数。
+// ================= W5 P5+：品类/形态轴（真源=data/forms.json·#52 block2）=================
+// ⚠️ 机型轴=categories.json（slug=产品 URL /{slug}/）vs 形态轴=forms.json（key=/type/{key}/，
+// name=产品内联 p.form 字符串 + 校验白名单）。数组顺序=/type 页序=chip 序。
 app.get("/api/admin/forms", async (c) => {
   const cfg = ghConfig(c.env);
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
-  const raw = await readFile(c.env, cfg, "data/products-index.json");
+  const [raw, formsRaw] = await Promise.all([
+    readFile(c.env, cfg, "data/products-index.json"),
+    readFile(c.env, cfg, "data/forms.json"),
+  ]);
+  if (!formsRaw) return c.json({ error: "forms.json missing（官网 #52 block2 未部署？）" }, 404);
   const products: any[] = raw ? JSON.parse(raw) : [];
+  const forms: any[] = JSON.parse(formsRaw).forms || [];
   const count: Record<string, number> = {};
   for (const p of products) { const f = p.form || ""; count[f] = (count[f] || 0) + 1; }
-  // FORM_KEY 顺序=代码真源顺序（形态显示名 → slug）
-  const known = Object.entries(FORM_KEY as Record<string, string>).map(([form, slug]) => ({ form, slug, count: count[form] || 0 }));
-  // 孤儿：产品有 form 值但不在 FORM_KEY（未映射 slug=列表页筛不出）——吼出来
-  const knownForms = new Set(Object.keys(FORM_KEY as Record<string, string>));
+  // forms.json 数组顺序=真源顺序（name=显示名 / key=/type slug）
+  const known = forms.map((f: any) => ({ form: f.name, slug: f.key, count: count[f.name] || 0 }));
+  // 孤儿：产品有 form 值但不在 forms.json（未映射=列表页筛不出、build integrity 闸会 FAIL）——吼出来
+  const knownForms = new Set(forms.map((f: any) => f.name));
   const orphans = Object.keys(count).filter((f) => f && !knownForms.has(f)).map((f) => ({ form: f, slug: "", count: count[f] }));
-  return c.json({ forms: known, orphans, editable: false, note: "形态轴 slug/顺序定义在 render.js(FORM_KEY)，显示名=产品内联 form 字段。可编辑需 forms.json 重构官网 render。" });
+  return c.json({ forms: known, orphans, editable: false, note: "形态轴真源=data/forms.json（key=/type/{key}/ URL，name=产品 form 值）。增删/排序/改名端点待接（契约 §3），页面生成需官网 build。" });
 });
 
 // run_worker_first=true 时 Worker 先跑：未匹配的路由必须**显式**回落静态资源
