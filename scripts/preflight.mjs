@@ -121,6 +121,37 @@ console.log("\n⑤ 上线就绪：内联 content 有没有配套校验");
   }
 }
 
+// ⑥ 我验的这份，总工**取得到**吗
+// ③ 治的是"同步了但没提交"（工作树 vs HEAD）。这一条治它的下一格：**提交了但没推**。
+//   2026-07-28 实测：我 re-vendor 后 commit 了没 push，preflight 在我这儿全绿，
+//   而总工在部署树 checkout origin 分支跑闸 —— 红。两边都是真的，因为读的不是同一个东西。
+//   > **「我做了」→「我提交了」→「我推了」是三个状态，而 ③ 只覆盖前两个之间那一步。**
+// ⚠️ **不判红**：本地开发时没推是正常的。它只在"要报 deploy"那一刻才是错的，
+//    而那一刻是人决定的，闸判不出来 —— 所以这里给事实，不给结论。
+console.log("\n⑥ 我验的这份，总工取得到吗（HEAD 是否已在 origin 上）");
+{
+  let branch = "", localHead = "", remote = "";
+  try {
+    branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+    localHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    execFileSync("git", ["fetch", "-q", "origin", branch], { encoding: "utf8" });
+    remote = execFileSync("git", ["rev-parse", `origin/${branch}`], { encoding: "utf8" }).trim();
+  } catch (e) {
+    console.log(`   ⚪ 取不到 origin/${branch || "?"}（离线或分支未推）——**这是"查不到"，不是"已同步"**`);
+  }
+  if (remote) {
+    const same = remote === localHead;
+    console.log(`   ${same ? "✓" : "⚠️"} 本地 ${localHead.slice(0, 8)} · origin/${branch} ${remote.slice(0, 8)}  ${same ? "一致" : "**不一致 —— 有 commit 没推**"}`);
+    if (!same) {
+      const ahead = execFileSync("git", ["log", "--oneline", `origin/${branch}..HEAD`], { encoding: "utf8" }).trim();
+      if (ahead) console.log(ahead.split("\n").map((l) => "      未推: " + l.slice(0, 76)).join("\n"));
+      console.log(`   🔴 **报 deploy 前先 push** —— 总工发的是 origin 上那份，不是这里这份。`);
+    } else {
+      console.log(`   ⇒ 报 deploy 时贴这个：origin/${branch} = ${remote}`);
+    }
+  }
+}
+
 if (bad) { console.error(`\n🔴 ${bad} 道闸没过 —— 别报 deploy。`); process.exit(1); }
 console.log(drifted
   ? "\n✅ 三闸全绿。镜像**本轮被同步过** —— 复核完签名与行为自查再报 deploy。"
