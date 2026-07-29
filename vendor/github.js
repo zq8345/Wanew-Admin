@@ -102,11 +102,18 @@ export async function commitFiles(env, cfg, files, message) {
         权威文件里的错数字会被下一个人当实测引用,那事在这个文件上已经发生过一次。
         ⇒ Admin 侧实测:保存产品 27→28 · 改品类排序 16→17 · 改品类显示名 17→18。
      ⚠️ `sha` 与 `content` 互斥(同时给会报错),所以删除项继续走 `sha: null`,它本来也不发请求。
-     ⚠️ 编码:blob API 那边显式写着 `encoding: "utf-8"`,是因为它**还支持 base64**;
-        tree API 没有这个字段,因为 `content` 只有一种可能 —— 它是 JSON 请求体里的字符串,
-        而 JSON 按规范就是 UTF-8。**这条是推论,不是文档明文**,所以验收必须是
-        "真提交一次含中文/西语/葡语重音的多文件 commit,再读回来逐字节比对"
-        (scripts/gh-commit-e2e.mjs),不是看它没报错。
+     🔴 编码:blob API 显式写着 `encoding: "utf-8"`,是因为它**还支持 base64**;tree API 没有
+        这个字段,因为 `content` 只有一种可能 —— 它是 JSON 请求体里的字符串,而 JSON 按规范是 UTF-8。
+        **这条始终是推论,不是文档明文,而且【下面那道自证闸并不证明它】。**
+     ⚠️ 边界要标死,别多信一寸:
+        · **已证**(本地 git 对象模型,零凭据可复现):递归读回给全路径;
+          且 tree 条目的 sha == `sha1("blob " + 字节数 + "\0" + 字节)`。
+        · **未证**:GitHub 把 JSON 里的 `content` 字符串编码成字节这一步。
+        **而这一步恰恰不需要被证 —— 那正是这道闸存在的理由。**
+        如果 GitHub 编码错了,它算出的 sha 就是**它那份字节**的 sha,与本地期望不等 ⇒ **闸照样响。**
+        > **这道闸不依赖"GitHub 编码正确"这个前提,它是用来检查那个前提的。**
+        ⇒ 所以**不许**把它写成"编码已验证、可以跳过自证";反过来也**不需要**靠一次性 e2e 去证编码 ——
+        每次保存都在证。`scripts/gh-commit-e2e.mjs` 现在的价值只剩"数子请求 + 量真实体积"。
      ⚠️ 这条路径**从不写二进制**:commitFiles 的入口只接文本(原来也永远是 encoding utf-8,
         没有 base64 分支);readFile 里那个 base64 是【读】的时候解码 GitHub 的返回值,与此无关。 */
   const writes = files.filter((f) => !f.delete);

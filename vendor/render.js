@@ -239,7 +239,16 @@ export function cardHtml(e, locale = "en", catalog, urlOf, formKey = {}, sizes) 
   const alt = altOf(title, locale, catalog);          // alt 仍是长标题(en 逐字节门 + 无障碍)
   const cardTitle = entryCardTitle(e, locale);        // 卡面显示短名,缺省回落长标题
   const href = urlOf ? urlOf(`/${e.category}/${e.id}`, locale) : `/${e.category}/${e.id}`;
-  return `\n              <div class="col-xl-3 col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="200ms" data-cat="${e.category}" data-form="${formKey[e.form] || ""}">\n                <div class="blog-one__single">\n                  <a href="${href}">\n                    <div class="blog-one__img">\n                      <img src="${e.thumb}"${dimAttr(e.thumb, sizes)} alt="${alt}" loading="lazy">\n                    </div>\n                    <div class="blog-content">\n                      <h3 class="blog-one__title">${cardTitle}</h3>\n                      <p class="blog-one__tt">${entryExcerpt(e, locale)}</p>\n                    </div>\n                  </a>\n                </div>\n              </div>`;
+  /* 卡面只有【主图 + 标题】(Joe 2026-07-28)。
+     摘要原来是 `<p class="blog-one__tt">${entryExcerpt(e, locale)}</p>`,内容是从 Amazon 商品
+     描述头部截出来的一段 —— 关键词堆,而且**每一条都断在半个词上**。
+     > **一段断在半个词处的营销文案,唯一传达的信息是"这里有一段我们没处理完的文字"。**
+     去掉它,列表页才像一份目录:卡片的工作是让人认出这是什么并点进去,不是在列表页塞完参数。
+
+     ⚠️ `entryExcerpt` 与 manifest 里的 `excerpt` 字段【都保留】 —— 只停止在卡上渲染。
+        字段还被 i18n 派生链用着(regen.mjs:231 按语种重算),删字段是另一件事,不在这条里做。
+        于是 `entryExcerpt` 暂时没有调用方:**这是有意的,不是漏删。** */
+  return `\n              <div class="col-xl-3 col-lg-4 col-md-6 wow fadeInUp" data-wow-delay="200ms" data-cat="${e.category}" data-form="${formKey[e.form] || ""}">\n                <div class="blog-one__single">\n                  <a href="${href}">\n                    <div class="blog-one__img">\n                      <img src="${e.thumb}"${dimAttr(e.thumb, sizes)} alt="${alt}" loading="lazy">\n                    </div>\n                    <div class="blog-content">\n                      <h3 class="blog-one__title">${cardTitle}</h3>\n                    </div>\n                  </a>\n                </div>\n              </div>`;
 }
 
 function updateChips(html, id, countFn) {
