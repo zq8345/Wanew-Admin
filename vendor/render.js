@@ -192,6 +192,17 @@ const altOf = (title, locale, catalog) => {
   return `${title} ${suffix}`;
 };
 
+/* 产品详情页的站内链接。**三处调用共用它**:相关推荐 / 列表页卡片 / 首页产品条。
+   ⚠️ 这三处此前各自写着 `/${e.category}/${e.id}` —— 三份拷贝就是三条会各自漂的规则,
+      而它们漂开的表现是"其中一处还指着旧址":全站 200,没有任何东西会报错。
+      (首页产品条和列表卡片本来就长得不像同一套组件,正是这种地方最容易只切一半。)
+   🔴 缺 path 就抛,不回落到旧址:`/products/undefined` 会是一条【返回 200 的死链】,
+      而"悄悄退回旧形态"会让第 5b 步删旧址那天才暴露 —— 那时已经没人记得这里有个回落。 */
+const productHref = (e) => {
+  if (!e || !e.path) throw new Error(`productHref: 产品 ${e && e.id} 没有规范 path —— 算不出新址`);
+  return `/products/${e.path}`;
+};
+
 // urlOf must be passed for a non-default locale, or every related-product card on a pt page
 // points back at the English site. R1's routing rule was correct; this function simply drove
 // around it — which is how e_links went 35 -> 256 on R2's first landing. A rule with an
@@ -204,7 +215,7 @@ export function genRelated(prodEntry, entries, locale = "en", catalog, urlOf) {
   const rest = others.filter((p) => p.category !== prodEntry.category && p.form !== prodEntry.form).sort(byId);
   return [...sameCat, ...sameForm, ...rest].slice(0, 4).map((s) => {
     const title = entryTitle(s, locale);
-    const p = `/${s.category}/${s.id}`;
+    const p = productHref(s);
     return { href: urlOf ? urlOf(p, locale) : p, img: s.thumb || "", alt: altOf(title, locale, catalog), title };
   });
 }
@@ -238,7 +249,8 @@ export function cardHtml(e, locale = "en", catalog, urlOf, formKey = {}, sizes) 
   const title = entryTitle(e, locale);
   const alt = altOf(title, locale, catalog);          // alt 仍是长标题(en 逐字节门 + 无障碍)
   const cardTitle = entryCardTitle(e, locale);        // 卡面显示短名,缺省回落长标题
-  const href = urlOf ? urlOf(`/${e.category}/${e.id}`, locale) : `/${e.category}/${e.id}`;
+  const rel = productHref(e);
+  const href = urlOf ? urlOf(rel, locale) : rel;
   /* 卡面只有【主图 + 标题】(Joe 2026-07-28)。
      摘要原来是 `<p class="blog-one__tt">${entryExcerpt(e, locale)}</p>`,内容是从 Amazon 商品
      描述头部截出来的一段 —— 关键词堆,而且**每一条都断在半个词上**。
@@ -317,7 +329,7 @@ export function renderHome(tpl, { locale, catalog, tiles, modelDisplay, urlOf, e
   if (out.includes("{{PRODUCT_STRIP}}")) {
     const strip = pickHomeProducts(products || [], 8, featured, formOrder).map((e) => {
       const title = entryTitle(e, locale);
-      const href = urlOf(`/${e.category}/${e.id}`, locale);
+      const href = urlOf(productHref(e), locale);   // 首页产品条:和列表卡片不是同一套组件,但必须同一条规则
       return `<a class="w3-pstrip__card" href="${href}">\n` +
         `            <div class="w3-pstrip__img"><img src="${e.thumb}"${dimAttr(e.thumb, sizes)} alt="${altOf(title, locale, catalog)}" loading="lazy"></div>\n` +
         `            <div class="w3-pstrip__title">${title}</div>\n          </a>`;
