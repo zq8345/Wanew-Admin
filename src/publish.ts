@@ -12,7 +12,9 @@ import { render, genRelated, resolveImg, regenListPage, excerptOf, catmapOf, ren
 // @ts-ignore js 模块（官网权威：manifest 条目形状 + 缩略图派生规则 + 三态存在性语义）
 import { thumbFor, manifestEntry } from "../vendor/manifest-entry.js";
 // @ts-ignore js 模块（官网权威：产品页面路径与 slug 派生。entry 缺 path 时它**抛**，不静默兜底）
-import { productPagePath } from "../vendor/page-paths.js";
+// 5b 之后**三种页面路径全部由这一份算**，admin 不再自己拼任何一条。
+// 旧址（`{category}/{id}.html`、`{category}/index.html`）这个概念在本文件里已经不存在。
+import { productPagePath, categoryPagePath, listPagePath } from "../vendor/page-paths.js";
 // @ts-ignore js 模块
 import { makeChrome } from "../vendor/chrome.js";
 // @ts-ignore js 模块
@@ -347,13 +349,14 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
 
   // 详情页 × enabled locales（默认 locale 恒渲染[供预览]；其它 locale：已存在才处理——渲染内容不决定 site map）
   //
-  // 🔴 **5b 之前两套地址都是活的，所以两套都要写。**
-  //    旧址 `{category}/{id}.html` 是**当前被链接、被索引**的那套；新址 `products/{slug}-{id}.html`
-  //    已经存在但带 noindex。只切到新址 = **对外可见的那个页面停在保存之前** ——
-  //    那不是"提前迁移"，是**当场制造一批陈旧页面**，和 es/pt 那个停更病一模一样：
-  //    页面还在、内容合法、只是不再更新。5b 当天删旧址并停写，那时才只写新址。
-  // ⚠️ 每个地址**各渲染一次**：`applyChrome(raw, rel)` 吃 rel（canonical/alternate 由它算），
-  //    复用同一份 HTML 会让新址页带着旧址的规范链接。渲染是 CPU，不是子请求。
+  // 🔴 **5b：只写新址 `products/{slug}-{id}.html`。旧址由官网 ③c 删除，admin 不再写、也不删。**
+  //    ⚠️ 顺序不可颠倒，两个方向各有一种病：
+  //      · 官网删之前就停写 → 旧址页仍在被索引、承接流量，却从此不再更新（停更病）
+  //      · 官网删之后还在写 → 被删的旧址被 admin **一个产品一个产品地复活**，全站 200、无报错
+  //    ⇒ 本补丁的发版时机 = 官网 ③c 上线【之后】，不是"5b 那天"。
+  // ⚠️ admin **不负责删旧址**：那是 ③c 的一次性动作。admin 跟着删 = 两个写入方同时动同一批文件。
+  // ⚠️ `applyChrome(raw, rel)` 吃 rel（canonical/alternate 由它算）—— rel 变了，注入结果就变，
+  //    所以这里不能复用双活期那份 HTML。
   const renderTo = async (rel: string, locale: string, isDefault: boolean, isPreviewTarget: boolean) => {
     const exists = ctx.pagesList.has(rel);
     if (isLive) {
@@ -381,9 +384,7 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
   for (const locale of locales.enabled) {
     const dir = locDir[locale];
     const isDefault = locale === locales.default;
-    const oldRel = dir ? `${dir}/${prod.category}/${prod.id}.html` : `${prod.category}/${prod.id}.html`;
-    await renderTo(oldRel, locale, isDefault, isDefault);           // 预览仍取旧址那份（对外可见的那套）
-    await renderTo(productPagePath(entry, dir), locale, isDefault, false);
+    await renderTo(productPagePath(entry, dir), locale, isDefault, isDefault);   // 唯一一套地址=预览取它
 
     // ⭐ 改标题 → slug 变 → 旧 slug 的新址文件成孤儿。**regen 只产不删，删它的职责在这里**
     //    （我是知道 path 变了的那一方 —— 是我算的）。旧 path 从**写新 manifest 之前**的
@@ -402,17 +403,9 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
   for (const cat of cats) {
     for (const locale of locales.enabled) {
       const dir = locDir[locale];
-      // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
-      //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
-      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。
-      //    品类页当前地址是 `type/{key}/index.html`（2026-07-28 实测），两套都由官网 build 产
-      //    （/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
-      // ⚠️ **上面这句描述的是「当前状态」，它的寿命等于那个状态**：5b 之后机型与形态**合并进同一层**
-      //    `products/{cat}/index.html`，`type/` 这一层结构上不再存在 —— 到那天这几行要重写。
-      //    （zh 例外：zh/type/ 有 5 个而 zh/products/*/ 为 0，zh 没有新址可去，不迁移不删。）
-      //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
-      for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
-        const rel = dir ? `${dir}/${base}` : base;
+      // 5b：机型列表页只剩 `products/{model}/index.html` 一套，路径由 vendored page-paths 算。
+      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。品类页由官网 build 产，admin 不写。
+      for (const rel of (cat ? [categoryPagePath(cat, dir)] : [listPagePath(dir)])) {
         if (!ctx.pagesList.has(rel)) continue;
         const h = await readFile(env, cfg, rel);
         if (h) files.push({ path: rel, content: regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */) });
@@ -451,23 +444,15 @@ export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number,
   ];
   for (const locale of locales.enabled) {
     const dir = locDir[locale];
-    const rel = dir ? `${dir}/${category}/${id}.html` : `${category}/${id}.html`;
+    const rel = productPagePath(existing, dir);   // 5b：只有一套地址；旧址已由官网 ③c 删除
     if (ctx.pagesList.has(rel)) files.push({ path: rel, delete: true });   // 三语详情一并删（存在的）
   }
   for (const cat of new Set<string | null>([null, category])) {
     for (const locale of locales.enabled) {
       const dir = locDir[locale];
-      // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
-      //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
-      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。
-      //    品类页当前地址是 `type/{key}/index.html`（2026-07-28 实测），两套都由官网 build 产
-      //    （/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
-      // ⚠️ **上面这句描述的是「当前状态」，它的寿命等于那个状态**：5b 之后机型与形态**合并进同一层**
-      //    `products/{cat}/index.html`，`type/` 这一层结构上不再存在 —— 到那天这几行要重写。
-      //    （zh 例外：zh/type/ 有 5 个而 zh/products/*/ 为 0，zh 没有新址可去，不迁移不删。）
-      //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
-      for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
-        const rel = dir ? `${dir}/${base}` : base;
+      // 5b：机型列表页只剩 `products/{model}/index.html` 一套，路径由 vendored page-paths 算。
+      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。品类页由官网 build 产，admin 不写。
+      for (const rel of (cat ? [categoryPagePath(cat, dir)] : [listPagePath(dir)])) {
         if (!ctx.pagesList.has(rel)) continue;
         const h = await readFile(env, cfg, rel);
         if (h) files.push({ path: rel, content: regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */) });
@@ -479,24 +464,33 @@ export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number,
 }
 
 // ================= P0-3 批量编辑（一次 commit 的多产品原子 publish）=================
-// ⭐ 一致性核心：批量改 category 涉页面路径重算（旧 cat/id.html 删、新 cat/id.html 建）。
-// bulkPagePlan=纯函数（可 node 单测）：给一个产品的路径变更，算出该删哪些旧路径页、该渲染哪些新路径页。
+// bulkPagePlan=纯函数（可 node 单测）：算这个产品该删哪些页、该渲染哪些页。
+//
+// 🔴 **5b 把这个函数的前提整个拿掉了，所以它是【重写】不是【改字符串】。**
+//    旧址 `{category}/{id}.html` 把机型编进了路径，于是"批量改机型"= 路径变 = 删旧建新。
+//    新址是 `products/{slug}-{id}.html` —— `page-paths.js:64` 写着「**编号做主，名字只是装饰**，
+//    改产品名、改机型、改品类，旧链接永远能解析回同一个产品」。
+//    ⇒ **改机型不再改变页面路径。**
+//
+//    ⚠️ 如果只把上面两行的模板换掉、留着 `catChanged → deletes.push(oldRel)`：
+//       oldRel 与 newRel 会算成**同一个字符串**，于是同一次 commit 里同时出现
+//       `{path, delete:true}` 和 `{path, content}` —— **删掉刚渲染的那一页，而且不报错。**
+//
+// ⚠️ 那"改标题→slug 变→旧文件成孤儿"呢？批量操作**不改标题**（op 只有 status/category/form），
+//    所以批量永远不产生孤儿。改标题那条路在 publishProduct 里，靠 man0 的 prevEntry.path 删孤儿。
 export function bulkPagePlan(
-  id: number, oldCat: string, newCat: string, isLive: boolean,
+  entry: any, isLive: boolean,
   enabledLocales: string[], defaultLoc: string, locDir: Record<string, string>, pagesList: Set<string>,
 ): { deletes: string[]; renders: string[] } {
   const deletes: string[] = [], renders: string[] = [];
-  const catChanged = oldCat !== newCat;
   for (const locale of enabledLocales) {
     const dir = locDir[locale] || "";
-    const oldRel = dir ? `${dir}/${oldCat}/${id}.html` : `${oldCat}/${id}.html`;
-    const newRel = dir ? `${dir}/${newCat}/${id}.html` : `${newCat}/${id}.html`;
-    if (catChanged && pagesList.has(oldRel)) deletes.push(oldRel);   // 类目变→删旧路径页（防残留）
+    const rel = productPagePath(entry, dir);   // 缺 path 会抛 —— 不静默兜底
     if (isLive) {
-      // 渲染新路径页：默认 locale 恒；其它 locale 在新路径已存在、或旧路径存在(迁移过来)才渲
-      if (locale === defaultLoc || pagesList.has(newRel) || (catChanged && pagesList.has(oldRel))) renders.push(newRel);
-    } else {
-      if (pagesList.has(newRel)) deletes.push(newRel);   // 下架/草稿：删新路径页（若存在）
+      // 默认 locale 恒渲染；其它 locale 只在页面已存在时渲（哪些语种有页面是官网的决定）
+      if (locale === defaultLoc || pagesList.has(rel)) renders.push(rel);
+    } else if (pagesList.has(rel)) {
+      deletes.push(rel);   // 下架/草稿：删线上页
     }
   }
   return { deletes: [...new Set(deletes)], renders: [...new Set(renders)] };
@@ -549,11 +543,12 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
     if (isLive) manifest.push(entry);
     affectedCats.add(oldCat); affectedCats.add(prod.category);
     // 页面计划（一致性核心，纯函数算）
-    const plan = bulkPagePlan(id, oldCat, prod.category, isLive, locales.enabled, locales.default, locDir, ctx.pagesList);
+    const plan = bulkPagePlan(entry, isLive, locales.enabled, locales.default, locDir, ctx.pagesList);
     for (const rel of plan.deletes) files.push({ path: rel, delete: true });
     for (const rel of plan.renders) {
-      // 从 rel 反推 locale（dir 前缀→locale）：按 enabled 找匹配的 locale
-      const loc = locales.enabled.find((L: string) => { const d = locDir[L] || ""; return (d ? `${d}/${prod.category}/${id}.html` : `${prod.category}/${id}.html`) === rel; }) || locales.default;
+      // 从 rel 反推 locale：用**产出这些 rel 的同一个函数**去比，别再手拼一遍路径模板
+      //（原来这里拼的是旧址模板 —— 一处改了另一处没改，反推就会全落到 default locale）
+      const loc = locales.enabled.find((L: string) => productPagePath(entry, locDir[L] || "") === rel) || locales.default;
       const related = genRelated(entry, manifest, loc, catalog, urlOf);
       const rawHtml = render(prod, { template, imgBase: site.img_base, related, locale: loc, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap, sizes });
       const { html, errors } = chrome.applyChrome(rawHtml.replace(/\r/g, ""), rel);
@@ -570,17 +565,9 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
   for (const cat of affectedCats) {
     for (const locale of locales.enabled) {
       const dir = locDir[locale] || "";
-      // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
-      //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
-      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。
-      //    品类页当前地址是 `type/{key}/index.html`（2026-07-28 实测），两套都由官网 build 产
-      //    （/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
-      // ⚠️ **上面这句描述的是「当前状态」，它的寿命等于那个状态**：5b 之后机型与形态**合并进同一层**
-      //    `products/{cat}/index.html`，`type/` 这一层结构上不再存在 —— 到那天这几行要重写。
-      //    （zh 例外：zh/type/ 有 5 个而 zh/products/*/ 为 0，zh 没有新址可去，不迁移不删。）
-      //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
-      for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
-        const rel = dir ? `${dir}/${base}` : base;
+      // 5b：机型列表页只剩 `products/{model}/index.html` 一套，路径由 vendored page-paths 算。
+      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。品类页由官网 build 产，admin 不写。
+      for (const rel of (cat ? [categoryPagePath(cat, dir)] : [listPagePath(dir)])) {
         if (!ctx.pagesList.has(rel)) continue;
         const h = await readFile(env, cfg, rel);
         if (h) files.push({ path: rel, content: regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any) });
