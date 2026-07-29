@@ -268,18 +268,27 @@ export function validateProduct(body: any, id: number, categories: any, existing
   return { prod };
 }
 
-// 行尾保留（chrome-sync 同款策略）：编辑已有文件时保留其原行尾——否则 Joe 首次保存
-// git diff 整页变更（吓人+污染 blame）。新文件=LF。
-function matchEol(existingRaw: string | null | undefined, html: string): string {
-  return existingRaw && existingRaw.includes("\r\n") ? html.replace(/\n/g, "\r\n") : html;
-}
+// ⭐ `matchEol` 已删除（原本：读一遍旧文件，看它是不是 CRLF，好让新内容跟着变）。
+//
+// 🔴 删的理由不是"现在恰好全是 LF" —— 那是观察，观察会过期。
+//    官网 `0213c712d` 的 `.gitattributes` 把 `* text=auto eol=lf` 钉进了仓库，
+//    **"库内恒 LF"从既成事实变成了声明**，代码可以依赖声明。
+//    ⚠️ 依赖的是【库内容】，不是任何人的工作树 —— 官网那台机器的检出至今仍是混杂的
+//    （.gitattributes 不追溯修正已检出文件），而 `readFile` 走 GitHub API 取的是库内容。
+//
+//    自验（2026-07-28，origin/main=0213c712d，探测器先自证会报非零）：
+//      802 个 .html/.json 逐个 `git cat-file` 数字节 → 含 CRLF 或裸 CR 的 **0 个**
+//
+//    ⇒ 这一句"跟随原行尾"每次保存要换 7 次 readFile，而它的答案永远是"否"。
+//      **一份声明换掉一批运行时探测。**
 
-// json 落盘对齐仓库原文件（🟡终审 +108B 定性收口）：行尾+尾换行都跟随原文件——仓库 json 现状
-// 本就不齐（products/*=CRLF+尾NL、products-index=LF+无尾NL），只有"跟随"能让未改数据的保存
-// 字节归零，不污染 diff/blame。新文件=LF+尾NL。
+// json 落盘的**尾换行**仍要跟随原文件 —— 这半边【不能】跟着删。
+// 实测 origin/main 104 个 json：有尾换行 102 · 无 2，确实不齐；
+// 而"无"的那两个里就有 `data/products-index.json` —— **每次保存都写的那个**。
+// 不跟随 = 每次保存都在文件末尾多/少一个字节 = 每次都污染 diff。新文件=LF+尾NL。
 function matchJson(existingRaw: string | null | undefined, obj: any): string {
   const tail = existingRaw ? (/\n$/.test(existingRaw) ? "\n" : "") : "\n";
-  return matchEol(existingRaw, JSON.stringify(obj, null, 2) + tail);
+  return JSON.stringify(obj, null, 2) + tail;
 }
 
 // 发布：manifest upsert + 每个 enabled locale 的详情页（存在性规则）双步渲染 + 受影响列表页 regen
@@ -347,9 +356,8 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
       const raw = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap, sizes });
       const { html, errors } = chrome.applyChrome(raw.replace(/\r/g, ""), rel);   // ⭐ 双步第二段
       chromeErrors.push(...errors);
-      const out = matchEol(exists ? await readFile(env, cfg, rel) : null, html);
-      if (isPreviewTarget) previewContent = out;
-      files.push({ path: rel, content: out });
+      if (isPreviewTarget) previewContent = html;
+      files.push({ path: rel, content: html });
     } else {
       // draft/archived：删已存在的线上页；默认 locale 仍渲染一份供 dryRun 预览（不进 files=不提交）
       if (isDefault && isPreviewTarget) {
@@ -357,7 +365,7 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
         const raw = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap, sizes });
         const { html, errors } = chrome.applyChrome(raw.replace(/\r/g, ""), rel);
         chromeErrors.push(...errors);
-        previewContent = matchEol(exists ? await readFile(env, cfg, rel) : null, html);
+        previewContent = html;
       }
       if (exists) files.push({ path: rel, delete: true });
     }
@@ -401,7 +409,7 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
         const rel = dir ? `${dir}/${base}` : base;
         if (!ctx.pagesList.has(rel)) continue;
         const h = await readFile(env, cfg, rel);
-        if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
+        if (h) files.push({ path: rel, content: regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */) });
       }
     }
   }
@@ -456,7 +464,7 @@ export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number,
         const rel = dir ? `${dir}/${base}` : base;
         if (!ctx.pagesList.has(rel)) continue;
         const h = await readFile(env, cfg, rel);
-        if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
+        if (h) files.push({ path: rel, content: regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */) });
       }
     }
   }
@@ -544,8 +552,7 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
       const rawHtml = render(prod, { template, imgBase: site.img_base, related, locale: loc, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap, sizes });
       const { html, errors } = chrome.applyChrome(rawHtml.replace(/\r/g, ""), rel);
       chromeErrors.push(...errors);
-      const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;
-      files.push({ path: rel, content: matchEol(prevRaw, html) });
+      files.push({ path: rel, content: html });
     }
     touched++;
   }
@@ -570,7 +577,7 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
         const rel = dir ? `${dir}/${base}` : base;
         if (!ctx.pagesList.has(rel)) continue;
         const h = await readFile(env, cfg, rel);
-        if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any)) });
+        if (h) files.push({ path: rel, content: regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any) });
       }
     }
   }
@@ -647,8 +654,7 @@ export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string,
       const html0 = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap, sizes });
       const { html, errors } = chrome.applyChrome(html0.replace(/\r/g, ""), rel);
       if (errors.length) throw new Error(`chrome 注入失败 ${rel}: ${errors[0]}`);
-      const prevRaw = await readFile(env, cfg, rel);   // rebake 恒为已有页——保留其行尾
-      files.push({ path: rel, content: matchEol(prevRaw, html) });
+      files.push({ path: rel, content: html });
     }
   }
   for (const cat of [slug, null]) {
@@ -746,8 +752,7 @@ export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, payload: { e
     const h0 = renderHome(homeTpl, { locale, catalog: cat, tiles, modelDisplay: locales.model_display, urlOf, exists: pageExists, dirOf, enabled: locales.enabled, products: manifest, featured, formOrder: forms, internal_noindex: INTERNAL, sizes } as any /* 真源签名，tsc 对 js 默认参数(internal_noindex=[])推断为 never[]，同 regenListPage 走 as any */);
     const { html, errors } = chrome.applyChrome((h0 as string).replace(/\r/g, ""), rel);   // ⭐双步第二段
     chromeErrors.push(...errors);
-    const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;
-    files.push({ path: rel, content: matchEol(prevRaw, html) });
+    files.push({ path: rel, content: html });
   }
   if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
   const enPage = files.find((f) => f.path === "index.html");
@@ -826,8 +831,7 @@ export async function publishContact(env: Env, cfg: any, ctx: Ctx, edits: Contac
     const h0 = renderPage(tpl, { locale, catalog: catBase, urlOf, path: "/contact/", dirOf, enabled: locales.enabled, internal_noindex: INTERNAL, config: merged } as any /* 真源签名含 config，tsc 对 js 默认参推断不全，同 renderHome 走 as any */);
     const { html, errors } = chrome.applyChrome((h0 as string).replace(/\r/g, ""), rel);   // ⭐双步第二段
     chromeErrors.push(...errors);
-    const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;
-    files.push({ path: rel, content: matchEol(prevRaw, html) });
+    files.push({ path: rel, content: html });
   }
   if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
   const enPage = files.find((f) => f.path === "contact/index.html");
@@ -916,8 +920,7 @@ export async function publishPageMeta(env: Env, cfg: any, ctx: Ctx, slug: string
     const h0 = renderPage(tpl, { locale, catalog: catBase, urlOf, path: `/${slug}/`, dirOf, enabled: locales.enabled, internal_noindex: INTERNAL, config: contactCfg } as any);
     const { html, errors } = chrome.applyChrome((h0 as string).replace(/\r/g, ""), rel);
     chromeErrors.push(...errors);
-    const prevRaw = ctx.pagesList.has(rel) ? await readFile(env, cfg, rel) : null;
-    files.push({ path: rel, content: matchEol(prevRaw, html) });
+    files.push({ path: rel, content: html });
   }
   if (chromeErrors.length) return { error: "chrome 注入报错（未提交）", detail: chromeErrors.slice(0, 5) };
   const enPage = files.find((f) => f.path === `${slug}/index.html`);
