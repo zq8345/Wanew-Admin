@@ -88,7 +88,7 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // ================= 批2-2：产品 CRUD（双步三语，继承 [[path]].js 骨架） =================
 // 写路径全部走 loadCtx（GitHub 读真源）→ validate(merge) → publish/unpublish（原子 commit）。
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
-import { loadCtx, validateProduct, publishProduct, unpublishProduct, publishBulk, validateCategories, validateForms, formRenameFiles, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishPageMeta, SEO_PAGES, parseAuditMessage } from "./publish";
+import { loadCtx, normForm, validateProduct, publishProduct, unpublishProduct, publishBulk, validateCategories, validateForms, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishPageMeta, SEO_PAGES, parseAuditMessage } from "./publish";
 import type { HomeEdit, ContactEdit, SeoEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
@@ -834,9 +834,10 @@ app.get("/api/admin/dashboard", async (c) => {
   for (const p of products) byCat[p.category] = (byCat[p.category] || 0) + 1;
   // 形态分布（data/forms.json 数组顺序=/type 页序=chip 序；name=产品 form 字符串）
   const formsList: any[] = formsRaw ? (JSON.parse(formsRaw).forms || []) : [];
+  // 🔴 按**归一化后的 key** 计数：C 步 2 之后产品存的是 key，按显示名数会全变 0（生产实测）。
   const formCount: Record<string, number> = {};
-  for (const p of products) { const f = p.form || ""; if (f) formCount[f] = (formCount[f] || 0) + 1; }
-  const byForm = formsList.map((f: any) => ({ form: f.name, count: formCount[f.name] || 0 }));
+  for (const p of products) { const k = normForm(p.form, formsList); if (k) formCount[k] = (formCount[k] || 0) + 1; }
+  const byForm = formsList.map((f: any) => ({ form: f.name, count: formCount[f.key] || 0 }));
   const formsCount = formsList.length;
   // 媒体数（R2 count，best-effort）
   let mediaCount = 0;
@@ -889,13 +890,19 @@ app.get("/api/admin/forms", async (c) => {
   if (!formsRaw) return c.json({ error: "forms.json missing（官网 #52 block2 未部署？）" }, 404);
   const products: any[] = raw ? JSON.parse(raw) : [];
   const forms: any[] = JSON.parse(formsRaw).forms || [];
+  // 🔴 同上：按归一化后的 key 归并。**孤儿判定尤其不能按显示名** ——
+  //    迁移后每个产品的 form 都是 key，而 key 不在"显示名集合"里 ⇒ **68 个产品全被判成孤儿**。
   const count: Record<string, number> = {};
-  for (const p of products) { const f = p.form || ""; count[f] = (count[f] || 0) + 1; }
+  const rawSeen: Record<string, number> = {};   // 原始取值，只用于孤儿（认不出的那些要原样报出来）
+  for (const p of products) {
+    const k = normForm(p.form, forms);
+    if (k) count[k] = (count[k] || 0) + 1;
+    else if (p.form) rawSeen[p.form] = (rawSeen[p.form] || 0) + 1;
+  }
   // forms.json 数组顺序=真源顺序（name=显示名 / key=/type slug）
-  const known = forms.map((f: any) => ({ form: f.name, slug: f.key, count: count[f.name] || 0 }));
+  const known = forms.map((f: any) => ({ form: f.name, slug: f.key, count: count[f.key] || 0 }));
   // 孤儿：产品有 form 值但不在 forms.json（未映射=列表页筛不出、build integrity 闸会 FAIL）——吼出来
-  const knownForms = new Set(forms.map((f: any) => f.name));
-  const orphans = Object.keys(count).filter((f) => f && !knownForms.has(f)).map((f) => ({ form: f, slug: "", count: count[f] }));
+  const orphans = Object.keys(rawSeen).map((f) => ({ form: f, slug: "", count: rawSeen[f] }));
   return c.json({ forms: known, orphans, editable: true, note: "形态轴真源=data/forms.json（key=/type/{key}/ URL，name=产品 form 值）。可加/排序/改显示名/带守卫删；改 key 一期不做（动 URL）。新品类页面需官网构建后生效。" });
 });
 
@@ -931,33 +938,31 @@ app.put("/api/admin/forms", async (c) => {
   const formsFile = { path: "data/forms.json", content: JSON.stringify(formsJson, null, 2) + "\n" };
 
   try {
-    let touched = 0, scanned = 0; let rfSkipped: any[] = [];
-    let r: any;
-    if (renamed.length) {
-      // 改显示名 → 连带改产品 form（扫全部产品含草稿/下架），与 forms.json 同一次 commit
-      const rf = await formRenameFiles(c.env, cfg, ctx, renamed);
-      // 预算拒绝不是"故障"，是**在写之前主动停手** —— 用 409 和一句人能照着做的话，
-      // 别混进 502 的"扫描失败"里（那会让人以为 GitHub 出问题了，往错的方向查）。
-      if ((rf as any).budget) return c.json({ error: "改显示名超出单次调用上限（未提交，仓库未改动）", detail: rf.error, spent: spent(), limit: SUBREQ_LIMIT }, 409);
-      if (rf.error) return c.json({ error: "扫描产品失败（未提交）", detail: rf.error }, 502);
-      touched = rf.touched; scanned = rf.scanned; rfSkipped = (rf as any).skipped || [];
-      r = await commitGuarded(
-        c.env, cfg, [...rf.files, formsFile],
-        `admin: forms update (改显示名 ${renamed.map((x) => `${x.from}→${x.to}`).join(",")}${touched ? ` · 连带 ${touched} 产品` : ""}) (${operator(c)})`);
-    } else {
-      const tag = [added.length ? `加 ${added.join(",")}` : "", removed.length ? `删 ${removed.join(",")}` : ""].filter(Boolean).join(" / ") || "排序";
-      r = await commitGuarded(c.env, cfg, [formsFile], `admin: forms update (${tag}) (${operator(c)})`);
-    }
+    // ⭐ C 步 3：产品的 form 现在存 **key**，而改显示名不动 key ⇒ **一个产品文件都不用碰**。
+    //    原来这里要扫全部产品、按显示名替换（formRenameFiles，已删）：68 次读 + 23 次写 = 108 次子请求，
+    //    而免费版上限 50 —— 那正是 Joe 两天改不了品类名的原因。现在是 1 个文件。
+    // ⚠️ 三个分支（改名 / 加删 / 排序）现在写的都是同一个 formsFile，所以不再分叉 ——
+    //    分叉过的那一版里，只有改名那支带着 108 次调用，而它和另外两支长得几乎一样。
+    const tag = renamed.length
+      ? `改显示名 ${renamed.map((x) => `${x.from}→${x.to}`).join(",")}`
+      : ([added.length ? `加 ${added.join(",")}` : "", removed.length ? `删 ${removed.join(",")}` : ""].filter(Boolean).join(" / ") || "排序");
+    const r: any = await commitGuarded(c.env, cfg, [formsFile], `admin: forms update (${tag}) (${operator(c)})`);
     // ⚠️ 诚实边界（契约 §1）：加品类的 /type/{key}/ 页、以及排序后的 chip 顺序/计数，都由官网
     // build（regen.mjs + chrome-sync）产出 —— edge 跑不了。数据已入库 ≠ 页面已变。
-    const needsSiteBuild = added.length > 0 || removed.length > 0 || (!renamed.length);
+    // 🔴 **改显示名同样需要构建**。原来这里把 renamed 排除在外，因为那时改名会连带重写产品文件 ——
+    //    但那些是**数据文件**，一个页面都不渲染（实测 formRenameFiles 的 files.push 里 .html 出现 0 次）。
+    //    显示名印在官网 **257 个页面**上（实测，探针要同时匹配转义形态 `&amp;`，只搜原文会得到假的 0）。
+    //    ⇒ 三种改动都是"数据已入库 ≠ 页面已变"。
+    const needsSiteBuild = true;
     const parts: string[] = [];
     if (added.length) parts.push(`已加品类 ${added.join(",")}`);
     if (removed.length) parts.push(`已删品类 ${removed.join(",")}`);
-    if (renamed.length) parts.push(`已改显示名 ${renamed.map((x) => `${x.from}→${x.to}`).join(",")}（连带改了 ${touched} 个产品／共扫 ${scanned} 个）`);
+    if (renamed.length) parts.push(`已改显示名 ${renamed.map((x) => `${x.from}→${x.to}`).join(",")}`);
     if (!parts.length) parts.push("已保存新顺序");
-    const note = parts.join("；") + (needsSiteBuild ? "。⚠️ 数据已入库，但 /type/ 页面与导航计数需官网构建后才生效——请知会官网跑一次 build。" : "。改显示名只动数据，页面无需重建。");
-    return c.json({ ok: true, added, removed, renamed, productsTouched: touched, productsScanned: scanned, ...(rfSkipped.length ? { skipped: rfSkipped } : {}), needsSiteBuild, note, ...r });
+    const note = parts.join("；") + "。⚠️ **数据已入库，但官网页面上的文字还没变**——品类显示名印在约 257 个页面上，需要我们手动跑一次站点重建才会更新（目前没有自动触发，改完请知会一声）。";   // ⚠️ 临时措辞：等 Joe 定要不要自动化
+    // productsTouched / productsScanned / skipped 一并去掉：改显示名**不再触碰任何产品文件**，
+    // 留着它们只会报 0，而"0 个产品被改"读起来像"什么都没生效"。
+    return c.json({ ok: true, added, removed, renamed, needsSiteBuild, note, ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 

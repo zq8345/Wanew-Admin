@@ -717,7 +717,12 @@ const api = (p, opt) => fetch("/api/admin" + p, { redirect: "manual", ...(opt ||
   if (e instanceof TypeError) reauth();
   throw e;
 });
-const FORMS = ["Cables", "Mounts & Brackets", "Power & Charging", "Networking", "Cases & Protection"];
+// 🔴 品类清单**不硬编码**：真源是官网仓的 data/forms.json，后端 GET /forms 透出。
+//    写死在这里就是第二份 —— 官网加/改一个品类，这里不会知道，而下拉里少一个选项
+//    的表现是"那个品类的产品存不进去"，不是报错。
+// ⚠️ option 的 value 用 **key**、label 用显示名：产品数据里 form 存的是 key（C 步 2 之后），
+//    value 用显示名会让编辑页回填匹配不上 → select 静默变空 → 保存抹掉 form。
+let FORMS = [];   // [{key, name}]
 const SITE = "https://wanew.com";
 let products = [], cats = [], sel = new Set(), cur = null; // cur = 正在编辑的产品(含 i18n 全量)
 
@@ -767,7 +772,9 @@ document.addEventListener("click", (e) => {
   await Promise.all([loadCats(), loadList()]);
   // 🔴终审修复：#e-form 之前从未填充（只填了列表的 #f-form）→ 编辑页回填必空 → 保存抹 form 字段
   const fs = $("#f-form"), ef = $("#e-form"), bf = $("#bulk-form");
-  FORMS.forEach((f) => { fs.append(new Option(f, f)); ef.append(new Option(f, f)); if (bf) bf.append(new Option(f, f)); });
+  try { const d = await api("/forms"); FORMS = d.forms || []; }
+  catch (e) { msg("品类清单加载失败：" + e.message + "——形态下拉为空，暂时别保存产品", 1); }
+  FORMS.forEach((f) => { fs.append(new Option(f.name, f.key)); ef.append(new Option(f.name, f.key)); if (bf) bf.append(new Option(f.name, f.key)); });
   if (bf) bf.append(new Option("（清空形态）", "__none"));
   ["#q", "#f-cat", "#f-form"].forEach((s) => $(s).addEventListener("input", renderRows));
   showDash();   // 默认落地=仪表盘（比落在"产品"更像后台首页）
@@ -1058,7 +1065,7 @@ async function saveForms() {
   if (!confirm(`将把品类改动保存到官网仓。\n此操作直接修改生产官网仓。${renamed ? "\n\n改显示名会连带修改引用它的所有产品（含草稿/下架）。" : ""}\n确定？`)) return;
   try {
     const r = await api("/forms", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ forms: formsEdit.map((f) => ({ key: f.key, name: f.name.trim() })) }) });
-    msg(`✅ 已保存（${(r.commit || "").slice(0, 7)}）${r.productsTouched ? `· 连带改了 ${r.productsTouched} 个产品` : ""}`);
+    msg(`✅ 已保存（${(r.commit || "").slice(0, 7)}）${r.note ? "\n" + r.note : ""}`, 0);
     if (r.needsSiteBuild) showBuildNote("form", r.note || "品类数据已提交，/type/ 页面与导航计数需官网构建后生效。");
     await loadForms();
   } catch (e) { msg("保存失败：" + e.message, 1); }

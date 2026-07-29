@@ -82,6 +82,29 @@ export interface Ctx {
 export const formKeyOf = (forms: any[]): Record<string, string> =>
   Object.fromEntries((forms || []).map((f: any) => [f.name, f.key]));
 
+/**
+ * form 取值归一化：**收 key 与显示名两者，一律返回 key**；认不出返回 null。
+ *
+ * 🔴 为什么必须有这一个函数、而不是各处各写一遍判断：
+ *    `form` 的消费方**不止一个**。C 步 2 迁移那天我只找到两个就动手了，结果漏了三个 ——
+ *    保存产品校验、批量改形态校验、仪表盘计数/孤儿判定 —— 而漏掉的那两个校验让
+ *    **68 个产品全部无法保存**，漏掉的孤儿判定让**全部产品显示成孤儿**。
+ *    > **一次归一化改动，要问"这个值还有几个消费方"，而不是"我改的这处对不对"。**
+ *    收成一个函数之后，那个问题只需要被回答一次。
+ *
+ * ⚠️ 收两种**不是放松校验**：既不是 key 也不是显示名的第三种取值仍然返回 null（照样拒）。
+ * ⚠️ 为什么迁移完了还要收显示名：守卫/校验的正确性**不该依赖另一个操作的原子性**。
+ *    分批、回滚、半途失败都会让两种取值同时存在。
+ */
+export const normForm = (v: any, forms: any[]): string | null => {
+  if (v === null || v === undefined || v === "") return null;
+  const s = String(v);
+  const list = forms || [];
+  if (list.some((f: any) => f.key === s)) return s;
+  const hit = list.find((f: any) => f.name === s);
+  return hit ? hit.key : null;
+};
+
 export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
   const [template, siteRaw, locRaw, catRaw, categoriesRaw, manRaw, partial, pagesRaw, formsRaw, sizesRaw] = await Promise.all([
     readFile(env, cfg, "data/templates/product.html"),
@@ -183,12 +206,15 @@ export function demoteBodyH1(html: string): string {
 // 校验 + 白名单 + ⭐merge：编辑时以旧 json 为底，en 从表单、其它 locale 原样保留（防翻译擦除）。
 export function validateProduct(body: any, id: number, categories: any, existing: any | null, forms: any[]): { prod?: any; error?: string } {
   const CATEGORIES: string[] = (categories?.categories || []).map((c: any) => c.slug);
-  // 形态白名单=data/forms.json 单源（#52 block2；旧硬编码数组已删——两处打架=品类 split-brain）
-  const FORMS: string[] = (forms || []).map((f: any) => f.name);
   if (!body || typeof body !== "object") return { error: "body must be an object" };
   if (!CATEGORIES.includes(body.category)) return { error: "invalid category" };
-  const form = body.form ? String(body.form) : null;
-  if (form !== null && !FORMS.includes(form)) return { error: "invalid form" };
+  // 形态白名单=data/forms.json 单源（#52 block2；旧硬编码数组已删——两处打架=品类 split-brain）
+  // 🔴 **收 key 与显示名两者，落盘一律 key。** C 步 2 之后产品数据里存的是 key，
+  //    而这里原来只收显示名 ⇒ **68 个产品全部保存被拒**（生产实测）。
+  //    ⚠️ 收两种不是放松校验：第三种取值照样拒。
+  //    ⚠️ 落盘归一化成 key 是关键 —— 只"收下"而按原样存，会让数据重新分叉成两种取值。
+  const form = normForm(body.form, forms);
+  if (body.form && !form) return { error: "invalid form" };
   const en = body.i18n && body.i18n.en;
   if (!en || typeof en.title !== "string" || !en.title.trim()) return { error: "title required" };
   if (typeof en.description_html !== "string") return { error: "description_html required" };
@@ -472,11 +498,13 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
   const { template, site, locales, catalog, manifest: man0, locDir, catmap, chrome, sizes } = ctx;
   const CATS: string[] = (ctx.categories?.categories || []).map((c: any) => c.slug);
   const formsEff = opts.forms ?? ctx.forms ?? [];
-  const FORMS: string[] = formsEff.map((f: any) => f.name);   // forms.json 单源（可被 opts.forms 覆盖）
   const formKey = formKeyOf(formsEff);
+  // 🔴 与保存产品同一条：收 key 与显示名两者，**落盘一律 key**（见 normForm 头部注释）。
+  //    前端下拉传什么都能收，而写进数据的只有一种形态 —— 否则数据会重新分叉。
+  const formVal = op === "form" ? normForm(value, formsEff) : null;
   if (op === "status" && !["draft", "published", "archived"].includes(value)) return { error: "status 非法" };
   if (op === "category" && !CATS.includes(value)) return { error: `机型非法：${value}` };
-  if (op === "form" && value && !FORMS.includes(value)) return { error: `形态非法：${value}` };
+  if (op === "form" && value && !formVal) return { error: `形态非法：${value}` };
   const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
   const idset = new Set(ids.map(Number).filter((n) => Number.isFinite(n)));
   if (!idset.size) return { error: "ids 为空" };
@@ -498,7 +526,7 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
     const oldCat = prod.category;
     if (op === "status") prod.status = value;
     else if (op === "category") prod.category = value;
-    else if (op === "form") prod.form = value || null;
+    else if (op === "form") prod.form = formVal;   // 归一化后的 key（清空时为 null）
     const isLive = (prod.status || "published") === "published";
     files.push({ path: `data/products/${id}.json`, content: matchJson(raw, prod) });
     // manifest：移旧条目；live 则加新条目（entry 抄 publishProduct 逻辑）
@@ -598,51 +626,6 @@ export function validateForms(body: any, existing: any[]): {
   return { forms: list.map((f: any, i: number) => ({ key: f.key, name: names[i] })), added, removed, renamed };
 }
 
-// 改品类显示名 → 连带把所有引用旧值的产品 form 改成新值（契约 §3：不连带改=孤儿，官网 build integrity 闸 FAIL）。
-// ⚠️ 必须扫**全部**产品文件而非只扫 manifest——manifest 只含已发布的，草稿/下架产品同样带 form，
-//    漏改它们=一发布就撞白名单校验。返回 files（不 commit），由调用方与 forms.json 一起原子提交。
-// 注：品类显示名只是**数据桶值**——卡片 data-form 用的是 key、chip 标签来自 chrome.json，
-//    故改显示名不改任何已 built 页面，只动 products/*.json + products-index.json。
-export async function formRenameFiles(env: Env, cfg: any, ctx: Ctx, renames: { from: string; to: string }[]): Promise<{ files: any[]; touched: number; scanned: number; error?: string; skipped?: any[] }> {
-  const map = new Map(renames.map((r) => [r.from, r.to]));
-  const files: any[] = [];
-  let ids: number[] = [];
-  try {
-    const res = await fetch(`https://api.github.com/repos/${(env as any).GITHUB_REPO}/contents/data/products`, {
-      headers: { Authorization: `Bearer ${(env as any).GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
-    });
-    if (!res.ok) return { files: [], touched: 0, scanned: 0, error: `github contents failed: ${res.status}` };
-    const arr: any = await res.json();
-    if (Array.isArray(arr)) ids = arr.filter((f: any) => /^\d+\.json$/.test(f.name)).map((f: any) => Number(f.name.replace(".json", "")));
-  } catch (e: any) { return { files: [], touched: 0, scanned: 0, error: `github fetch error: ${String(e).slice(0, 160)}` }; }
-
-  // 🔴 在**读那 68 个产品之前**就把账算完 —— 这一步才是超限的来源（2026-07-28 实测：
-  //    读到第 39 个时 `Too many subrequests`）。上面的目录列表只花了 1 次，是算这笔账的必要代价。
-  //    最坏情况：每个产品都要改（blob = scanned + forms.json + products-index）。
-  const worst = ids.length + (ids.length + 2) + 5;
-  const no = afford(worst, `改显示名要逐个读 ${ids.length} 个产品（含草稿/下架），再连带重写引用它的那些`);
-  if (no) return { files: [], touched: 0, scanned: ids.length, error: no, budget: true } as any;
-
-  let touched = 0;
-  const skipped: any[] = [];
-  for (const id of ids) {
-    const raw = await readFile(env, cfg, `data/products/${id}.json`);
-    // ⚠️ 这两处原本静默 continue：一个产品文件坏了 → 改品类显示名时它被跳过 →
-    //    它的 form 停在旧值 → 官网 build 的 integrity-check FAIL，而 admin 报的是"改名成功"。
-    //    **不是让它不跳，是让它跳得出声。**
-    if (!raw) { skipped.push({ id, why: "读不到（404，但目录列表里有）" }); continue; }
-    let prod: any; try { prod = JSON.parse(raw); } catch (e: any) { skipped.push({ id, why: "JSON 解析失败：" + String(e).slice(0, 80) }); continue; }
-    const to = prod.form ? map.get(prod.form) : undefined;
-    if (!to) continue;
-    prod.form = to;
-    files.push({ path: `data/products/${id}.json`, content: matchJson(raw, prod) });
-    touched++;
-  }
-  // manifest（已发布产品的索引）同步改名
-  const manifest = ctx.manifest.map((e: any) => (e.form && map.has(e.form) ? { ...e, form: map.get(e.form) } : e));
-  if (JSON.stringify(manifest) !== JSON.stringify(ctx.manifest)) files.push({ path: "data/products-index.json", content: matchJson(ctx.manifestRaw, manifest) });
-  return { files, touched, scanned: ids.length, skipped };
-}
 
 // 重烘焙一个类目：详情页（三语存在性）双步 + 该类目列表 + 总列表（各语种存在的）。返回 files 数组。
 export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string, sink?: any[]): Promise<any[]> {
