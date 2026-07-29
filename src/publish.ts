@@ -364,8 +364,12 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
       const dir = locDir[locale];
       // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
       //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
-      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。品类页是 `type/{key}/index.html`，
-      //    两套都由官网 build 产（/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。
+      //    品类页当前地址是 `type/{key}/index.html`（2026-07-28 实测），两套都由官网 build 产
+      //    （/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      // ⚠️ **上面这句描述的是「当前状态」，它的寿命等于那个状态**：5b 之后机型与形态**合并进同一层**
+      //    `products/{cat}/index.html`，`type/` 这一层结构上不再存在 —— 到那天这几行要重写。
+      //    （zh 例外：zh/type/ 有 5 个而 zh/products/*/ 为 0，zh 没有新址可去，不迁移不删。）
       //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
       for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
         const rel = dir ? `${dir}/${base}` : base;
@@ -415,8 +419,12 @@ export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number,
       const dir = locDir[locale];
       // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
       //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
-      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。品类页是 `type/{key}/index.html`，
-      //    两套都由官网 build 产（/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。
+      //    品类页当前地址是 `type/{key}/index.html`（2026-07-28 实测），两套都由官网 build 产
+      //    （/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      // ⚠️ **上面这句描述的是「当前状态」，它的寿命等于那个状态**：5b 之后机型与形态**合并进同一层**
+      //    `products/{cat}/index.html`，`type/` 这一层结构上不再存在 —— 到那天这几行要重写。
+      //    （zh 例外：zh/type/ 有 5 个而 zh/products/*/ 为 0，zh 没有新址可去，不迁移不删。）
       //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
       for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
         const rel = dir ? `${dir}/${base}` : base;
@@ -523,8 +531,12 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
       const dir = locDir[locale] || "";
       // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
       //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
-      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。品类页是 `type/{key}/index.html`，
-      //    两套都由官网 build 产（/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。
+      //    品类页当前地址是 `type/{key}/index.html`（2026-07-28 实测），两套都由官网 build 产
+      //    （/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      // ⚠️ **上面这句描述的是「当前状态」，它的寿命等于那个状态**：5b 之后机型与形态**合并进同一层**
+      //    `products/{cat}/index.html`，`type/` 这一层结构上不再存在 —— 到那天这几行要重写。
+      //    （zh 例外：zh/type/ 有 5 个而 zh/products/*/ 为 0，zh 没有新址可去，不迁移不删。）
       //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
       for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
         const rel = dir ? `${dir}/${base}` : base;
@@ -661,8 +673,12 @@ export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string,
       const dir = locDir[locale];
       // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
       //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
-      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。品类页是 `type/{key}/index.html`，
-      //    两套都由官网 build 产（/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。
+      //    品类页当前地址是 `type/{key}/index.html`（2026-07-28 实测），两套都由官网 build 产
+      //    （/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      // ⚠️ **上面这句描述的是「当前状态」，它的寿命等于那个状态**：5b 之后机型与形态**合并进同一层**
+      //    `products/{cat}/index.html`，`type/` 这一层结构上不再存在 —— 到那天这几行要重写。
+      //    （zh 例外：zh/type/ 有 5 个而 zh/products/*/ 为 0，zh 没有新址可去，不迁移不删。）
       //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
       for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
         const rel = dir ? `${dir}/${base}` : base;
