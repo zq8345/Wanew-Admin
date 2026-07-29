@@ -972,13 +972,11 @@ async function saveCats() {
     const model_display = { ...(window._origMd || {}) };   // 原全键集打底（不许丢键，含 performance-gen-2 孤儿键）
     for (const c of catsEdit) model_display[c.slug] = c.name.trim();
     const rm = await api("/models", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ model_display }) });
-    const rebaked = (rc.rebaked || []).length + (rm.rebaked || []).length;
-    if (rc.needsSiteBuild) {
-      msg(`✅ 已保存（${(rc.commit || "").slice(0, 7)}）· 新机型 ${(rc.added || []).join(",")} 数据已入库。⚠️ 页面需官网构建后才出现——请知会官网跑一次 build。`);
-      showBuildNote("model", `新机型 ${(rc.added || []).join(",")} 的数据已提交到官网仓，但 /${(rc.added || [])[0]}/ 页面要等官网跑一次构建才会生成（官网无 CI，页面是构建产物）。`);
-    } else {
-      msg(`✅ 已保存（分类 ${(rc.commit || "").slice(0, 7)} / 机型 ${(rm.commit || "").slice(0, 7)}）· 重烘焙 ${rebaked} 类 · ≈1分钟上线`);
-    }
+    // ⚠️ 措辞**只有一个真源**：服务端的 `note`。原来这里自己拼了第二句
+    //    「重烘焙 N 类 · ≈1分钟上线」——改机型显示名已不再重烘焙任何页面，那句话的两半都不成立了，
+    //    而"≈1分钟上线"恰恰是最会让人不去跑构建的一句。前端不再自己造措辞。
+    msg(`✅ 已保存（分类 ${(rc.commit || "").slice(0, 7)} / 机型 ${(rm.commit || "").slice(0, 7)}）${rc.note ? "\n" + rc.note : ""}`, 0);
+    showBuildNote("model", rc.note || "机型数据已提交，页面需官网跑一次站点重建后才更新。");
     await loadCats();          // 刷新产品编辑页的类目下拉（新显示名）
     await loadCatsView();      // 重载：新行变成已存在行（slug 转只读）
   } catch (e) { msg("保存失败：" + e.message, 1); }

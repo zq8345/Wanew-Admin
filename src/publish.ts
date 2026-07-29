@@ -634,51 +634,18 @@ export function validateForms(body: any, existing: any[]): {
 }
 
 
-// 重烘焙一个类目：详情页（三语存在性）双步 + 该类目列表 + 总列表（各语种存在的）。返回 files 数组。
-export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string, sink?: any[]): Promise<any[]> {
-  const { template, site, locales, catalog, manifest, locDir, catmap, chrome, formKey, sizes } = ctx;
-  const urlOf = (p: string, loc: string) => chrome.localizeUrl(p, loc);
-  const files: any[] = [];
-  // ⚠️ 返回的是裸数组、调用点用 spread —— 改返回形状要动 3 处调用点。
-  //    改成**收集器传入**：跳过的信息汇到调用方手里，spread 用法一字不动。
-  const skipped: any[] = sink || [];
-  for (const e of manifest.filter((m: any) => m.category === slug)) {
-    const raw = await readFile(env, cfg, `data/products/${e.id}.json`);
-    if (!raw) { skipped.push({ id: e.id, why: "读不到（404，但 manifest 里有）" }); continue; }
-    let prod: any; try { prod = JSON.parse(raw); } catch (err: any) { skipped.push({ id: e.id, why: "JSON 解析失败：" + String(err).slice(0, 80) }); continue; }
-    for (const locale of locales.enabled) {
-      const dir = locDir[locale];
-      const rel = dir ? `${dir}/${slug}/${e.id}.html` : `${slug}/${e.id}.html`;
-      if (!ctx.pagesList.has(rel)) continue;
-      const related = genRelated(e, manifest, locale, catalog, urlOf);
-      const html0 = render(prod, { template, imgBase: site.img_base, related, locale, modelDisplay: locales.model_display, catalog, urlOf, enabled: locales.enabled, catmap, sizes });
-      const { html, errors } = chrome.applyChrome(html0.replace(/\r/g, ""), rel);
-      if (errors.length) throw new Error(`chrome 注入失败 ${rel}: ${errors[0]}`);
-      files.push({ path: rel, content: html });
-    }
-  }
-  for (const cat of [slug, null]) {
-    for (const locale of locales.enabled) {
-      const dir = locDir[locale];
-      // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
-      //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
-      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。
-      //    品类页当前地址是 `type/{key}/index.html`（2026-07-28 实测），两套都由官网 build 产
-      //    （/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
-      // ⚠️ **上面这句描述的是「当前状态」，它的寿命等于那个状态**：5b 之后机型与形态**合并进同一层**
-      //    `products/{cat}/index.html`，`type/` 这一层结构上不再存在 —— 到那天这几行要重写。
-      //    （zh 例外：zh/type/ 有 5 个而 zh/products/*/ 为 0，zh 没有新址可去，不迁移不删。）
-      //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
-      for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
-        const rel = dir ? `${dir}/${base}` : base;
-        if (!ctx.pagesList.has(rel)) continue;
-        const h = await readFile(env, cfg, rel);
-        if (h) files.push({ path: rel, content: regenListPage(h, manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any) });
-      }
-    }
-  }
-  return files;
-}
+// ⭐ `rebakeCategory`（重烘焙一个机型：逐产品读 json → 渲染详情页 + 列表页）**已删除**。
+//    三个调用点（改机型显示名 ×2、删机型后刷总列表 ×1）全部去掉后它成了孤儿。
+//
+// 🔴 **将来若要恢复「重烘焙一个机型」这个能力，先看这里。**
+//    取回：`git show 53150bc9:src/publish.ts`（本次删除之前的最后一版）
+//    ⚠️ **别照原样取回。** 它当初的形状 —— 逐产品 `readFile(data/products/{id}.json)` 再渲染 ——
+//    **在 Workers 免费版 50 子请求上限下，对产品数 36 的机型不成立**：实测 62（已经是
+//    砍掉行尾探测之后的数字；砍之前 157）。恢复它之前先解决那个形状，否则会原样重现今天这条。
+//    ⇒ 记的不是代码，是**那个形状为什么不行** —— 重写的人最可能重犯的正是形状。
+//
+//    ⚠️ 另外：删机型那条路径（刷总列表）**不要恢复** —— 实测它写的是零变化文件
+//    （catalog 里多/少一个产品数为 0 的机型，regen 产出 24 vs 24 逐字节相同）。
 
 // ================= W5 P1：首页内容 CMS（镜像官网 regen.mjs 首页生成）=================
 // 编辑 home.json i18n 文案 → renderHome + 双步 applyChrome 重烘焙首页（RENDER_SET=enabled∪render_extra，

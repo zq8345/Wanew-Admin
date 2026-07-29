@@ -1,4 +1,4 @@
-// #52 产品后台一期 —— wanew-admin worker 骨架（批1b）。
+﻿// #52 产品后台一期 —— wanew-admin worker 骨架（批1b）。
 // 批2 在此之上加：产品 CRUD（运行时 regen+原子 commit，继承 functions/api/admin/[[path]].js 骨架）、
 // 类目/机型管理端点、R2 直传。批3 加电商风 UI。
 import { Hono } from "hono";
@@ -88,7 +88,7 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 // ================= 批2-2：产品 CRUD（双步三语，继承 [[path]].js 骨架） =================
 // 写路径全部走 loadCtx（GitHub 读真源）→ validate(merge) → publish/unpublish（原子 commit）。
 // GITHUB_TOKEN 未配时 503 fail-closed（批4 接线前 dry 联调用 /api/admin/preview）。
-import { loadCtx, normForm, validateProduct, publishProduct, unpublishProduct, publishBulk, validateCategories, validateForms, rebakeCategory, publishHomepage, publishContact, CONTACT_KEYS, publishPageMeta, SEO_PAGES, parseAuditMessage } from "./publish";
+import { loadCtx, normForm, validateProduct, publishProduct, unpublishProduct, publishBulk, validateCategories, validateForms, publishHomepage, publishContact, CONTACT_KEYS, publishPageMeta, SEO_PAGES, parseAuditMessage } from "./publish";
 import type { HomeEdit, ContactEdit, SeoEdit } from "./publish";
 // @ts-ignore js 模块
 import { ghConfig, readFile } from "../vendor/github.js";
@@ -394,26 +394,33 @@ app.put("/api/admin/categories", async (c) => {
     files.push({ path: "data/locales.json", content: JSON.stringify(locJson, null, 2) + "\n" });
   }
   try {
-    const skipped: any[] = [];   // 静默跳过的产品 —— 必须数出来并报出去
-    const ctx2 = { ...ctx, categories: v.cats, catmap: Object.fromEntries(v.cats.categories.map((cc: any) => [cc.slug, cc.display])) };
-    for (const slug of changed) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug, skipped));
-    // 删机型（产品数已=0）：删各语该机型空列表页 /{slug}/index.html + 刷总列表(products/index.html)把它从 nav/分区抹掉
+    // 🔴 改机型显示名**不再重烘焙任何页面** —— 与改品类显示名（PUT /forms）对称。
+    //    两个操作性质完全相同（改一个显示名），此前只对其中一个做了正确的事。
+    //    页面上的字等 rebuild.mjs；数据这一步只写 json。
+    //    ⇒ 实测 62（mini）→ 17，且 7 个机型里原本只有 mini 单独改就超 50、改 2–3 个必超。
+    // 删机型（产品数已=0）：删各语该机型空列表页 /{slug}/index.html
     for (const r of removed) for (const locale of ctx.locales.enabled) {
       const dir = ctx.locDir[locale]; const rel = dir ? `${dir}/${r}/index.html` : `${r}/index.html`;
       if (ctx.pagesList.has(rel)) files.push({ path: rel, delete: true });
     }
-    if (removed.length && !changed.length) {   // 没有 display 变更触发过 total 重烘焙 → 用剩余机型触发一次刷 total
-      const anyRemain = v.cats.categories[0]?.slug;
-      if (anyRemain) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, anyRemain, skipped));
-    }
+    // 🔴 这里原本还有一次「删机型后 rebake 任意剩余机型来刷总列表」。删掉了，因为**它什么也没做**：
+    //    实测（同一机型跑两次 regen，唯一差别 = catalog 里多/少一个产品数为 0 的机型）：
+    //      产出 24 vs 24 个文件，**逐字节差异 0**。
+    //    而它以为自己在防的那件事也够不着 —— 机型链接硬编码在官网的 `data/templates/_chrome.html`
+    //    页脚（20 条），admin 不写那个文件，删机型后全站页脚仍链向它，那份陈旧只有 rebuild.mjs 能修。
+    //    ⚠️ 最后它取的是 `categories[0]`，**和被删的那个机型无关**；而删机型的守卫要求产品数 = 0
+    //       ⇒ 这条路径的代价（恒 62，取决于第一个机型多大）与它要做的事完全无关。
     const tag = [added.length ? `加机型 ${added.join(",")}` : "", removed.length ? `删机型 ${removed.join(",")}` : ""].filter(Boolean).join(" / ");
     const r = await commitGuarded(c.env, cfg, files, `admin: categories update${tag ? ` (${tag})` : ""} (${operator(c)})`);
-    // ⚠️ 诚实边界（契约 §1）：官网没有 CI，新机型的页面由 regen.mjs（需 fs）生成 —— edge 跑不了。
-    // 数据已提交，但 /{slug}/ 页面要等官网跑一次 build 才出现。别让用户以为立刻可见。
-    const note = added.length
-      ? `已提交新机型 ${added.join(",")}（数据已入库）。⚠️ 机型页面需官网构建后才生效——请知会官网跑一次 build，届时 /${added[0]}/ 及三语页会出现。`
-      : (removed.length ? `已删机型 ${removed.join(",")}（空列表页删除 + 总列表刷新）` : (changed.length ? "display 变更类目已重烘焙" : "仅顺序/无实质变更——首页瓦片顺序随下次本地管线"));
-    return c.json({ ok: true, ...(skipped.length ? { skipped } : {}), rebaked: changed, removed, added, needsSiteBuild: added.length > 0, filesWritten: files.length, note, ...r });
+    // ⚠️ 诚实边界（契约 §1）：官网没有 CI，页面由 rebuild.mjs（需 fs）生成 —— edge 跑不了。
+    //    **措辞与 PUT /forms 保持一致**：同一件事（数据已入库 ≠ 页面已变）不该有两种说法。
+    const parts: string[] = [];
+    if (added.length) parts.push(`已加机型 ${added.join(",")}`);
+    if (removed.length) parts.push(`已删机型 ${removed.join(",")}`);
+    if (changed.length) parts.push(`已改显示名 ${changed.join(",")}`);
+    if (!parts.length) parts.push("已保存新顺序");
+    const note = parts.join("；") + "。⚠️ **数据已入库，但官网页面上的文字还没变**——机型显示名印在该机型的每个产品页与列表页上，需要我们手动跑一次站点重建才会更新（目前没有自动触发，改完请知会一声）。";   // ⚠️ 临时措辞：等 Joe 定要不要自动化
+    return c.json({ ok: true, renamed: changed, removed, added, needsSiteBuild: true, filesWritten: files.length, note, ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
@@ -449,11 +456,10 @@ app.put("/api/admin/models", async (c) => {
   loc.model_display = md;
   const files: any[] = [{ path: "data/locales.json", content: JSON.stringify(loc, null, 2) + "\n" }];
   try {
-    const skipped: any[] = [];   // 静默跳过的产品 —— 必须数出来并报出去
-    const ctx2 = { ...ctx, locales: loc };
-    for (const slug of changed) if (ctx.catmap[slug] !== undefined) files.push(...await rebakeCategory(c.env, cfg, ctx2 as any, slug, skipped));
+    // 🔴 同上：改显示名不重烘焙。这条路径和 PUT /categories 是同一次前端保存里连着发的两枪，
+    //    原来两枪各 rebake 一遍（各 62）；现在各 17。页面上的字统一等 rebuild.mjs。
     const r = await commitGuarded(c.env, cfg, files, `admin: model_display update (${operator(c)})`);
-    return c.json({ ok: true, ...(skipped.length ? { skipped } : {}), rebaked: changed, filesWritten: files.length, ...r });
+    return c.json({ ok: true, renamed: changed, needsSiteBuild: changed.length > 0, filesWritten: files.length, ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
 
