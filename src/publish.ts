@@ -33,11 +33,17 @@ import { byteLen } from "./bytes";
 //    —— 实际只花 5 次。**一个模型过时了的安全装置，就是停机器。**
 //    这个常数与 vendor 实现的一致性由 `scripts/token-lint.mjs` 机器核对，不靠记性。
 // vendor 现在有**两条**写入路径，成本不同：
-//   · 内联 content（请求体 ≤ INLINE_LIMIT）→ 固定 5 次
-//   · 体积超限 → 退回逐文件 blob POST  → 5 + 文件数
-// 只按 5 算会在退路上撞限；只按 5+N 算会**误拒正常保存**（33 文件的产品保存实际只花 5）。
+//   · 内联 content（请求体 ≤ INLINE_LIMIT）→ 固定 6 次
+//   · 体积超限 → 退回逐文件 blob POST  → 6 + 文件数
+// 只按 6 算会在退路上撞限；只按 6+N 算会**误拒正常保存**（33 文件的产品保存实际只花 6）。
 // ⚠️ INLINE_LIMIT 必须与 vendor 里那个常数一致 —— 由 token-lint 机器核对，不靠记性。
-const COMMIT_SUBREQ = 5;
+//
+// 🔴 5 → 6（2026-07-28，官网 e655e93a1）：SHA 自证要多一次 `GET /git/trees/{sha}?recursive=1`。
+//    `POST /git/trees` 的响应**只含那一层**（本地复现：一棵嵌套 tree 非递归读回只有 1 条 `data`，
+//    我们提交的 4 条路径匹配 0 条），所以拿它逐条比对必然"一条都没验到" —— 生产上真的响了。
+//    ⚠️ **一个过时的成本模型就是一台停掉的机器**（上次它差点让每次保存都被拒）。
+//       这个常数改动**必须与 re-vendor 同一个 commit**，中间态是"闸按 6 花、按 5 算"。
+const COMMIT_SUBREQ = 6;
 const INLINE_LIMIT = 5 * 1024 * 1024;
 
 const commitCost = (files: any[]): number => {

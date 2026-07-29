@@ -96,7 +96,11 @@ export async function commitFiles(env, cfg, files, message) {
         改品类排序 读11+写5=**16** ✅。**写入侧已经与文件数无关;仍超的那 80 次读不在这个函数里。**
         表现是"后台保存成功但网站永远不变",而且从 2026-07-26 起就是这样,没人看得出为什么。
         Git Trees API 接受用 `content` 代替 `sha`:**blob 由服务端在建 tree 时一并创建**。
-        于是子请求数变成常数 5,**与文件数无关** —— 不是"够用了",是把这个上限从结构上摘掉。
+        于是子请求数变成常数 6,**与文件数无关** —— 不是"够用了",是把这个上限从结构上摘掉。
+     ⚠️ 是 6 不是 5:SHA 自证要多花一次 `GET /git/trees/{sha}?recursive=1` 才拿得到嵌套路径
+        (POST 的响应只有顶层)。**这一行的数字随实现变,改实现就要改它** ——
+        权威文件里的错数字会被下一个人当实测引用,那事在这个文件上已经发生过一次。
+        ⇒ Admin 侧实测:保存产品 27→28 · 改品类排序 16→17 · 改品类显示名 17→18。
      ⚠️ `sha` 与 `content` 互斥(同时给会报错),所以删除项继续走 `sha: null`,它本来也不发请求。
      ⚠️ 编码:blob API 那边显式写着 `encoding: "utf-8"`,是因为它**还支持 base64**;
         tree API 没有这个字段,因为 `content` 只有一种可能 —— 它是 JSON 请求体里的字符串,
@@ -140,15 +144,31 @@ export async function commitFiles(env, cfg, files, message) {
      (这个流程的原子性是"先造后指"挣来的:掉在这一步只留下无人引用的游离对象,GitHub 自行回收。)
 
      🔴 **验不了就不放行,这是这段代码最重要的一条。**
-     GitHub 创建 tree 的响应里,嵌套路径(如 data/products/650.json)会不会以完整路径出现,
-     **我没有凭据实测,所以不假设**。于是:
-       · 逐个比对能找到的;任何一个不匹配 → 中止
-       · **一个都没验到 → 也中止**,而不是当作通过 —— 那种情况说明自证根本没生效,
-         而"没生效"和"验过了"在只看有没有抛错的眼里长得一模一样
-       · 部分验到 → 同样中止,并报出没覆盖到的路径
-     ⚠️ 若 admin 侧第一次跑就撞到这条,拿到的是一条**说得清的错误**(而不是静默放行,
-        也不是静默写坏);那时按响应实际形状调整匹配方式即可。 */
-  const byPath = new Map((newTree.tree || []).filter((t) => t.type === "blob").map((t) => [t.path, t.sha]));
+     四个出口,任何一个都在 POST commit 之前中止:
+       · 任何一条不匹配        → 中止
+       · **一条都没验到        → 也中止**(自证根本没生效,而"没生效"和"验过了"
+         在只看有没有抛错的眼里长得一模一样)
+       · 只验到一部分          → 中止,并报出没覆盖到的路径
+       · **响应被截断(truncated) → 中止,而且措辞必须说清"这是截断,不是不匹配"** ——
+         两种失败混成一句话,下一个人会去查错的方向
+
+     ⚠️ **这段的第二个出口在生产上真触发过,而它拦对了。** 当初我写"没有凭据实测,所以不假设",
+     并把"admin 第一次跑会被拦住"标成代价。2026-07-28 Joe 改品类名时它触发,分支零改动。
+     **如果当初选了"匹配到才算",这次会静默放行,而 Joe 会以为保存成功。**
+
+     🔴 原因(已实测,不是推断):`POST /git/trees` 的响应**只返回那一层的条目**。
+     实测 root tree:41 条,**含斜杠的路径 0 条**;`data/products/650.json` 找不到,
+     只有 `data`(type: tree)。所以嵌套路径一条都匹配不上。
+     ⇒ 多花 1 次 `GET /git/trees/{sha}?recursive=1` 拿完整路径(实测 2129 条、2088 条带斜杠)。
+     ⚠️ 而"tree 条目的 sha 就是 git blob SHA"这条地基也实测过,不靠理解:
+        取 origin/main 上 5 个已知文件(含中文 JSON、含 NUL 的脚本、嵌套路径),
+        `git rev-parse <ref>:<path>` 与 API 返回的 sha **逐条相同**。 */
+  const full = await gh(env, `/repos/${cfg.owner}/${cfg.name}/git/trees/${newTree.sha}?recursive=1`);
+  if (full.truncated) {
+    throw new Error("SHA 自证无法进行,已中止:递归 tree 响应被截断(truncated=true),拿到的路径不完整。" +
+      "**这是截断,不是不匹配** —— 字节可能完全正确,只是这次没能全部看到。别按'内容不符'去查。");
+  }
+  const byPath = new Map((full.tree || []).filter((t) => t.type === "blob").map((t) => [t.path, t.sha]));
   const unverifiable = [];
   let verified = 0;
   for (const f of writes) {
