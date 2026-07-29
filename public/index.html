@@ -565,8 +565,10 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
       <button class="cat-add" id="cat-add-btn" style="display:none" onclick="catAdd()" title="加机型：新 URL 段、不影响现有机型">＋ 添加机型</button>
       <div class="buildnote" id="cat-build-note" style="display:none"></div>
       <!-- Joe：规则说明读一次就够，不该每次挡在数据前面 → 并进按钮下方这段脚注的首句（两张卡同一种处理）。文案未改。 -->
-      <!-- ⚠️ 这段讲的**全是编辑规则**（加机型要构建、删机型有守卫）—— 只读时是纯噪音，还挡在数据前面。进管理态再显示。 -->
-      <p class="muted" id="cat-help" style="display:none;font-size:12px;margin-top:10px">每个机型一个显示名（官网列表/导航/详情/瓦片统一用它）。保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。<b>加机型</b>：数据即时入库，<b>页面需官网构建后出现</b>。<b>删机型</b>：管理态点行末 ✕ 标记、保存时后端守卫（有产品会拒删）。<span title="每个机型有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" class="hint-q">网址标识不可改 ?</span></p>
+      <!-- ⚠️ 这段讲的**全是编辑规则**（加机型要构建、删机型有守卫）—— 只读时是纯噪音，还挡在数据前面。进管理态再显示。
+           ⚠️ 冲突解法：**文案取本分支**（旧版说"重烘焙…≈1 分钟上线"，而 rebakeCategory 早已删除，那句是假的），
+              **`id` + `display:none` 取 main**（只读态收起）。两边改的是同一行，但改的是不同的事。 -->
+      <p class="muted" id="cat-help" style="display:none;font-size:12px;margin-top:10px">每个机型一个显示名。保存直接提交官网仓。<b>改显示名</b>：网站上只会变<b>一部分</b>，而且要等下一次构建——列表页标题与产品页面包屑会变，导航/页脚里的机型名、分享卡片标题、筛选按钮标签<b>不会</b>（它们来自另一份数据，构建跑多少次都不变）。<b>加机型</b>：数据即时入库，<b>页面需官网构建后出现</b>。<b>删机型</b>：管理态点行末 ✕ 标记、保存时后端守卫（有产品会拒删）。<span title="每个机型有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" class="hint-q">网址标识不可改 ?</span></p>
     </div>
 
     <!-- 形态/品类轴（可编辑：data/forms.json 单源·契约 §3/§4）-->
@@ -588,7 +590,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
       </table>
       <button class="cat-add" id="form-add-btn" style="display:none" onclick="formAdd()" title="加品类：新 /type/ URL 段、不影响现有品类">＋ 添加品类</button>
       <div class="buildnote" id="form-build-note" style="display:none"></div>
-      <p class="muted" id="form-help" style="display:none;font-size:12px;margin-top:10px">每个品类一个显示名（也是产品的形态值）。真源=官网 <span class="tnum">data/forms.json</span>。<b>顺序</b>决定品类页与筛选 chip 的排列。<b>改显示名</b>会连带修改引用它的所有产品（含草稿/下架），页面不需重建。<b>加/删/排序</b>的数据即时入库，但<b>品类页与导航计数需官网构建后生效</b>。<span title="每个品类有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" class="hint-q">网址标识不可改 ?</span></p>
+      <p class="muted" id="form-help" style="display:none;font-size:12px;margin-top:10px">每个品类一个显示名（也是产品的形态值）。真源=官网 <span class="tnum">data/forms.json</span>。<b>顺序</b>决定品类页与筛选 chip 的排列。<b>改显示名</b>只改这一份数据（不再改动任何产品文件）；<b>网站上的品类名暂时不会跟着变，跑构建也不会</b>——页面上的这些字来自另一份数据，当前不读这里，正在改造中。<b>加/删/排序</b>的数据即时入库，但<b>品类页与筛选顺序/计数需官网构建后生效</b>。<span title="每个品类有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" class="hint-q">网址标识不可改 ?</span></p>
     </div>
 
     </div><!-- /.cat-2col -->
@@ -1069,7 +1071,8 @@ async function saveCats() {
   const slugs = catsEdit.map((c) => c.slug);
   if (new Set(slugs).size !== slugs.length) return msg("URL 段重复了，每个机型必须唯一", 1);
   const news = catsEdit.filter((c) => c._new);
-  if (!confirm(`将把机型显示名 / 顺序${news.length ? ` / 新增 ${news.length} 个机型` : ""}保存到官网仓。\n此操作直接修改生产官网仓。${news.length ? "\n\n⚠️ 新机型的页面要等官网构建后才出现（数据先入库）。" : ""}\n确定？`)) return;
+  const mdRenamed = catsEdit.some((c) => c.slug && !c._new && (window._origMd || {})[c.slug] !== undefined && (window._origMd || {})[c.slug] !== c.name.trim());
+  if (!confirm(`将把机型显示名 / 顺序${news.length ? ` / 新增 ${news.length} 个机型` : ""}保存到官网仓。\n此操作直接修改生产官网仓。${mdRenamed ? "\n\n⚠️ 改显示名后，网站上只会变一部分（列表页标题、面包屑），\n导航/页脚/分享标题/筛选标签不会跟着变，跑构建也不会。" : ""}${news.length ? "\n\n⚠️ 新机型的页面要等官网构建后才出现（数据先入库）。" : ""}\n确定？`)) return;
   try {
     // 新机型的 model_display 随 /categories 同一次 commit 落地（缺了会让新页沿用参考页标题=静默错）
     const model_display_add = {};
@@ -1086,17 +1089,24 @@ async function saveCats() {
     //    「重烘焙 N 类 · ≈1分钟上线」——改机型显示名已不再重烘焙任何页面，那句话的两半都不成立了，
     //    而"≈1分钟上线"恰恰是最会让人不去跑构建的一句。前端不再自己造措辞。
     msg(`✅ 已保存（分类 ${(rc.commit || "").slice(0, 7)} / 机型 ${(rm.commit || "").slice(0, 7)}）${rc.note ? "\n" + rc.note : ""}`, 0);
-    showBuildNote("model", rc.note || "机型数据已提交，页面需官网跑一次站点重建后才更新。");
+    // ⚠️ 兜底文案也不许说"跑一次重建就会更新" —— 兜底是 note 缺失时才用的，
+    //    而"我不知道"绝不能被写成一个具体的、会让人去做无效动作的承诺。
+    // ⚠️ 这一块两边都要：文案取本分支，`setCatManage(false)` 取 main（两边改的是同一处的不同事）。
+    showBuildNote("model", rc.note || "机型数据已保存。网站上的显示名只会变一部分，且不是立刻——具体见改造说明，别等构建。");
     setCatManage(false);       // 保存完就回只读 —— 写任务结束了，没理由把写控件继续摆着
     await loadCats();          // 刷新产品编辑页的类目下拉（新显示名）
     await loadCatsView();      // 重载：新行变成已存在行（slug 转只读）
   } catch (e) { msg("保存失败：" + e.message, 1); }
 }
 // 诚实提示条：数据已入库 ≠ 页面已变（官网无 CI，页面是 build 产物）。静默不一致比慢更伤。
+// ⚠️ 标题原来写死「数据已提交，页面待官网构建」—— **那句话在改显示名这条路上是错的**
+//    （品类名跑构建也不变；机型名只变一半），而它就压在正文上方，会先被读到、直接盖过正文。
+//    ⇒ 标题只说确定为真的那半（数据已保存），"要不要等构建"交给正文按情况讲。
+// ⚠️ 正文含换行：esc 之后要把 \n 转成 <br>，否则整段挤成一行。
 function showBuildNote(which, text) {
   const el = $(which === "model" ? "#cat-build-note" : "#form-build-note");
   if (!el) return;
-  el.innerHTML = `<span>⚠️</span><div><b>数据已提交，页面待官网构建</b><br>${esc(text)}</div>`;
+  el.innerHTML = `<span>⚠️</span><div><b>数据已保存到官网仓</b><br>${esc(text).replace(/\n/g, "<br>")}</div>`;
   el.style.display = "flex";
 }
 
@@ -1196,11 +1206,13 @@ async function saveForms() {
   if (new Set(keys).size !== keys.length) return msg("URL 段重复了", 1);
   if (new Set(names).size !== names.length) return msg("显示名重复了——显示名就是产品的形态值，重了会归错桶", 1);
   const renamed = formsEdit.filter((f) => !f._new && f.name.trim() !== f._orig).length;
-  if (!confirm(`将把品类改动保存到官网仓。\n此操作直接修改生产官网仓。${renamed ? "\n\n改显示名会连带修改引用它的所有产品（含草稿/下架）。" : ""}\n确定？`)) return;
+  // ⚠️ 原文写「改显示名会连带修改引用它的所有产品（含草稿/下架）」—— C 步 3 之后**不再成立**：
+  //    产品存的是 key，改名只写 forms.json 一个文件。而这句是点「确定」前读到的最后一句话。
+  if (!confirm(`将把品类改动保存到官网仓。\n此操作直接修改生产官网仓。${renamed ? "\n\n⚠️ 改显示名只改这一份数据，不动任何产品。\n网站页面上的品类名暂时不会跟着变（跑构建也不会）——正在改造中。" : ""}\n确定？`)) return;
   try {
     const r = await api("/forms", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ forms: formsEdit.map((f) => ({ key: f.key, name: f.name.trim() })) }) });
     msg(`✅ 已保存（${(r.commit || "").slice(0, 7)}）${r.note ? "\n" + r.note : ""}`, 0);
-    if (r.needsSiteBuild) showBuildNote("form", r.note || "品类数据已提交，/type/ 页面与导航计数需官网构建后生效。");
+    if (r.needsSiteBuild) showBuildNote("form", r.note || "品类数据已保存。改显示名的话，网站上的字暂时不会变、跑构建也不会——别等构建。");
     await loadForms();
   } catch (e) { msg("保存失败：" + e.message, 1); }
 }

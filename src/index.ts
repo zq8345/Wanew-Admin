@@ -457,14 +457,29 @@ app.put("/api/admin/categories", async (c) => {
     //       ⇒ 这条路径的代价（恒 62，取决于第一个机型多大）与它要做的事完全无关。
     const tag = [added.length ? `加机型 ${added.join(",")}` : "", removed.length ? `删机型 ${removed.join(",")}` : ""].filter(Boolean).join(" / ");
     const r = await commitGuarded(c.env, cfg, files, `admin: categories update${tag ? ` (${tag})` : ""} (${operator(c)})`);
-    // ⚠️ 诚实边界（契约 §1）：官网没有 CI，页面由 rebuild.mjs（需 fs）生成 —— edge 跑不了。
-    //    **措辞与 PUT /forms 保持一致**：同一件事（数据已入库 ≠ 页面已变）不该有两种说法。
+    // 🔴 机型显示名改完，**只有一部分**会跟着构建变。核过的分界（origin/main:scripts/regen.mjs）：
+    //      会跟   `const MODEL = locales.model_display` → `LIST_PAGES` 用 `MODEL[c]`
+    //             ⇒ 机型列表页 <title>/<h1>、产品页面包屑
+    //      不跟   导航与页脚的机型链接文字走 `data/chrome.json` 的 `footer.*`（硬编码键，
+    //             与 model_display 平行、不相交）；社交标题/JSON-LD/筛选 chip 同样没有东西重写它们
+    // ⚠️ 所以**不能笼统说"跑一次构建就更新"** —— 那句话今天误导了 Joe 两次：
+    //    他以为等构建就行，实际改完永远等不到那半。**一个把人引向无效动作的提示，比不提示更糟。**
+    // ⚠️ 这是**过渡态文案**：官网①模板直读品类数据 ②加 CI 自动构建 做完之后，这两句都要重写成"已自动同步"。
     const parts: string[] = [];
     if (added.length) parts.push(`已加机型 ${added.join(",")}`);
     if (removed.length) parts.push(`已删机型 ${removed.join(",")}`);
     if (changed.length) parts.push(`已改显示名 ${changed.join(",")}`);
     if (!parts.length) parts.push("已保存新顺序");
-    const note = parts.join("；") + "。⚠️ **数据已入库，但官网页面上的文字还没变**——机型显示名印在该机型的每个产品页与列表页上，需要我们手动跑一次站点重建才会更新（目前没有自动触发，改完请知会一声）。";   // ⚠️ 临时措辞：等 Joe 定要不要自动化
+    // ⚠️ 这段字会被 textContent / esc() 渲染 —— **不要写 Markdown**，`**粗体**` 会原样显示成星号。
+    //    换行可以：toast 的 .msg 有 white-space:pre-wrap，面板那边由 showBuildNote 转成 <br>。
+    const note = parts.join("；") + "。\n"
+      + (changed.length
+        ? "⚠️ 网站上只会变一部分，而且要等下一次构建：\n"
+          + "· 会变：机型列表页的标题、产品页里的面包屑\n"
+          + "· 不会变：导航与页脚里的机型名、分享卡片标题、筛选按钮的标签\n"
+          + "不会变的那部分来自另一份数据，构建跑多少次都不变 —— 别等它。改造完成后会自动同步，在那之前需要开发改一次。\n"
+        : "")
+      + (added.length ? "· 新机型的页面要等下一次构建才出现（目前没有自动触发，改完请知会一声）。" : "");
     return c.json({ ok: true, renamed: changed, removed, added, needsSiteBuild: true, filesWritten: files.length, note, ...r });
   } catch (e: any) { return c.json({ error: "commit failed", detail: String(e).slice(0, 300) }, 502); }
 });
@@ -1104,17 +1119,35 @@ app.put("/api/admin/forms", async (c) => {
     const r: any = await commitGuarded(c.env, cfg, [formsFile], `admin: forms update (${tag}) (${operator(c)})`);
     // ⚠️ 诚实边界（契约 §1）：加品类的 /type/{key}/ 页、以及排序后的 chip 顺序/计数，都由官网
     // build（regen.mjs + chrome-sync）产出 —— edge 跑不了。数据已入库 ≠ 页面已变。
-    // 🔴 **改显示名同样需要构建**。原来这里把 renamed 排除在外，因为那时改名会连带重写产品文件 ——
-    //    但那些是**数据文件**，一个页面都不渲染（实测 formRenameFiles 的 files.push 里 .html 出现 0 次）。
-    //    显示名印在官网 **257 个页面**上（实测，探针要同时匹配转义形态 `&amp;`，只搜原文会得到假的 0）。
-    //    ⇒ 三种改动都是"数据已入库 ≠ 页面已变"。
+    // 🔴 **改品类显示名与「构建」无关 —— 构建跑多少次都不会变。**
+    //    真源是本文件写的 `data/forms.json` 的 `name`；而页面上的品类名读的是
+    //    `data/chrome.json` 的 `header.*`（硬编码键，`{{t.header.mounts_brackets}}` 这种）。
+    //    **两条链平行、不相交。**
+    //    实测（官网拿 Joe 当时的真实数据状态复刻一棵树跑 rebuild）：
+    //      改 forms.json / locales.json → **621 个页面一个字没变**
+    //      改 chrome.json               → 563 个页面当场跟着变
+    // 🔴 原来这里写的是"需要手动跑一次站点重建才会更新" —— **那句话是错的，而且它今天误导了 Joe 两次**：
+    //    他两次都以为"等构建就行"，于是去等一件不会有结果的事，然后怀疑是不是自己没等够。
+    //    **一个把人引向无效动作的提示，比不提示更糟。**
+    // ⚠️ 加品类 / 排序**不同**：`/type/{key}/` 新页与 chip 顺序确实由 build 产出，那部分构建有效。
+    //    ⇒ 分开说，别用一句话盖住两种不同的事实。
+    // ⚠️ 过渡态文案：官网①模板直读品类数据 ②CI 自动构建 做完后，这里要重写成"已自动同步"。
     const needsSiteBuild = true;
     const parts: string[] = [];
     if (added.length) parts.push(`已加品类 ${added.join(",")}`);
     if (removed.length) parts.push(`已删品类 ${removed.join(",")}`);
     if (renamed.length) parts.push(`已改显示名 ${renamed.map((x) => `${x.from}→${x.to}`).join(",")}`);
     if (!parts.length) parts.push("已保存新顺序");
-    const note = parts.join("；") + "。⚠️ **数据已入库，但官网页面上的文字还没变**——品类显示名印在约 257 个页面上，需要我们手动跑一次站点重建才会更新（目前没有自动触发，改完请知会一声）。";   // ⚠️ 临时措辞：等 Joe 定要不要自动化
+    // ⚠️ 同上：这段字走 textContent / esc()，**不要写 Markdown**。
+    const note = parts.join("；") + "。\n"
+      + (renamed.length
+        ? "⚠️ 网站上的品类名暂时不会变，跑构建也不会 —— 页面上的这些字来自另一份数据，当前不读这里"
+          + "（已实测：改完重建，621 个页面一字未动）。\n"
+          + "别等构建。改造完成后会自动同步，在那之前需要开发改一次。\n"
+        : "")
+      + ((added.length || removed.length || !renamed.length)
+        ? "· 新品类页面、以及筛选按钮的顺序与计数：这部分要等下一次构建才生效（目前没有自动触发，改完请知会一声）。"
+        : "");
     // productsTouched / productsScanned / skipped 一并去掉：改显示名**不再触碰任何产品文件**，
     // 留着它们只会报 0，而"0 个产品被改"读起来像"什么都没生效"。
     return c.json({ ok: true, added, removed, renamed, needsSiteBuild, note, ...r });
