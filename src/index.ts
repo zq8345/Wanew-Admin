@@ -914,10 +914,14 @@ app.put("/api/admin/forms", async (c) => {
 
   // ⭐ 删守卫（契约 §4）：该品类还有产品 → 拒删并报数。静默删会让那些产品从 /type/ 页消失、
   // data-form 变空，官网 build 的 forms-integrity-check 也会 FAIL。响亮拒 > 静默丢。
+  // 🔴 **两种取值都要数。** 产品的 `form` 正在从【显示名】迁到【key】（C 步 2），
+  //    迁移之后 manifest 里是 key，而这里原来只比显示名 ⇒ 数出 0 ⇒ **删一个有 33 个产品的品类会被放行**。
+  //    ⚠️ 这个失败方向特别毒：守卫不是报错，是**沉默放行** —— 而放行之后那些产品就成了孤儿。
+  //    ⚠️ 迁移期间两种取值会同时存在（旧数据显示名 / 新写入 key），所以不是"改成比 key"，是**两个都数**。
   const oldByKey = new Map((ctx.forms || []).map((f: any) => [f.key, f.name]));
   for (const key of removed) {
     const name = String(oldByKey.get(key));
-    const n = (ctx.manifest as any[]).filter((m: any) => m.form === name).length;
+    const n = (ctx.manifest as any[]).filter((m: any) => m.form === name || m.form === key).length;
     if (n > 0) return c.json({ error: `品类「${name}」下还有 ${n} 个产品，删了它们会从 /type/${key}/ 页消失。请先用「批量改形态」把这些产品迁到别的品类，再删。` }, 400);
   }
 
