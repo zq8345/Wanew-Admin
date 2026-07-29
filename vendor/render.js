@@ -624,7 +624,14 @@ export function regenListPage(html, entries, catFilter, { locale = "en", catalog
   const inScope = (e) => {
     if (!catFilter) return true;
     if (Array.isArray(catFilter)) return catFilter.includes(e.category);
-    if (typeof catFilter === "object") return catFilter.form ? e.form === catFilter.form : true;
+    if (typeof catFilter === "object") {
+      // 🔴 两边都归一化,但【必须带兜底】。写成 `formKey[e.form] === formKey[catFilter.form]`
+      //    在 formKey 为 {} 时是 `undefined === undefined` —— 恒真式,每个产品进每一页。
+      //    而 /type/ 页本来就该有几十张卡,**这个失败肉眼看不出来**。
+      return catFilter.form
+        ? (formKey[e.form] || e.form) === (formKey[catFilter.form] || catFilter.form)
+        : true;
+    }
     return e.category === catFilter;
   };
   const scope = entries.filter(inScope)

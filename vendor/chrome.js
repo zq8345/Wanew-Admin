@@ -47,7 +47,12 @@ const ANCHORS = [
 
 export function makeChrome({ catalog, locales, partial, manifest, pageExists, locDir, forms = [] }) {
   // form-factor bucket name -> data-form key, derived from the single source (not hardcoded).
-  const FORM_KEY = Object.fromEntries(forms.map((f) => [f.name, f.key]));
+  /* 🔴 name 与 key 【都】映射到 key —— C 步 1:读取侧两者都认。
+   产品数据里 `form` 存的是【显示名】当外键,所以改一个显示名要重写上百个文件。
+   根治是把它改成存 key,而这是第一步:**读取侧先能同时认两种**,admin 才敢动数据。
+   ⚠️ 顺序不可颠倒 —— 这一步没上线就迁移,线上按显示名匹配会全部落空,
+   产品会从 /type/ 页整批消失。 */
+const FORM_KEY = Object.fromEntries(forms.flatMap((f) => [[f.name, f.key], [f.key, f.key]]));
   const src = partial.replace(/\r/g, "");
   const block = (name) => {
     const m = src.match(new RegExp(`<!-- #block:${name} -->\\n([\\s\\S]*?)\\n<!-- #endblock -->`));
@@ -88,7 +93,10 @@ export function makeChrome({ catalog, locales, partial, manifest, pageExists, lo
   }
 
   const counts = { all: manifest.length };
-  for (const [form, key] of Object.entries(FORM_KEY)) counts[key] = manifest.filter((e) => e.form === form).length;
+  // ⚠️ 必须按 forms 遍历、用 FORM_KEY 归一化 e.form ——
+  // 表变双向之后,原来的 `Object.entries(FORM_KEY)` 会把同一个 key 遍历两遍(name 一次、key 一次),
+  // 后一次的结果覆盖前一次。计数不会报错,只会变成"只数了其中一种写法"。
+  for (const f of forms) counts[f.key] = manifest.filter((e) => FORM_KEY[e.form] === f.key).length;
 
   function renderBlock(blockSrc, locale, vars) {
     let out = blockSrc.replace(/\{\{t\.([a-z0-9_.]+)\}\}/gi, (m, key) => {
