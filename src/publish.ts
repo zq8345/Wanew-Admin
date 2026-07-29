@@ -362,11 +362,17 @@ export async function publishProduct(env: Env, cfg: any, ctx: Ctx, prod: any, op
   for (const cat of cats) {
     for (const locale of locales.enabled) {
       const dir = locDir[locale];
-      const base = cat ? `${cat}/index.html` : "products/index.html";
-      const rel = dir ? `${dir}/${base}` : base;
-      if (!ctx.pagesList.has(rel)) continue;
-      const h = await readFile(env, cfg, rel);
-      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
+      // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
+      //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
+      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。品类页是 `type/{key}/index.html`，
+      //    两套都由官网 build 产（/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
+      for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
+        const rel = dir ? `${dir}/${base}` : base;
+        if (!ctx.pagesList.has(rel)) continue;
+        const h = await readFile(env, cfg, rel);
+        if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
+      }
     }
   }
   if (chromeErrors.length) return { error: "chrome 注入报错（未提交，防打回模板态）", detail: chromeErrors.slice(0, 5) };
@@ -407,11 +413,17 @@ export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number,
   for (const cat of new Set<string | null>([null, category])) {
     for (const locale of locales.enabled) {
       const dir = locDir[locale];
-      const base = cat ? `${cat}/index.html` : "products/index.html";
-      const rel = dir ? `${dir}/${base}` : base;
-      if (!ctx.pagesList.has(rel)) continue;
-      const h = await readFile(env, cfg, rel);
-      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
+      // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
+      //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
+      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。品类页是 `type/{key}/index.html`，
+      //    两套都由官网 build 产（/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
+      for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
+        const rel = dir ? `${dir}/${base}` : base;
+        if (!ctx.pagesList.has(rel)) continue;
+        const h = await readFile(env, cfg, rel);
+        if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any /* 真源签名含 catalog/urlOf(render.js:381)；tsc 对 js 推断不全 */)) });
+      }
     }
   }
   const r = await commitFiles(env, cfg, files, `admin: delete product ${id} (${opts.email})`);
@@ -509,11 +521,17 @@ export async function publishBulk(env: Env, cfg: any, ctx: Ctx, ids: number[], o
   for (const cat of affectedCats) {
     for (const locale of locales.enabled) {
       const dir = locDir[locale] || "";
-      const base = cat ? `${cat}/index.html` : "products/index.html";
-      const rel = dir ? `${dir}/${base}` : base;
-      if (!ctx.pagesList.has(rel)) continue;
-      const h = await readFile(env, cfg, rel);
-      if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any)) });
+      // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
+      //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
+      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。品类页是 `type/{key}/index.html`，
+      //    两套都由官网 build 产（/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
+      for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
+        const rel = dir ? `${dir}/${base}` : base;
+        if (!ctx.pagesList.has(rel)) continue;
+        const h = await readFile(env, cfg, rel);
+        if (h) files.push({ path: rel, content: matchEol(h, regenListPage(h.replace(/\r/g, ""), manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any)) });
+      }
     }
   }
   if (opts.extraFiles?.length) files.push(...opts.extraFiles);   // 与产品改动同一次 commit=原子
@@ -641,11 +659,17 @@ export async function rebakeCategory(env: Env, cfg: any, ctx: Ctx, slug: string,
   for (const cat of [slug, null]) {
     for (const locale of locales.enabled) {
       const dir = locDir[locale];
-      const base = cat ? `${cat}/index.html` : "products/index.html";
-      const rel = dir ? `${dir}/${base}` : base;
-      if (!ctx.pagesList.has(rel)) continue;
-      const h = await readFile(env, cfg, rel);
-      if (h) files.push({ path: rel, content: regenListPage(h, manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any) });
+      // ⚠️ 5b 之前机型列表页也是**两套都活**：旧址 {model}/index.html、新址 products/{model}/index.html。
+      //    只写旧址 → 新址那套每保存一次就停更；5b 删旧址后 admin 会写到不存在的路径。
+      // ⚠️ 这里的 cat 是**机型**(prod.category)，**不是品类(form)**。品类页是 `type/{key}/index.html`，
+      //    两套都由官网 build 产（/type/ 与 chip 计数同源），admin 一个都不写 —— 别照这个形状去拼 type/ 路径。
+      //    产品总列表页 products/index.html **两套共用同一路径**，所以 cat 为 null 时只有一个。
+      for (const base of (cat ? [`${cat}/index.html`, `products/${cat}/index.html`] : ["products/index.html"])) {
+        const rel = dir ? `${dir}/${base}` : base;
+        if (!ctx.pagesList.has(rel)) continue;
+        const h = await readFile(env, cfg, rel);
+        if (h) files.push({ path: rel, content: regenListPage(h, manifest, cat, { locale, catalog, urlOf, formKey, sizes } as any) });
+      }
     }
   }
   return files;
