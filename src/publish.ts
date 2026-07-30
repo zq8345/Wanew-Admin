@@ -14,7 +14,7 @@ import { thumbFor, manifestEntry } from "../vendor/manifest-entry.js";
 // @ts-ignore js 模块（官网权威：产品页面路径与 slug 派生。entry 缺 path 时它**抛**，不静默兜底）
 import { productPagePath } from "../vendor/page-paths.js";
 // @ts-ignore js 模块
-import { makeChrome } from "../vendor/chrome.js";
+import { makeChrome, applyFormNames } from "../vendor/chrome.js";
 // @ts-ignore js 模块
 import { ghConfig, commitFiles as rawCommitFiles, readFile } from "../vendor/github.js";
 import { afford, spent } from "./subreq";
@@ -187,16 +187,23 @@ export async function loadCtx(env: Env, cfg: any): Promise<Ctx | null> {
   const locDir = localeDirs(locales);
   const forms = JSON.parse(formsRaw).forms || [];
   const formKey = formKeyOf(forms);
+  /* 🔴 品类显示名的真源是 forms.json，不是 chrome.json。
+     官网 2026-07-30 起在读入 chrome.json 之后立刻套一次 applyFormNames（regen.mjs / chrome-sync.mjs
+     两个入口都套）。**admin 不套的话，它重新生成的页面会把旧品类名写回去** ——
+     Joe 刚把 "Power & Charging" 改成 "Charging"，而 admin 保存一次产品就会把 nav 改回旧名。
+     ⚠️ 与今天那几颗 vendor 雷同一形状：镜像同步了、【调用点没跟上】，而两边各自都不报错。
+     只覆盖 en；es/pt/zh 保持 chrome.json 现值（见 vendor/chrome.js:applyFormNames 的说明）。 */
+  const catalogWithFormNames = applyFormNames(catalog, forms);
   // media-sizes.json 不列必需：缺了只是不补 width/height（与今天一致），不该因此拒绝所有写操作
   let sizes: Record<string, [number, number]> = {};
   if (sizesRaw) { try { sizes = JSON.parse(sizesRaw); } catch { sizes = {}; } }
   const chrome = makeChrome({
-    catalog, locales, partial, manifest,
+    catalog: catalogWithFormNames, locales, partial, manifest,
     pageExists: (rel: string) => pagesList.has(rel),
     locDir,
     forms,   // #52 block2：品类 nav 计数吃 forms.json 单源（不传=计数全 0，不崩但错）
   });
-  return { template, site, locales, catalog, categories, manifest, manifestRaw: manRaw ?? null, partial, pagesList, repoFiles, r2Thumbs, locDir, catmap: catmapOf(categories), forms, formKey, sizes, chrome };
+  return { template, site, locales, catalog: catalogWithFormNames, categories, manifest, manifestRaw: manRaw ?? null, partial, pagesList, repoFiles, r2Thumbs, locDir, catmap: catmapOf(categories), forms, formKey, sizes, chrome };
 }
 
 // body h1 消毒：模板已把产品标题渲成 canonical <h1>（render.js {{TITLE}}），body 正文里再出现 <h1>

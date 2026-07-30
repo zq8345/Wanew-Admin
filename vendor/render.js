@@ -629,7 +629,31 @@ export function setListLabels(html, { locale, catalog, model, formKey }) {
   // (2) 机型导航行里的 <a> "All" 锚(href 指向全集):只认 "All"/已本地化值,型号名锚不动。
   out = out.replace(/(<a class="product-chip[^"]*" href="[^"]*"(?: data-filter="all")?>)([^<]*?)( <span class="product-chip__n">)/g,
     (m, a, label, b) => (label === "All" || label === ALL ? a + ALL + b : m));
+
   return out;
+}
+
+/* 机型导航 <a> 的 href → 新址。**放在 regenListPage 里**,因为它需要 `entries` 才知道
+   哪些 slug 是真机型 —— 我第一版写进了 setListLabels,那里没有 entries,regen 当场
+   `ReferenceError` 停在第 1 步。⚠️ 那次失败留下的是中间态产出:**别拿它验收、别提交。**
+
+   这一行是【导航】,不是筛选:`<button>` 那一种就地筛选、根本没有 href。
+   > **"chip"不是单一形态,规则要分开写** —— 和 blog-one__single 那次同一条:
+   > **类名不是语义**,它可以横跨两种东西。
+
+   🔴 合法 slug 取自 entries 的 category 集合,不另立清单 —— 另立就是第二份会漂的真源。
+      (聚合页 performance-gen-2 自己没有产品,不在集合里,页面上也确实没有它的 chip。)
+   🔴 幂等 + 时间维度:模式【同时接受】旧形态 `/{slug}/` 与新形态 `/products/{slug}/`,
+      一律产出新形态。**没有"先试新的、失败再试旧的"这种分支** ——
+      收尾那一刀之后旧形态不再出现,若靠失败回退实现,那条回退路径从此再没被验证过。 */
+export function switchChipHrefs(html, entries) {
+  const slugs = new Set((entries || []).map((e) => e.category).filter(Boolean));
+  if (!slugs.size) throw new Error("switchChipHrefs: entries 里一个 category 都没有 —— 空集合会让替换静默为 0");
+  return html.replace(/(<a class="product-chip[^"]*" href=")([^"]*)(")/g, (m, a, href, b) => {
+    const mm = /^(\/(?:es|pt|zh))?\/(?:products\/)?([a-z0-9-]+)\/$/.exec(href);
+    if (!mm || !slugs.has(mm[2])) return m;            // All 锚(/products/)与任何非机型链接原样
+    return `${a}${mm[1] || ""}/products/${mm[2]}/${b}`;
+  });
 }
 
 /* 列表页的标题。**三处同一个值**:`<title>` 是给搜索结果看的,`og:title` / `twitter:title`

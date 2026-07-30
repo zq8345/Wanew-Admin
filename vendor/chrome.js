@@ -45,6 +45,50 @@ const ANCHORS = [
 // `forms` = data/forms.json 的 forms[] 单源（[{key,name}]），由调用方（chrome-sync / admin worker）读入后传进来，
 // 本模块保持无 fs。缺省 [] 是防御下限（nav 计数会全 0=肉眼可见，非崩溃），真源缺失应由调用方 flag。
 
+/* 品类 key → 它在 chrome.json 里的标签键。
+   🔴 **键名是历史包袱,不是语义** —— 它们从旧英文显示名 slug 派生(power → header.power_charging、
+   cases → header.cases_protection)。所以这张表【无法从数据派生】,必须显式存在。
+   ⚠️ 但键名难看无害:它只是内部标识符。真正的病是"改了显示名、页面上不变",那个由下面
+   applyFormNames 治掉。**不要为了让键名好看去改键名** —— 改键要动 698 页的模板引用,而收益是零。
+   ⚠️ 已知欠账:render.js 里还有一份同样的表(函数内局部)。今天不动它是为了把改动面压到最小,
+   收敛成一份单独排。**两份变一份可以等,但别变成三份。** */
+export const FORM_LABEL_KEY = {
+  mounts: "header.mounts", power: "header.power_charging", cables: "header.cables",
+  networking: "header.networking", cases: "header.cases_protection",
+};
+
+/* `data/forms.json` 的 name 是品类显示名的【真源】—— Joe 在后台改的就是它。
+   在这之前,页面上的品类名读 chrome.json 的 header.*,两条链平行不相交 ⇒
+   **后台改完名、跑多少次构建都不变**(2026-07-29 实测:改名后 621 个页面一字未动)。
+   这个函数把真源覆盖到 catalog 上,调用方读入 chrome.json 之后立刻套一次。
+
+   只覆盖 en。es/pt/zh 保持 chrome.json 现值 —— **那不是 bug**:西语标签不必是英语的直译,
+   它们是各自语言里对同一品类的叫法(Energía y carga 之于 Charging)。多语言编辑是另一件事。
+
+   ⚠️ 按 FORM_LABEL_KEY 遍历,不按 forms 遍历。forms.json 里出现表里没有的新 key 时,
+   这里【静默跳过】而不是抛 —— 抛会让"在后台加一个品类"直接保存失败。
+   那种情况该由常驻闸报红(看得见、且不挡任何人的操作),不该由渲染期抛异常。 */
+/* 🔴 `forms.json` 存【纯文本】("Cases & Protection")，`chrome.json` 存【HTML 就绪】的转义文本
+   ("Cases &amp; Protection")——catalog 的值是直接插进 HTML 的，pick() 不做转义。
+   2026-07-29 实测:第一版没转义就写进去，243 个页面的 `Cases &amp; Protection` 变成裸 `&`。
+   ⚠️ **而坏掉的是我根本没打算改的那个品类** —— 被改的 Charging 完全正确。
+      只验"改名生效了吗"会全绿;是"差异必须恰好等于声明的那一处"这条抓到的。
+   ⚠️ 负向前查断言:只转义【不是实体开头】的 &，否则后台里输入 "&amp;" 会被二次转义成 "&amp;amp;"。 */
+const htmlReady = (s) => String(s)
+  .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;")
+  .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+export function applyFormNames(catalog, forms = []) {
+  const byKey = new Map(forms.map((f) => [f.key, f]));
+  const out = { ...catalog };
+  for (const [formKey, catKey] of Object.entries(FORM_LABEL_KEY)) {
+    const f = byKey.get(formKey);
+    if (!f || !f.name || !out[catKey]) continue;
+    out[catKey] = { ...out[catKey], en: htmlReady(f.name) };
+  }
+  return out;
+}
+
 export function makeChrome({ catalog, locales, partial, manifest, pageExists, locDir, forms = [] }) {
   // form-factor bucket name -> data-form key, derived from the single source (not hardcoded).
   /* 🔴 name 与 key 【都】映射到 key —— C 步 1:读取侧两者都认。
