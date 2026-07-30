@@ -64,10 +64,55 @@ app.use("*", (c, next) => withBudget(async () => {
 // 到达 Worker 的请求必须带 Cf-Access-Authenticated-User-Email —— 没有 = 不明来路（如误开 workers.dev
 // 或 Access 配置被撤），一律 403。**没有 Basic Auth 兜底 = 故意的**：这后台能 commit 代码仓，
 // 兜底口就是后门。本地开发走 DEV_BYPASS_AUTH（.dev.vars 独有）。
+// 🔴 **这个 Worker 持有一个能写官网仓的 GITHUB_TOKEN。** 所以鉴权的失效模式不是"有人看到后台"，
+//    是"有人往生产站提交代码"。下面三道各挡一种失效，**任何一道不确定都拒绝，不放行**。
+//
+// ⚠️ 原来只有一道：`有 cf-access-authenticated-user-email 这个头就放行`。
+//    那道题问的是"这个头在不在"，而不是"这个头是真的吗、这个人是谁"。
+//    Access 一旦被误摘、或将来多一条不经 Access 的路由，**伪造一个 HTTP 头就能接管官网仓**。
+//
+// ⚠️ 还差一层没做：**验 `CF_Authorization` JWT 的签名 + aud**（Cloudflare team domain 的 JWKS）。
+//    那才是"这个头是真的"的证明；下面的白名单只回答"这个人是谁"。
+//    **不要因为白名单上线了就以为这条已经解决** —— 头仍然是可伪造的，只是能伪造成的身份从"任何人"
+//    收窄成了"名单上的那一个"。JWKS 那层单独排。
+const ALLOW_LIST = (env: any): string[] =>
+  String(env.ALLOWED_EMAILS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+
 app.use("*", async (c, next) => {
-  if (c.env.DEV_BYPASS_AUTH === "1") return next();
+  // ① 开发旁路：**只在本机生效**，而且不是靠"记得别在生产配"。
+  //    ⚠️ 用另一个环境变量（如 ENVIRONMENT=development）去守它，等于用一个配置去守另一个配置——
+  //       两个都配错的那天它照样敞着。宿主名是**请求自带的事实**，配不出来。
+  //    🔴 生产上出现这个变量 ⇒ 直接 500 停掉，而不是"忽略它继续跑"：
+  //       一个被误配的后门应该让服务停，让人立刻看见，而不是让服务安静地敞着。
+  if (c.env.DEV_BYPASS_AUTH === "1") {
+    const h = new URL(c.req.url).hostname;
+    const isLocal = h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h.endsWith(".localhost");
+    if (!isLocal) {
+      console.error(JSON.stringify({ evt: "auth_bypass_in_production", host: h }));
+      return c.text("配置错误：DEV_BYPASS_AUTH 出现在非本机环境。已拒绝服务——请移除该变量后重新部署。", 500);
+    }
+    return next();
+  }
+
+  // ② Access 头必须在（边缘门还在不在）
   const email = c.req.header("cf-access-authenticated-user-email");
   if (!email) return c.text("此后台需通过 Cloudflare Access 登录（wanew-admin 应用）。", 403);
+
+  // ③ 邮箱白名单，**空名单 = 拒绝所有**。
+  //    🔴 空名单绝不能当成"不限制" —— 那是 fail-open，而这个后台 fail-open 的代价是官网仓。
+  //    ⚠️ 但空名单是**配置错**，不是"你没权限"，所以回 500 不回 403：
+  //       两者混成一个码，运维会去查用户的权限，而问题在部署。
+  //    ⚠️ 名单放在 wrangler.jsonc 的 vars 里（不是 secret）：它不敏感，而**和代码同一次部署**
+  //       就没有"代码已 fail-closed、变量还没配"那个把人锁在门外的窗口。
+  const allow = ALLOW_LIST(c.env);
+  if (!allow.length) {
+    console.error(JSON.stringify({ evt: "auth_allowlist_missing" }));
+    return c.text("配置错误：ALLOWED_EMAILS 未配置。为安全起见已拒绝全部请求——请配置后重新部署。", 500);
+  }
+  if (!allow.includes(email.trim().toLowerCase())) {
+    console.error(JSON.stringify({ evt: "auth_denied", email }));
+    return c.text("此账号不在本后台的允许名单内。", 403);
+  }
   return next();
 });
 
