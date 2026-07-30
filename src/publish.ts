@@ -451,8 +451,22 @@ export async function unpublishProduct(env: Env, cfg: any, ctx: Ctx, id: number,
   ];
   for (const locale of locales.enabled) {
     const dir = locDir[locale];
-    const rel = dir ? `${dir}/${category}/${id}.html` : `${category}/${id}.html`;
-    if (ctx.pagesList.has(rel)) files.push({ path: rel, delete: true });   // 三语详情一并删（存在的）
+    // 🔴 **两套地址都要删。** 原来只删旧址 `{category}/{id}.html`，新址
+    //    `products/{slug}-{id}.html` 留在仓里 —— 产品没了，页面还在。
+    //    ⚠️ 而 regen **只产不删**：它按 manifest 生成页面，删掉的产品不在 manifest 里，
+    //       所以它既不会重建那个文件，也不会清掉它。**没有任何下游会修好这个。**
+    //    ⚠️ 现在看不见是因为新址还带 noindex、由 Function 优先接管；5b 收尾去掉 noindex 那天，
+    //       孤儿会混进第一批提交给 Google 的地址里。
+    //
+    // ⭐ 这一条**与 5b 的时序无关**，所以可以现在就发、不必等 ⑥：
+    //    删除只在 `pagesList.has(rel)` 时才发生 —— 旧址删光之后那半自然变成空操作，
+    //    不像"写"那半会把已删的旧址复活。**"删两套"在两个时间窗里都是对的。**
+    for (const rel of [
+      dir ? `${dir}/${category}/${id}.html` : `${category}/${id}.html`,
+      ...(existing.path ? [productPagePath(existing, dir)] : []),   // 缺 path 就不猜（productPagePath 会抛）
+    ]) {
+      if (ctx.pagesList.has(rel)) files.push({ path: rel, delete: true });   // 三语详情一并删（存在的）
+    }
   }
   for (const cat of new Set<string | null>([null, category])) {
     for (const locale of locales.enabled) {
