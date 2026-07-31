@@ -33,7 +33,9 @@
    **模仿 Google 搜索结果页**的颜色，不是本后台的主题色。跟着主题走反而失去用途——Joe 要看的
    正是"在 Google 上长什么样"。所以它们保持字面值，别在后续 W4 清理里"顺手"收编。 */
 *{box-sizing:border-box}
-body{margin:0;font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+/* 13px = 密集模式的正文档（规格 §5：只四档 20/15/13/11）。原来是 14px，于是每个没有显式字号的
+   容器都贡献一档"14"，一屏轻松七种字号 —— 而**六档字号 = 没有层级**。行高 20px 走音阶。 */
+body{margin:0;font:13px/20px Inter,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
   background:var(--w3-bg);color:var(--w3-text);-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font:inherit;color:inherit}
 a{color:var(--w3-accent);text-decoration:none}
@@ -43,7 +45,7 @@ a:hover{text-decoration:underline}
 /* W4：收重复出现的一次性样式。**只收重复的** —— 一次性布局若逐个建类，会得到一堆只用一次的类，
    那比 inline 更糟（同样的一次性样式多一层间接）。§3 的规则是"每类组件只有一种实现"，不是"零 inline"。 */
 .h3sub{font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--w3-text3)}  /* 卡片标题里的副标签：解掉 h3 的大写/字距 */
-.note{font-size:12px;color:var(--w3-text3);margin:0 0 12px}                                        /* 工具栏下方的说明段 */
+.note{font-size:13px;color:var(--w3-text3);margin:0 0 12px}                                        /* 工具栏下方的说明段 */
 .ta-r{text-align:right}                                                                            /* 数字列右对齐（配 .tnum 用） */
 .hint-q{cursor:help;border-bottom:1px dotted var(--w3-text3)}                                       /* 带 tooltip 的问号提示 */
 
@@ -51,19 +53,19 @@ a:hover{text-decoration:underline}
 .dz-header{height:var(--dz-header-h);display:flex;align-items:center;gap:16px;padding:0 16px;
   background:var(--dz-glass);backdrop-filter:blur(14px);border-bottom:1px solid var(--w3-line);
   position:sticky;top:0;z-index:50}
-.dz-logo{display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:700;letter-spacing:.02em;font-size:15px;color:var(--w3-text)}
+.dz-logo{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;letter-spacing:.02em;font-size:15px;color:var(--w3-text)}
 .dz-logo .mark{width:22px;height:22px;border-radius:5px;background:linear-gradient(135deg,var(--w3-accent),#4d84e6);
   display:grid;place-items:center;color:#0a0c0f;font-size:13px;font-weight:800}
-.dz-logo .sub{color:var(--w3-text3);font-weight:500;font-size:12px}
+.dz-logo .sub{color:var(--w3-text3);font-weight:500;font-size:11px}
 .dz-search{flex:1;max-width:420px;position:relative}
 .dz-search input{width:100%;height:var(--dz-control-h);background:var(--w3-bg2);border:1px solid var(--w3-line);
-  border-radius:var(--dz-radius-s);padding:0 10px 0 30px;color:var(--w3-text);font-size:13px}
+  border-radius:var(--dz-radius-s);padding:0 12px 0 32px;color:var(--w3-text);font-size:13px}
 .dz-search input::placeholder{color:var(--w3-text3)}
 .dz-search input:focus{outline:none;border-color:var(--w3-accent)}
 .dz-search .ic{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--w3-text3);font-size:13px;pointer-events:none}
 .dz-header .spacer{flex:1}
-.dz-user{display:flex;align-items:center;gap:7px;color:var(--w3-text2);font-size:13px;
-  padding:5px 9px;border-radius:var(--dz-radius-s);border:1px solid transparent;white-space:nowrap}
+.dz-user{display:flex;align-items:center;gap:8px;color:var(--w3-text2);font-size:13px;
+  padding:4px 8px;border-radius:var(--dz-radius-s);border:1px solid transparent;white-space:nowrap}
 .dz-user .av{width:22px;height:22px;border-radius:50%;background:var(--w3-panel2);border:1px solid var(--w3-line2);
   display:grid;place-items:center;font-size:11px;color:var(--w3-text)}
 
@@ -72,14 +74,14 @@ a:hover{text-decoration:underline}
 
 /* ── 左栏 ── */
 .dz-side{width:var(--dz-nav-w);flex-shrink:0;background:var(--w3-panel);border:1px solid var(--w3-line);
-  border-radius:var(--dz-radius);padding:10px;display:flex;flex-direction:column;overflow:auto}
+  border-radius:var(--dz-radius);padding:12px;display:flex;flex-direction:column;overflow:auto}
 .dz-eyebrow{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--w3-text3);
-  padding:0 8px;margin:12px 0 5px}
+  padding:0 8px;margin:12px 0 4px}
 .dz-eyebrow:first-child{margin-top:2px}
-.dz-nav-item{display:flex;align-items:center;gap:9px;padding:var(--dz-nav-item-py) 10px;border-radius:var(--dz-radius-s);
-  color:var(--w3-text3);cursor:pointer;font-size:13.5px;position:relative;
+.dz-nav-item{display:flex;align-items:center;gap:8px;padding:var(--dz-nav-item-py) 12px;border-radius:var(--dz-radius-s);
+  color:var(--w3-text3);cursor:pointer;font-size:13px;position:relative;
   transition:background .15s var(--dz-ease),color .15s var(--dz-ease)}
-.dz-nav-item .ic{width:16px;text-align:center;opacity:.9;font-size:14px;flex-shrink:0}
+.dz-nav-item .ic{width:16px;text-align:center;opacity:.9;font-size:13px;flex-shrink:0}
 .dz-nav-item:hover{background:var(--w3-panel2);color:var(--w3-text2)}
 .dz-nav-item.active{background:var(--w3-panel2);color:var(--w3-text);font-weight:600}
 .dz-nav-item.active::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:2px;background:var(--w3-accent)}
@@ -88,11 +90,11 @@ a:hover{text-decoration:underline}
 /* Phase 1 未建的分区：明示 soon，不装成可用（灰按钮必写原因） */
 .dz-nav-item.soon{opacity:.5;cursor:not-allowed}
 .dz-nav-item.soon:hover{background:transparent;color:var(--w3-text3)}
-.dz-nav-item .soon-tag{margin-left:auto;font-size:10px;letter-spacing:.06em;color:var(--w3-text3);
+.dz-nav-item .soon-tag{margin-left:auto;font-size:11px;letter-spacing:.06em;color:var(--w3-text3);
   border:1px solid var(--w3-line);border-radius:4px;padding:0 4px}
-.dz-side-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--w3-line);display:flex;flex-direction:column;gap:1px}
+.dz-side-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--w3-line);display:flex;flex-direction:column;gap:2px}
 .dz-logo img{height:20px;display:block}
-.dz-user-foot{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12.5px;color:var(--w3-text2);border-radius:var(--dz-radius-s);cursor:pointer}
+.dz-user-foot{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--w3-text2);border-radius:var(--dz-radius-s);cursor:pointer}
 .dz-user-foot:hover{background:var(--w3-panel2)}
 .dz-user-foot .av{width:20px;height:20px;border-radius:50%;background:var(--w3-panel2);border:1px solid var(--w3-line2);display:grid;place-items:center;font-size:11px;color:var(--w3-text);flex-shrink:0}
 /* 当前登录人必须看得全——"我现在是谁的身份在操作"是基本信息，截断成 joe@wanew.com… 等于没写。
@@ -108,41 +110,41 @@ a:hover{text-decoration:underline}
 .dz-acct > summary:focus-visible{outline:2px solid var(--w3-accent);outline-offset:-2px;border-radius:var(--dz-radius-s)}
 .dz-acct .caret{margin-left:auto;color:var(--w3-text3);font-size:11px;flex:none;transition:transform .12s var(--dz-ease)}
 .dz-acct[open] .caret{transform:rotate(180deg)}
-.dz-logout{display:flex;align-items:center;gap:7px;padding:7px 10px;margin:3px 0 0 27px;font-size:12.5px;
+.dz-logout{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0 0 24px;font-size:13px;
   color:var(--w3-text3)!important;border-radius:var(--dz-radius-s);text-decoration:none;
   border:1px solid var(--w3-line);background:var(--w3-bg2)}
 .dz-logout:hover{background:var(--dz-err-bg);border-color:var(--dz-err-line);color:var(--dz-err)!important;text-decoration:none}
 .dz-logout:focus-visible{outline:2px solid var(--w3-accent);outline-offset:1px}
-.dz-deploy{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12px;color:var(--w3-text3)}
+.dz-deploy{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:11px;color:var(--w3-text3)}
 .dz-deploy .dot{width:7px;height:7px;border-radius:50%;background:var(--dz-ok);box-shadow:0 0 6px var(--dz-ok);flex-shrink:0}
 
 /* ── 主面板 ── */
 .dz-main{flex:1;overflow:auto;background:var(--w3-panel);border:1px solid var(--w3-line);
   border-radius:var(--dz-radius);padding:var(--dz-panel-pad)}
-.dz-pagehead{display:flex;align-items:baseline;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.dz-pagehead{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
 .dz-pagehead h1{font-size:18px;margin:0;font-weight:700;letter-spacing:-.01em}
-.dz-pagehead .meta{color:var(--w3-text3);font-size:12.5px}
+.dz-pagehead .meta{color:var(--w3-text3);font-size:11px}
 
 /* ── 工具栏 / 表单控件 ── */
 .dz-toolbar{display:flex;align-items:center;gap:var(--dz-gap-sm);margin-bottom:12px;flex-wrap:wrap}
 .dz-toolbar .spacer{flex:1}
 .dz-field{height:var(--dz-control-h);background:var(--w3-bg2);border:1px solid var(--w3-line);
-  border-radius:var(--dz-radius-s);padding:0 9px;color:var(--w3-text);font-size:13px}
+  border-radius:var(--dz-radius-s);padding:0 8px;color:var(--w3-text);font-size:13px}
 .dz-field:focus{outline:none;border-color:var(--w3-accent)}
 select.dz-field{cursor:pointer}
-textarea.dz-field{height:auto;padding:8px 9px;resize:vertical;line-height:1.5}
+textarea.dz-field{height:auto;padding:8px 8px;resize:vertical;line-height:1.5}
 
 /* ── 按钮（D-btn：accent 主 / 幽灵次 / 克制 danger，总工拍板）── */
-.dz-btn{height:var(--dz-control-h);padding:0 13px;border-radius:var(--dz-radius-s);border:1px solid var(--w3-line2);
+.dz-btn{height:var(--dz-control-h);padding:0 12px;border-radius:var(--dz-radius-s);border:1px solid var(--w3-line2);
   background:transparent;color:var(--w3-text);font-size:13px;cursor:pointer;display:inline-flex;align-items:center;
-  gap:6px;white-space:nowrap;transition:.15s var(--dz-ease)}
+  gap:8px;white-space:nowrap;transition:.15s var(--dz-ease)}
 .dz-btn:hover{background:var(--w3-panel2);border-color:rgba(255,255,255,.28)}
 .dz-btn:disabled{opacity:.45;cursor:not-allowed}
 .dz-btn--primary{background:var(--w3-accent);border-color:var(--w3-accent);color:var(--dz-on-accent);font-weight:600}
 .dz-btn--primary:hover{background:var(--dz-accent-hi);border-color:var(--dz-accent-hi)}
 .dz-btn--danger{border-color:var(--dz-err-line);color:var(--dz-err);background:transparent}
 .dz-btn--danger:hover{background:var(--dz-err-bg);border-color:var(--dz-err)}
-.dz-btn.sm{height:26px;padding:0 9px;font-size:12.5px}
+.dz-btn.sm{height:26px;padding:0 8px;font-size:13px}
 
 /* ── dense 表 ── */
 .dz-table{width:100%;border-collapse:collapse}
@@ -152,14 +154,14 @@ textarea.dz-field{height:auto;padding:8px 9px;resize:vertical;line-height:1.5}
   position:sticky;top:0;background:var(--w3-panel);z-index:1;white-space:nowrap}
 .dz-table tbody tr{transition:background .12s var(--dz-ease)}
 .dz-table tbody tr:hover{background:var(--w3-panel2)}
-.dz-thumb{width:38px;height:38px;border-radius:8px;background:var(--w3-tile);object-fit:contain;padding:3px;display:block}
+.dz-thumb{width:38px;height:38px;border-radius:8px;background:var(--w3-tile);object-fit:contain;padding:4px;display:block}
 .dz-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;white-space:nowrap;
   border:1px solid var(--w3-line);background:var(--w3-bg2);color:var(--w3-text2)}
 .dz-badge--accent{border-color:rgba(125,177,255,.28);background:rgba(125,177,255,.1);color:var(--dz-accent-hi)}
 .dz-check{width:15px;height:15px;accent-color:var(--w3-accent);cursor:pointer}
 
 /* ── 批量条 ── */
-.dz-bulk{display:none;align-items:center;gap:10px;padding:8px 12px;margin-bottom:10px;
+.dz-bulk{display:none;align-items:center;gap:12px;padding:8px 12px;margin-bottom:10px;
   background:rgba(125,177,255,.08);border:1px solid rgba(125,177,255,.28);
   border-radius:var(--dz-radius-s);font-size:13px}
 .dz-bulk.on{display:flex;flex-wrap:wrap}
@@ -167,7 +169,7 @@ textarea.dz-field{height:auto;padding:8px 9px;resize:vertical;line-height:1.5}
 
 /* ── toast ── */
 .dz-toast{position:fixed;bottom:18px;right:18px;background:var(--w3-panel);border:1px solid var(--w3-line);
-  border-left:3px solid var(--dz-ok);border-radius:var(--dz-radius-s);padding:10px 14px;font-size:13px;
+  border-left:3px solid var(--dz-ok);border-radius:var(--dz-radius-s);padding:12px 16px;font-size:13px;
   display:none;max-width:420px;z-index:200;box-shadow:0 24px 60px -24px rgba(0,0,0,.55)}
 .dz-toast.err{border-left-color:var(--dz-err)}
 .dz-spin{display:inline-block;width:12px;height:12px;border:2px solid var(--w3-text3);border-top-color:transparent;
