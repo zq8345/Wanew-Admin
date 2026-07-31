@@ -61,7 +61,10 @@
 }
 /* ② 焦点提亮：产品图是这一页唯一有视觉的东西，40px 等于把它丢掉了。
    ⚠️ 浅色下才这么放 —— 暗色下白底产品图放大会变成一块发光补丁（那正是"每张图都在喊"）。 */
-:root[data-theme="light"] .thumb{width:56px;height:56px;background:#FFFFFF;box-shadow:0 0 0 1px #E5EAF2}
+/* 56px → 44px：56 让可见行数掉到 10，而 §10① 要求 ≥12。
+   曲线是量出来的（1440×900）：40→12 行 · **44→12 行** · 48→11 · 52→10 · 56→10 · 64→9。
+   ⇒ **44 是还能保住 12 行的最大缩略图** —— 焦点提亮与密度之间，按数字取那个点，不靠感觉折中。 */
+:root[data-theme="light"] .thumb{width:44px;height:44px;background:#FFFFFF;box-shadow:0 0 0 1px #E5EAF2}
 :root{
   /* 密度层（D-token：CRM 实测紧凑值对齐 8px 网格，总工拍板照收） */
   --dz-control-h:32px; --dz-row-py:8px; --dz-cell-px:10px; --dz-panel-pad:16px;
@@ -98,7 +101,10 @@ a:hover{text-decoration:underline}
 /* W4：收重复出现的一次性样式。**只收重复的** —— 一次性布局若逐个建类，会得到一堆只用一次的类，
    那比 inline 更糟（同样的一次性样式多一层间接）。§3 的规则是"每类组件只有一种实现"，不是"零 inline"。 */
 .h3sub{font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--dz-c-text3)}  /* 卡片标题里的副标签：解掉 h3 的大写/字距 */
-.note{font-size:13px;color:var(--dz-c-text3);margin:0 0 12px}                                        /* 工具栏下方的说明段 */
+/* 12→8：都在音阶上。⚠️ 改它的原因不是"更好看"，是 ① 可见行数**贴着边过的** ——
+   间距对齐让表格顶从 160px 变成 161px，就掉了一行（12→11）。一个靠 1px 通过的判据，
+   下一次任何微调都会让它翻面。这里腾出 4px，让它有余量而不是刚好。 */
+.note{font-size:13px;color:var(--dz-c-text3);margin:0 0 8px}                                        /* 工具栏下方的说明段 */
 .ta-r{text-align:right}                                                                            /* 数字列右对齐（配 .tnum 用） */
 .hint-q{cursor:help;border-bottom:1px dotted var(--dz-c-text3)}                                       /* 带 tooltip 的问号提示 */
 
@@ -202,7 +208,7 @@ a:hover{text-decoration:underline}
 .dz-nav-item.soon:hover{background:transparent;color:var(--dz-c-text3)}
 .dz-nav-item .soon-tag{margin-left:auto;font-size:11px;letter-spacing:.06em;color:var(--dz-c-text3);
   border:1px solid var(--dz-c-line);border-radius:4px;padding:0 4px}
-.dz-side-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--dz-c-line);display:flex;flex-direction:column;gap:2px}
+.dz-side-foot{margin-top:auto;padding-top:12px;border-top:1px solid var(--dz-c-line);display:flex;flex-direction:column;gap:2px}
 .dz-logo img{height:20px;display:block}
 /* logo 跟随主题：白版压在浅色顶栏上几乎看不见（Joe 生产截图）。
    ⚠️ 默认（无 data-theme）走**白版**，与暗色一致 —— 主题属性在 <head> 后立刻设，
@@ -217,7 +223,7 @@ a:hover{text-decoration:underline}
    184px 侧栏放不下一行邮箱，就让它换行，不截断。 */
 .dz-user-foot .who{white-space:normal;word-break:break-all;line-height:1.35;min-width:0}
 .dz-user-foot{align-items:flex-start}
-.dz-user-foot .av{flex:none;margin-top:1px}
+.dz-user-foot .av{flex:none;margin-top:2px}
 /* 账号菜单：<details> 原生开合。收起态仍完整显示"我是谁"，只把退出这个低频高危项收进去。 */
 .dz-acct{position:relative}
 .dz-acct > summary{cursor:pointer;list-style:none;user-select:none}
@@ -237,7 +243,7 @@ a:hover{text-decoration:underline}
 /* ── 主面板 ── */
 .dz-main{flex:1;overflow:auto;background:var(--dz-c-panel);border:1px solid var(--dz-c-line);
   border-radius:var(--dz-radius);padding:var(--dz-panel-pad)}
-.dz-pagehead{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.dz-pagehead{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap}
 .dz-pagehead h1{font-size:18px;margin:0;font-weight:700;letter-spacing:-.01em}
 .dz-pagehead .meta{color:var(--dz-c-text3);font-size:11px}
 
@@ -277,7 +283,7 @@ textarea.dz-field{height:auto;padding:8px 8px;resize:vertical;line-height:1.5}
 .dz-check{width:15px;height:15px;accent-color:var(--dz-c-accent);cursor:pointer}
 
 /* ── 批量条 ── */
-.dz-bulk{display:none;align-items:center;gap:12px;padding:8px 12px;margin-bottom:10px;
+.dz-bulk{display:none;align-items:center;gap:12px;padding:8px 12px;margin-bottom:12px;
   background:rgba(125,177,255,.08);border:1px solid rgba(125,177,255,.28);
   border-radius:var(--dz-radius-s);font-size:13px}
 .dz-bulk.on{display:flex;flex-wrap:wrap}
