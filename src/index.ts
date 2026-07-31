@@ -977,10 +977,39 @@ app.get("/api/admin/dashboard", async (c) => {
   const lastPublish = activity.find((a: any) => /^admin:/.test(String(a.message || ""))) || null;
   // 扫了多少条 —— 前端用它把"这窗口内没有"和"取不到"说成两句话，而不是都画成 `—`。
   const activityScanned = activity.length;
+
+  // ⭐「最近编辑过的产品」—— 首页的主体。目录后台的主体本来就该是产品本身。
+  // 🔴 **manifest 和 data/products/{id}.json 都没有时间戳**（实测：字段里没有任何 *_at）。
+  //    唯一准确的来源是"那次保存本身" —— admin 每次保存产品就是一次 commit
+  //    `admin: update product {id} (email)`。**那不是拿提交时间当代理，那次提交就是那次编辑。**
+  // ⚠️ 不能用上面那批通用 commits：实测近 100 条里只有 **1 个**产品（窗口被官网自己的提交淹没）。
+  //    ⇒ 按路径过滤 `?path=data/products`：实测 40 条里有 11 个不同产品，够取 6 个。
+  //    多 1 次子请求，换掉"要么翻很多页、要么显示一条"。
+  let recent: any[] = [];
+  try {
+    const res = await fetch(`https://api.github.com/repos/${c.env.GITHUB_REPO}/commits?path=data/products&per_page=40`, {
+      headers: { Authorization: `Bearer ${c.env.GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
+    });
+    if (res.ok) {
+      const arr: any = await res.json();
+      const seen = new Set<number>();
+      if (Array.isArray(arr)) for (const x of arr) {
+        const m = /product (\d+)/.exec(String(x.commit?.message || "").split("\n")[0]);
+        if (!m) continue;
+        const id = Number(m[1]);
+        if (seen.has(id)) continue;           // 同一产品只留最新那次
+        const e: any = byId.get(id);
+        if (!e) continue;                     // 已删/未发布的不进"继续上次"——点进去是空的
+        seen.add(id);
+        recent.push({ id, title: e.title, thumb: e.thumb, at: x.commit?.committer?.date || null });
+        if (recent.length >= 6) break;
+      }
+    }
+  } catch { /* recent 保持空 —— 前端整块不显示，不留占位 */ }
   const lastHome = activity[0] || null;   // 兼容旧字段
   // ⚠️ byCat/byForm/activity/mediaCount 仍然返回：分类页与设置页在用，删了会连带弄坏别的屏。
   //    首屏不再显示它们 —— **"不在首屏"和"不存在"是两件事。**
-  return c.json({ products: products.length, categories: categories.length, models: models.length, formsCount, mediaCount, byCat, byForm, featured, imgBase: c.env.IMG_BASE, activity, lastHome, lastPublish, activityScanned, todo, repo: c.env.GITHUB_REPO });
+  return c.json({ products: products.length, categories: categories.length, models: models.length, formsCount, mediaCount, byCat, byForm, featured, imgBase: c.env.IMG_BASE, activity, lastHome, lastPublish, activityScanned, todo, recent, repo: c.env.GITHUB_REPO });
 });
 
 // ================= W5 P5：设置（品牌/口径只读对齐，零写入零撞车）=================
