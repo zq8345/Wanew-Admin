@@ -611,8 +611,38 @@ app.get("/api/admin/guides", async (c) => {
 app.get("/api/admin/seo", async (c) => {
   const cfg = ghConfig(c.env);
   if (!cfg) return c.json({ error: "GitHub not configured (GITHUB_TOKEN)" }, 503);
-  const raws = await Promise.all(SEO_PAGES.map((p) => readFile(c.env, cfg, `data/pages/${p.slug}.json`)));
-  const pages = SEO_PAGES.map((p, i) => {
+  // 🔴 标签集**从现存事实派生**，不照写死的名单发。
+  //    #76 把老枢纽文章并进 /guides/ 并逐篇 301 之后，mounts/power/marine/rv-off-grid/industrial
+  //    这 5 个顶层页已经不存在（实测 `_redirects` 里 5 条 301），而编辑器还在给它们开编辑入口，
+  //    显示 0/8 —— **那不是"漏填"，是这几格本该消失**。填了只会新建 5 个没人读的 json，
+  //    并让"填写情况"永远显示有未完成的活，下一个人看到再填一遍。
+  // ⚠️ 判据必须包含**搬迁后的位置**：faq 与 compatibility 也没有顶层页了，但它们搬到了
+  //    `guides/{slug}/index.html` 且 `data/pages/{slug}.json` 仍在驱动那两页 —— 只查顶层会把它们也误杀。
+  //    （我第一版就只查了顶层，量出"7 个已死"，比实际多杀两个。）
+  // ⚠️ 不另立一张"废弃名单" —— 那只是把同一个病挪个位置，下次迁移照样脱节。
+  let tree: Set<string> | null = null;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${c.env.GITHUB_REPO}/git/trees/${cfg.branch}?recursive=1`, {
+      headers: { Authorization: `Bearer ${c.env.GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
+    });
+    const tr: any = res.ok ? await res.json() : null;
+    if (tr && Array.isArray(tr.tree) && !tr.truncated) tree = new Set<string>(tr.tree.map((n: any) => n.path));
+  } catch { /* tree = null */ }
+  // 🔴 取不到就**不过滤**（保持今天的行为），而不是把所有标签都藏掉：
+  //    "查不到"和"不存在"是两件事，后者才该让入口消失。藏错了会让活着的页面没法编辑。
+  // 🔴 判据是**两条都要满足**，不是"页面还在"：
+  //    ① 页面活着（顶层 或 搬迁后的 guides/ 下）
+  //    ② `data/pages/{slug}.json` 存在 —— 那是本编辑器唯一能改的载体
+  //    ⚠️ 只查 ① 会把 mounts/power 留下来：它们的 guides 页确实在，**但没有 json**，
+  //       给它们开入口 = 新建两个没人读的 json，正是要根除的那件事。
+  //    ⚠️ 只查 ② 会把"json 在、页面已彻底删掉"的情况留下来。两条缺一不可。
+  const isLive = (slug: string) => !tree
+    || ((tree.has(`${slug}/index.html`) || tree.has(`guides/${slug}/index.html`)) && tree.has(`data/pages/${slug}.json`));
+  const livePages = SEO_PAGES.filter((p) => isLive(p.slug));
+  const retired = SEO_PAGES.filter((p) => !isLive(p.slug)).map((p) => p.slug);
+
+  const raws = await Promise.all(livePages.map((p) => readFile(c.env, cfg, `data/pages/${p.slug}.json`)));
+  const pages = livePages.map((p, i) => {
     const j = raws[i] ? JSON.parse(raws[i] as string) : {};
     const meta: Record<string, any> = {};
     for (const f of p.fields) meta[f] = j[`${p.slug}.meta.${f}`] || {};
@@ -622,7 +652,8 @@ app.get("/api/admin/seo", async (c) => {
   });
   const first = pages.map((p) => p.meta[p.fields[0]]).find((v) => v && typeof v === "object");
   const locales = first ? Object.keys(first).filter((l) => !l.startsWith("reason")) : [];
-  return c.json({ pages, locales });
+  // retired 只做诊断透出，**不渲染成标签** —— 让"为什么少了几格"可查，而不是让人猜。
+  return c.json({ pages, locales, retired, filtered: tree !== null });
 });
 
 app.put("/api/admin/seo/:slug", async (c) => {
