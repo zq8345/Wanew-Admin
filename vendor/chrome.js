@@ -74,9 +74,14 @@ export const FORM_LABEL_KEY = {
    ⚠️ **而坏掉的是我根本没打算改的那个品类** —— 被改的 Charging 完全正确。
       只验"改名生效了吗"会全绿;是"差异必须恰好等于声明的那一处"这条抓到的。
    ⚠️ 负向前查断言:只转义【不是实体开头】的 &，否则后台里输入 "&amp;" 会被二次转义成 "&amp;amp;"。 */
-const htmlReady = (s) => String(s)
+export const htmlReady = (s) => String(s)
   .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;")
-  .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  .replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+/* 🔴 `"` 是 2026-07-30 补的，而它是这一族里代价最大的那个字符：
+   产品 662 的 pt 文案含 `0.3"`，插进 <meta content="…"> 后把属性【提前闭合】，
+   后面的正文全部漏进标签、meta 被截断 —— 页面照样 200，没有任何闸会红。
+   ⚠️ 转义 `&<>` 够文本上下文，**不够属性上下文**。这两个上下文必须一起满足，
+      因为同一个值（如 TITLE）在模板里既进 <h1> 也进 value="…"。 */
 
 export function applyFormNames(catalog, forms = []) {
   const byKey = new Map(forms.map((f) => [f.key, f]));

@@ -1,3 +1,16 @@
+import { htmlReady as esc } from "./chrome.js";
+/* 🔴 输出转义。改之前 reps 里每一个值都【原样】插进模板 —— 而它们来自产品数据，
+   也就是 Joe 随时会打字进去的地方。2026-07-30 线上实证（产品 662 pt）：
+     meta_description 里的 `0.3"` 把 <meta content="…"> 属性提前闭合
+     同一个引号让 JSON-LD 第 4 块 JSON.parse 失败
+   两处都返回 200，没有任何闸会红。**这不是某个产品的问题，是每加一个产品就多一次机会。**
+
+   ⚠️ 只转义【承载用户数据、且落在文本/属性上下文】的键。
+      DESCRIPTION / SUMMARY_BLOCK / GALLERY_* / RELATED / JSONLD_* 是我们自己生成的 HTML 片段，
+      转义它们会把标签变成可见字符 —— **"全都转义"在这里是错的，比不转义更明显地坏。**
+   ⚠️ 复用 chrome.js 的 htmlReady，不另写一份：它已经处理了"不许二次转义已有实体"那个坑。 */
+const ESCAPED_KEYS = ["META_TITLE", "META_DESC", "TITLE", "CARD_TITLE", "CATEGORY"];
+
 // Canonical product-page render — imported by BOTH scripts/regen.mjs (Node, local) and
 // the CF Pages Function (Workers, publish-time regen). Pure string templating; no runtime
 // APIs. related is generated from lightweight manifest entries {id,category,form,title,thumb}
@@ -114,7 +127,14 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
   let jsonldProduct = prod.jsonld_product || "";
   if (locale !== "en" && jsonldProduct) {
     const enDesc = prod.i18n.en.meta_description;
-    if (enDesc && e.meta_description && e.meta_description !== enDesc) jsonldProduct = jsonldProduct.split(enDesc).join(e.meta_description);
+    /* 🔴 换进去的是 JSON 字符串体，不是裸文本。裸文本里的 `"` 会把 JSON 字符串提前闭合 ——
+       实证：662/671 的 ld+json 因此 JSON.parse 失败（结构化数据整块作废，页面照样 200）。
+       ⚠️ 用 JSON.stringify(x).slice(1,-1) 而不是自己写转义表：反斜杠、控制符、  都要管，
+          手写的那张表一定会漏一个。⚠️ 也不整体 parse→stringify：那会重排格式，
+          把【所有】非 en 产品页的 JSON-LD 块都改一遍，淹掉"只有坏页该变"这条判据。 */
+    if (enDesc && e.meta_description && e.meta_description !== enDesc) {
+      jsonldProduct = jsonldProduct.split(enDesc).join(JSON.stringify(e.meta_description).slice(1, -1));
+    }
   }
   // The template only knows how to be English. Everything phase2-convert used to do for pt on its
   // way past has to be done here now, or regenerating from the template silently un-does it —
@@ -147,7 +167,7 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
     RELATED: cards, JSONLD_BREADCRUMB: prod.jsonld_breadcrumb || "", JSONLD_PRODUCT: jsonldProduct,
   };
   let r = template;
-  for (const [k, v] of Object.entries(reps)) r = r.split(`{{${k}}}`).join(v);
+  for (const [k, v] of Object.entries(reps)) r = r.split(`{{${k}}}`).join(ESCAPED_KEYS.includes(k) ? esc(v) : v);
   // Resolve the body-chrome catalog tokens (item 7). Tokenizing the template without teaching the
   // renderer to read them shipped literal "{{t.body.back}}" onto every page — the tokens ARE the
   // English now, so an unresolved one is a leak, not a cosmetic bug. Throw rather than leave the
