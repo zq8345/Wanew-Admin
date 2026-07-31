@@ -39,7 +39,11 @@
   --dz-c-line2:#C9D2DF;
   --dz-c-text:#141922;      /* 主要文字：近黑但偏冷，对白 ≈ 16.5:1 */
   --dz-c-text2:#4E5967;     /* 次要 ≈ 7.9:1 */
-  --dz-c-text3:#7C8797;     /* 三级：只用于标签，不承载信息 */
+  /* 三级：只用于标签，不承载信息。
+     ⚠️ 原 #7C8797 在近白顶栏上只有 3.21:1 —— 搜索框的 ⌕ 与面包屑「› 分类管理」都偏灰。
+        换 logo 时**顺手把整条顶栏逐个算了一遍**才发现的：漏一个和漏一片，查一次的成本一样。
+        压暗到 ≈4.5:1；方向只会更清楚，不会更差。 */
+  --dz-c-text3:#5F6875;
   --dz-c-tile:#F2F5F9;
   --dz-c-accent:#2563C7;    /* 强调蓝在浅底上要压暗，否则对白只有 3:1 */
   --dz-c-ink:#FFFFFF;
@@ -123,6 +127,10 @@ a:hover{text-decoration:underline}
 .dz-todo-n{font-size:20px;font-weight:600;color:var(--dz-c-text);font-variant-numeric:tabular-nums}
 .dz-todo-t{font-size:13px;color:var(--dz-c-text2)}
 .dz-last{margin-top:24px;font-size:11px;color:var(--dz-c-text3)}
+/* 分类页只读态的显示名：纯文本，不是禁用的输入框 —— 禁用输入框看着仍然像个能改的东西 */
+.cat-ro{color:var(--dz-c-text)}
+.cat-tbl td.num{text-align:right;font-variant-numeric:tabular-nums;color:var(--dz-c-text2)}
+
 /* 从首屏点进来的临时切片：告诉用户「你现在看的是哪一批」，一个 chip，不是一段话 */
 .dz-slice{display:inline-flex;align-items:center;gap:8px;padding:2px 8px;border-radius:var(--dz-radius-s);
   background:var(--dz-accent-bg);color:var(--dz-c-accent);font-size:13px}
@@ -175,6 +183,12 @@ a:hover{text-decoration:underline}
   border:1px solid var(--dz-c-line);border-radius:4px;padding:0 4px}
 .dz-side-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--dz-c-line);display:flex;flex-direction:column;gap:2px}
 .dz-logo img{height:20px;display:block}
+/* logo 跟随主题：白版压在浅色顶栏上几乎看不见（Joe 生产截图）。
+   ⚠️ 默认（无 data-theme）走**白版**，与暗色一致 —— 主题属性在 <head> 后立刻设，
+      但万一它没设上，回落到暗色那套，而不是回落到一张看不见的图。 */
+.dz-logo .lg-light{display:none}
+:root[data-theme="light"] .dz-logo .lg-dark{display:none}
+:root[data-theme="light"] .dz-logo .lg-light{display:block}
 .dz-user-foot{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--dz-c-text2);border-radius:var(--dz-radius-s);cursor:pointer}
 .dz-user-foot:hover{background:var(--dz-c-panel2)}
 .dz-user-foot .av{width:20px;height:20px;border-radius:50%;background:var(--dz-c-panel2);border:1px solid var(--dz-c-line2);display:grid;place-items:center;font-size:11px;color:var(--dz-c-text);flex-shrink:0}

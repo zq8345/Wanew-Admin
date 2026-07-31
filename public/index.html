@@ -383,7 +383,13 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
 </head>
 <body>
 <header class="dz-header">
-  <div class="dz-logo" onclick="backToList()" title="回首页"><img src="/wanew-logo-white.png?v=1" alt="WANEW"></div>
+  <!-- 两张都放进 DOM，靠 CSS 按主题显示 —— 不用 JS 换 src：
+     换 src 会在切主题时闪一下（重新请求），而且"哪张对应哪个主题"会散在 JS 里，
+     与其它主题规则不在同一处。资源来自官网 static/wanew-logo-black.png（逐字节拷贝，未新造）。 -->
+<div class="dz-logo" onclick="backToList()" title="回首页">
+  <img class="lg-dark" src="/wanew-logo-white.png?v=1" alt="WANEW">
+  <img class="lg-light" src="/wanew-logo-black.png?v=1" alt="WANEW">
+</div>
   <div class="dz-search"><span class="ic">⌕</span><input type="search" id="q" placeholder="搜索产品标题 / ID…"></div>
   <div class="spacer"></div>
   <span class="muted" id="crumb" style="font-size:11px"></span>
@@ -542,8 +548,13 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
       <div class="dz-toolbar">
         <h3 style="margin:0">机型 <span class="h3sub">Model</span></h3>
         <div class="spacer"></div>
-        <button id="cat-manage-btn" onclick="toggleCatManage()" title="进入管理态才显示删除按钮（防误删）">🔧 管理</button>
-        <button class="primary" onclick="saveCats()">💾 保存</button>
+        <!-- 🔴 读模式只有「管理」。**没进编辑就摆着「保存」是自相矛盾的** ——
+             它在读模式下唯一能做的事就是保存一份没人改过的数据。 -->
+        <button id="cat-manage-btn" onclick="toggleCatManage()" title="进入管理态才能改名/排序/增删">🔧 管理</button>
+        <span id="cat-write-actions" style="display:none">
+          <button onclick="cancelCatManage()" title="放弃本次改动，回到只读">取消</button>
+          <button class="primary" onclick="saveCats()">💾 保存</button>
+        </span>
       </div>
       <table class="cat-tbl">
         <thead><tr>
@@ -551,10 +562,11 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
         </tr></thead>
         <tbody id="cats-rows"><tr><td colspan="3" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
       </table>
-      <button class="cat-add" onclick="catAdd()" title="加机型：新 URL 段、不影响现有机型">＋ 添加机型</button>
+      <button class="cat-add" id="cat-add-btn" style="display:none" onclick="catAdd()" title="加机型：新 URL 段、不影响现有机型">＋ 添加机型</button>
       <div class="buildnote" id="cat-build-note" style="display:none"></div>
       <!-- Joe：规则说明读一次就够，不该每次挡在数据前面 → 并进按钮下方这段脚注的首句（两张卡同一种处理）。文案未改。 -->
-      <p class="muted" style="font-size:12px;margin-top:10px">每个机型一个显示名（官网列表/导航/详情/瓦片统一用它）。保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。<b>加机型</b>：数据即时入库，<b>页面需官网构建后出现</b>。<b>删机型</b>：管理态点行末 ✕ 标记、保存时后端守卫（有产品会拒删）。<span title="每个机型有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" class="hint-q">网址标识不可改 ?</span></p>
+      <!-- ⚠️ 这段讲的**全是编辑规则**（加机型要构建、删机型有守卫）—— 只读时是纯噪音，还挡在数据前面。进管理态再显示。 -->
+      <p class="muted" id="cat-help" style="display:none;font-size:12px;margin-top:10px">每个机型一个显示名（官网列表/导航/详情/瓦片统一用它）。保存直接提交官网仓（重烘焙受影响详情/列表页，≈1 分钟上线）。<b>加机型</b>：数据即时入库，<b>页面需官网构建后出现</b>。<b>删机型</b>：管理态点行末 ✕ 标记、保存时后端守卫（有产品会拒删）。<span title="每个机型有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" class="hint-q">网址标识不可改 ?</span></p>
     </div>
 
     <!-- 形态/品类轴（可编辑：data/forms.json 单源·契约 §3/§4）-->
@@ -562,8 +574,11 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
       <div class="dz-toolbar">
         <h3 style="margin:0">品类 / 形态 <span class="h3sub">Type</span></h3>
         <div class="spacer"></div>
-        <button id="form-manage-btn" onclick="toggleFormManage()" title="进入管理态才显示删除按钮（防误删）">🔧 管理</button>
-        <button class="primary" onclick="saveForms()">💾 保存</button>
+        <button id="form-manage-btn" onclick="toggleFormManage()" title="进入管理态才能改名/排序/增删">🔧 管理</button>
+        <span id="form-write-actions" style="display:none">
+          <button onclick="cancelFormManage()" title="放弃本次改动，回到只读">取消</button>
+          <button class="primary" onclick="saveForms()">💾 保存</button>
+        </span>
       </div>
       <table class="cat-tbl">
         <thead><tr>
@@ -571,9 +586,9 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
         </tr></thead>
         <tbody id="forms-rows"><tr><td colspan="4" class="muted">加载中… <span class="spin"></span></td></tr></tbody>
       </table>
-      <button class="cat-add" onclick="formAdd()" title="加品类：新 /type/ URL 段、不影响现有品类">＋ 添加品类</button>
+      <button class="cat-add" id="form-add-btn" style="display:none" onclick="formAdd()" title="加品类：新 /type/ URL 段、不影响现有品类">＋ 添加品类</button>
       <div class="buildnote" id="form-build-note" style="display:none"></div>
-      <p class="muted" style="font-size:12px;margin-top:10px">每个品类一个显示名（也是产品的形态值）。真源=官网 <span class="tnum">data/forms.json</span>。<b>顺序</b>决定品类页与筛选 chip 的排列。<b>改显示名</b>会连带修改引用它的所有产品（含草稿/下架），页面不需重建。<b>加/删/排序</b>的数据即时入库，但<b>品类页与导航计数需官网构建后生效</b>。<span title="每个品类有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" class="hint-q">网址标识不可改 ?</span></p>
+      <p class="muted" id="form-help" style="display:none;font-size:12px;margin-top:10px">每个品类一个显示名（也是产品的形态值）。真源=官网 <span class="tnum">data/forms.json</span>。<b>顺序</b>决定品类页与筛选 chip 的排列。<b>改显示名</b>会连带修改引用它的所有产品（含草稿/下架），页面不需重建。<b>加/删/排序</b>的数据即时入库，但<b>品类页与导航计数需官网构建后生效</b>。<span title="每个品类有一个网址标识（创建时填），页面地址由它决定。一经创建不可改——改了会断已有链接。悬停某一行的显示名可看到它的网址标识。" class="hint-q">网址标识不可改 ?</span></p>
     </div>
 
     </div><!-- /.cat-2col -->
@@ -1001,7 +1016,21 @@ async function loadCatsView() {
   } catch (e) { rows.innerHTML = `<tr><td colspan="3" class="muted">加载失败：${esc(e.message)} <button onclick="loadCatsView()">重试</button></td></tr>`; return; }
   paintCats();
 }
+// 每个机型/品类下的在线产品数 —— 只读态要显示的**唯一**附加信息（"这个机型下有多少东西"是看分类时真正想知道的）
+const catCount = (slug) => (products || []).filter((p) => p.category === slug).length;
+const formCount = (key) => (products || []).filter((p) => p.form === key).length;
+
 function paintCats() {
+  // 🔴 默认只读：显示名（纯文本）+ 产品数。上下箭头、输入框、删除、添加 —— 一个都不出现。
+  //    每行两个箭头把版面切得很碎，而且只读时它们纯属噪音；顺带消掉"看一眼分类就误改数据"这一整类风险。
+  if (!catManage) {
+    $("#cats-rows").innerHTML = catsEdit.map((c) => `
+    <tr><td class="c-ord"></td>
+      <td><span class="cat-ro" title="网址标识：${esc(c.slug)}">${esc(c.name || c.slug)}</span></td>
+      <td class="c-act num">${catCount(c.slug)}</td>
+    </tr>`).join("") || `<tr><td colspan="3" class="muted">无机型</td></tr>`;
+    return;
+  }
   $("#cats-rows").innerHTML = catsEdit.map((c, i) => `
     <tr${c._new ? ' class="cat-new"' : ""}>
       <td class="c-ord"><span class="ord-grp"><button class="ico" onclick="catMove(${i},-1)" ${i === 0 ? "disabled" : ""} title="上移">↑</button><button class="ico" onclick="catMove(${i},1)" ${i === catsEdit.length - 1 ? "disabled" : ""} title="下移">↓</button></span></td>
@@ -1058,6 +1087,7 @@ async function saveCats() {
     //    而"≈1分钟上线"恰恰是最会让人不去跑构建的一句。前端不再自己造措辞。
     msg(`✅ 已保存（分类 ${(rc.commit || "").slice(0, 7)} / 机型 ${(rm.commit || "").slice(0, 7)}）${rc.note ? "\n" + rc.note : ""}`, 0);
     showBuildNote("model", rc.note || "机型数据已提交，页面需官网跑一次站点重建后才更新。");
+    setCatManage(false);       // 保存完就回只读 —— 写任务结束了，没理由把写控件继续摆着
     await loadCats();          // 刷新产品编辑页的类目下拉（新显示名）
     await loadCatsView();      // 重载：新行变成已存在行（slug 转只读）
   } catch (e) { msg("保存失败：" + e.message, 1); }
@@ -1074,19 +1104,32 @@ function showBuildNote(which, text) {
 // 沿用图库那套（manageMode + 🔧 管理 / ✓ 管理中），不造第二种交互。
 // 默认态只给改名/排序（低风险、常用）；删除是破坏性的（机型 slug=产品 URL、品类删了产品会从 /type/ 消失），
 // 后端虽有 count>0 守卫，前端也不该让它一直摆在手边。
+// 🔴 Joe：顺序调节、添加、以及**名称编辑本身**，都该在点「管理」之后才出现。
+//    ⇒ 「管理」不再只是"多显示一个删除按钮"，它是**读模式 / 写模式**的分界：
+//      读模式  显示名（纯文本）+ 产品数
+//      写模式  箭头 · 输入框 · 添加 · 删除 · 保存 / 取消 · 那段编辑规则说明
+// ⚠️ 退出必须能**取消**：改了一半想放弃要能回到只读且不落库 —— 所以 cancel 走重新拉取，
+//    而不是"把 catsEdit 改回去"（后者要自己维护一份快照，而快照一定会和真实来源漂）。
 let catManage = false, formManage = false;
-function toggleCatManage() {
-  catManage = !catManage;
+const _show = (sel, on) => { const e = $(sel); if (e) e.style.display = on ? "" : "none"; };
+function setCatManage(on) {
+  catManage = on;
   const b = $("#cat-manage-btn");
-  if (b) { b.classList.toggle("on", catManage); b.textContent = catManage ? "✓ 管理中" : "🔧 管理"; }
+  if (b) { b.classList.toggle("on", on); b.textContent = on ? "✓ 管理中" : "🔧 管理"; }
+  _show("#cat-write-actions", on); _show("#cat-add-btn", on); _show("#cat-help", on);
   paintCats();
 }
-function toggleFormManage() {
-  formManage = !formManage;
+function toggleCatManage() { setCatManage(!catManage); }
+async function cancelCatManage() { setCatManage(false); await loadCatsView(); }   // 重新拉取 = 丢弃未保存的改动
+function setFormManage(on) {
+  formManage = on;
   const b = $("#form-manage-btn");
-  if (b) { b.classList.toggle("on", formManage); b.textContent = formManage ? "✓ 管理中" : "🔧 管理"; }
+  if (b) { b.classList.toggle("on", on); b.textContent = on ? "✓ 管理中" : "🔧 管理"; }
+  _show("#form-write-actions", on); _show("#form-add-btn", on); _show("#form-help", on);
   paintForms();
 }
+function toggleFormManage() { setFormManage(!formManage); }
+async function cancelFormManage() { setFormManage(false); _formsLoaded = false; await loadForms(); }
 let _formsLoaded = false, formsEdit = [], _formOrphans = [];
 async function loadForms() {
   const rows = $("#forms-rows");
@@ -1100,6 +1143,18 @@ async function loadForms() {
   paintForms();
 }
 function paintForms() {
+  // 🔴 同机型：默认只读。品类这张表本来就有产品数一列，读模式保留它、去掉其余全部写控件。
+  if (!formManage) {
+    const ro = formsEdit.map((f) => `
+    <tr><td class="c-ord"></td>
+      <td><span class="cat-ro" title="网址标识：${esc(f.key)}">${esc(f.name || f.key)}</span></td>
+      <td class="cat-cnt tnum">${f._new ? "—" : f.count + " 个"}</td>
+      <td class="c-act"></td>
+    </tr>`).join("");
+    const orphRo = _formOrphans.map((f) => `<tr><td class="muted">⚠️</td><td>${esc(f.form)} <span class="muted" style="font-size:11px">（不在 forms.json 里）</span></td><td class="cat-cnt tnum">${f.count} 个</td><td></td></tr>`).join("");
+    $("#forms-rows").innerHTML = ro + orphRo || `<tr><td colspan="4" class="muted">无品类</td></tr>`;
+    return;
+  }
   const known = formsEdit.map((f, i) => `
     <tr${f._new ? ' class="cat-new"' : ""}>
       <td class="c-ord"><span class="ord-grp"><button class="ico" onclick="formMove(${i},-1)" ${i === 0 ? "disabled" : ""} title="上移">↑</button><button class="ico" onclick="formMove(${i},1)" ${i === formsEdit.length - 1 ? "disabled" : ""} title="下移">↓</button></span></td>
