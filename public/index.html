@@ -28,18 +28,42 @@ input,select,textarea{background:var(--w3-bg2);border:1px solid var(--w3-line);c
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--w3-accent)}
 /* 列表工具栏 / dense 表 */
 .toolbar{display:flex;gap:var(--dz-gap-sm);flex-wrap:wrap;align-items:center;margin-bottom:12px}
+/* ══ 密集模式（DESIGN.md §密集模式 · 官网仓 wanew-internal-docs/design-dense-mode.md 是唯一真源）══
+   靠明度分层，不靠描边。间距只走音阶 2/4/8/12/16/24/32/48。字号只四档 20/15/13/11。 */
+:root{
+  --dz-l0:#0B0C0E; --dz-l1:#121417; --dz-l2:#191C20; --dz-l3:#21252B; --dz-hair:#262A30;
+  --dz-t1:#E7EAEE; --dz-t2:#9BA3AE; --dz-t3:#6B7280;
+  --dz-ok-2:#3F9E63; --dz-draft-2:#B4863B; --dz-err-2:#C15B58;
+}
 table{width:100%;border-collapse:collapse}
-th,td{padding:var(--dz-row-py) var(--dz-cell-px);text-align:left;border-bottom:1px solid var(--w3-line);font-size:13px;vertical-align:middle}
-th{color:var(--w3-text3);font-weight:600;font-size:12px;background:transparent;white-space:nowrap}
-tr:hover td{background:var(--w3-panel2)}
-.thumb{width:76px;height:76px;object-fit:cover;background:var(--w3-tile);border-radius:8px;display:block}
-.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;white-space:nowrap;border:1px solid rgba(125,177,255,.28);background:rgba(125,177,255,.1);color:var(--dz-accent-hi)}
-.pill.st-pub{border-color:var(--dz-ok-line);background:var(--dz-ok-bg);color:var(--dz-ok)}
-.pill.st-draft{border-color:var(--w3-line2);background:var(--w3-panel2);color:var(--w3-text3)}
-.pill.st-arch{border-color:rgba(255,190,120,.4);background:rgba(255,190,120,.12);color:var(--dz-warn)}
+/* 纵 8 / 横 12（音阶）。行高由内容+padding 决定，缩略图那档定死 40px ⇒ 行 ≈56px（规格 §4） */
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--dz-hair);font-size:13px;line-height:20px;vertical-align:middle}
+/* 表头：11px 全大写三级色、无底色、只留下沿发丝线（§7） */
+th{color:var(--dz-t3);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;background:transparent;white-space:nowrap}
+tr:hover td{background:var(--dz-l3)}                      /* hover 升到 L3，§8 */
+#rows td{background:transparent;transition:background .1s var(--dz-ease)}
+.thumb{width:40px;height:40px;object-fit:cover;background:var(--dz-l2);border-radius:4px;display:block}
+/* 🔴 标题固定 2 行截断，永远不许铺到 3 行（§7）。**长标题被截断规则吃掉，不许把行撑高**（§10）。 */
+.ttl-cell{max-width:0;width:100%}
+.ttl-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  max-height:40px;overflow-wrap:anywhere}
+/* 数字列：右对齐 + 等宽数字（§6） */
+.num{text-align:right;font-variant-numeric:tabular-nums;color:var(--dz-t2);white-space:nowrap}
+/* 状态 = 6px 圆点 + 文字，不用实心胶囊（§3）。胶囊满屏 = 等于没有强调。 */
+.st{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;color:var(--dz-t2)}
+.st::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.st-pub{color:var(--dz-ok-2)} .st-draft{color:var(--dz-draft-2)} .st-arch{color:var(--dz-err-2)}
+/* 机型/品类：次要文字，不是彩色胶囊 —— 它们是属性不是状态，不该抢注意力 */
+.attr{color:var(--dz-t2);white-space:nowrap}
+.attr-none{color:var(--dz-t3)}
+/* 行操作：默认三级色，hover 整行才升到主要色（§7） */
+#rows .rowact button{color:var(--dz-t3);background:transparent;border:none;padding:4px 8px;font-size:13px}
+#rows tr:hover .rowact button{color:var(--dz-t1)}
+#rows .rowact button.danger{color:var(--dz-err-2)}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:13px;white-space:nowrap;border:1px solid var(--dz-hair);background:transparent;color:var(--dz-t2)}
 /* 产品三态分区 tab（在线/下架/草稿箱·dense） */
 .stabs{display:inline-flex;gap:2px;background:var(--w3-bg2);border:1px solid var(--w3-line);border-radius:var(--dz-radius-s);padding:2px}
-.stab{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:4px 11px;border:none;background:transparent;color:var(--w3-text2);border-radius:calc(var(--dz-radius-s) - 2px);cursor:pointer;height:auto}
+.stab{display:inline-flex;align-items:center;gap:5px;font-size:13px;padding:4px 12px;border:none;background:transparent;color:var(--w3-text2);border-radius:calc(var(--dz-radius-s) - 2px);cursor:pointer;height:auto}
 .stab:hover{color:var(--w3-text)}
 .stab.on{background:var(--w3-panel);color:var(--w3-text);box-shadow:0 0 0 1px var(--w3-line)}
 .stab-n{font-size:11px;color:var(--w3-text3);font-variant-numeric:tabular-nums}
@@ -313,7 +337,7 @@ button.ico-del:hover:not(:disabled){color:var(--dz-err);border-color:var(--dz-er
 .tlens .k{flex:none;width:74px;color:var(--w3-text3);font-size:11px}
 .tlens .v{flex:1;min-width:0;color:var(--w3-text2)}
 .tlens .v b{color:var(--w3-text);font-weight:600}
-.missing-sum{display:inline-block;margin-left:6px;font-size:10px;padding:1px 6px;border-radius:3px;background:var(--dz-warn-bg);border:1px solid var(--dz-warn-line);color:var(--dz-warn);white-space:nowrap}
+.missing-sum{display:inline-block;margin-left:6px;font-size:11px;padding:1px 6px;border-radius:3px;background:var(--dz-warn-bg);border:1px solid var(--dz-warn-line);color:var(--dz-warn);white-space:nowrap}
 /* 分类页：机型 + 品类一页两卡（12 行内容不值得用标签切换）。窄屏堆叠。 */
 .cat-2col{display:grid;grid-template-columns:1fr 1fr;gap:var(--dz-gap);align-items:start}
 @media(max-width:1100px){.cat-2col{grid-template-columns:1fr}}
@@ -362,7 +386,7 @@ button.on{background:var(--dz-accent-bg);border-color:var(--w3-accent);color:var
   <div class="dz-logo" onclick="backToList()" title="回首页"><img src="/wanew-logo-white.png?v=1" alt="WANEW"></div>
   <div class="dz-search"><span class="ic">⌕</span><input type="search" id="q" placeholder="搜索产品标题 / ID…"></div>
   <div class="spacer"></div>
-  <span class="muted" id="crumb" style="font-size:12px"></span>
+  <span class="muted" id="crumb" style="font-size:11px"></span>
 </header>
 <div class="dz-wrap">
   <nav class="dz-side">
@@ -806,7 +830,8 @@ function filtered() {
     (!q || String(p.id) === q || (p.title || "").toLowerCase().includes(q)) &&
     (!fc || p.category === fc) && (!ff || p.form === ff) && (!fst || (p.status || "published") === fst));
 }
-const STATUS_BADGE = { published: '<span class="pill st-pub">在线</span>', draft: '<span class="pill st-draft">草稿</span>', archived: '<span class="pill st-arch">已下架</span>' };
+// 6px 圆点 + 文字，不用实心胶囊（DESIGN.md §密集模式 §3）：每行都挂彩色胶囊 = 全屏都在强调 = 等于没有强调。
+const STATUS_BADGE = { published: '<span class="st st-pub">在线</span>', draft: '<span class="st st-draft">草稿</span>', archived: '<span class="st st-arch">已下架</span>' };
 const STATUS_TIP = { published: "在线：已发布、官网可见", draft: "草稿箱：从未发布、在编", archived: "已下架：曾上线现主动下线，数据保留可恢复（软下架）" };
 function statusActions(p) {   // 情境化流转按钮（下架=软下架主路径；硬删除进危险区）
   const s = p.status || "published";
@@ -836,12 +861,12 @@ function renderRows() {
     <tr>
       <td><input type="checkbox" ${sel.has(p.id) ? "checked" : ""} onchange="toggleSel(${p.id},this.checked)"></td>
       <td>${p.thumb ? `<img class="thumb" src="${esc(imgUrl(p.thumb))}" loading="lazy">` : ""}</td>
-      <td>${title}${p.excerpt ? "" : `<span class="missing-sum" title="没写摘要——列表卡和详情页顶部会空一块，建议补">缺摘要</span>`}</td>
+      <td class="ttl-cell"><div class="ttl-clamp">${title}${p.excerpt ? "" : `<span class="missing-sum" title="没写摘要——列表卡和详情页顶部会空一块，建议补">缺摘要</span>`}</div></td>
       <td><span title="${STATUS_TIP[p.status || "published"]}">${STATUS_BADGE[p.status] || STATUS_BADGE.published}</span></td>
-      <td class="muted">${p.id}</td>
-      <td><span class="pill">${esc(catName(p.category))}</span></td>
-      <td>${p.form ? `<span class="pill pf">${esc(p.form)}</span>` : `<span class="muted">—</span>`}</td>
-      <td><div style="display:flex;gap:4px;flex-wrap:wrap"><button onclick="openEdit(${p.id})">编辑</button> ${statusActions(p)}</div></td>
+      <td class="num">${p.id}</td>
+      <td><span class="attr">${esc(catName(p.category))}</span></td>
+      <td>${p.form ? `<span class="attr">${esc(p.form)}</span>` : `<span class="attr-none">—</span>`}</td>
+      <td class="rowact"><div style="display:flex;gap:4px;white-space:nowrap"><button onclick="openEdit(${p.id})">编辑</button> ${statusActions(p)}</div></td>
     </tr>`;
   }).join("") || `<tr><td colspan="8" class="muted">没有匹配的产品</td></tr>`;
   syncBulk();
