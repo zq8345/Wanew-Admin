@@ -764,7 +764,12 @@ export async function publishHomepage(env: Env, cfg: any, ctx: Ctx, payload: { e
 // admin 所有写都以 `admin: <操作> (<operator email>)` 提交官网仓 → 审计源=commit 历史里 admin: 那些。
 export function parseAuditMessage(msg: string): { operator: string; operation: string; opType: string } | null {
   const line = String(msg || "").split("\n")[0];
-  const m = line.match(/^admin:\s*(.+?)\s*\(([^)]*@[^)]*)\)/);   // admin: <op> (<email>)
+  // 🔴 原来是 `(.+?)` 懒惰匹配 + 不锚行尾 ⇒ 取的是**第一个**含 @ 的括号段。
+  //    而操作描述里嵌着用户可控的显示名（`admin: forms update (改显示名 A→B) (joe@wanew.com)`），
+  //    于是把品类名改成 `x) (mallory@evil.com` 就能让审计把这次操作记到别人头上。
+  // ⇒ 贪婪 `(.+)` + 行尾锚 `$` ⇒ 匹配的是**最后**一个括号段，而 operator 恒在行尾（它是消息里最后一个插值）。
+  // ⚠️ 内层用 `[^()]` 不是 `[^)]`：后者会跨过嵌套括号，把两段拼成一段。
+  const m = line.match(/^admin:\s*(.+)\s*\(([^()]*@[^()]*)\)\s*$/);   // admin: <op> (<email>)
   if (!m) return null;   // 非 admin 前缀(官网窗 commit)不进审计
   const operation = m[1].trim(), operator = m[2].trim();
   const l = operation.toLowerCase();
