@@ -124,9 +124,30 @@ a:hover{text-decoration:underline}
   background:var(--dz-c-panel);border:1px solid var(--dz-c-line);cursor:pointer;transition:background .1s var(--dz-ease)}
 .dz-todo-i:hover{background:var(--dz-c-panel2)}
 .dz-todo-i:focus-visible{outline:2px solid var(--dz-c-accent);outline-offset:2px}
-.dz-todo-n{font-size:20px;font-weight:600;color:var(--dz-c-text);font-variant-numeric:tabular-nums}
+.dz-todo-n{font-size:15px;font-weight:600;color:var(--dz-c-text);font-variant-numeric:tabular-nums}
 .dz-todo-t{font-size:13px;color:var(--dz-c-text2)}
-.dz-last{margin-top:24px;font-size:11px;color:var(--dz-c-text3)}
+/* 现状条：一行弱化文本，**不是卡片** —— 它是背景信息，给它一个卡片就是把它抬成同级内容。 */
+.dz-last{margin-top:24px;font-size:11px;color:var(--dz-c-text3);background:transparent;border:none;padding:0}
+/* ── 首屏：工作台入口 ─────────────────────────────────────────────────────
+   ② 主操作是视觉最重的**唯一**元素 —— 它是 Joe 每天都在做的事。 */
+.dz-mainact{margin-bottom:24px}
+/* 20px/600：必须**严格重于**待办数字（15px/600），否则"视觉最重且唯一"就落到待办上，
+   而那正是上一版读起来像告警面板的原因。⚠️ 20/15 都在字阶内，没有为了压过它而新造一档。 */
+.dz-newbtn{height:44px;padding:0 24px;font-size:20px;font-weight:600;border-radius:var(--dz-radius-s)}
+.dz-sec{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--dz-c-text3);margin:0 0 8px}
+/* ⭐「继续上次」是这一屏的主体：产品目录后台的主体本来就该是产品本身，
+   而缩略图让这一屏第一次有视觉内容 —— 目录里图就是内容。 */
+.dz-recent{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px;margin-bottom:24px}
+.dz-rec{background:var(--dz-c-panel);border:1px solid var(--dz-c-line);border-radius:var(--dz-radius-s);
+  padding:8px;cursor:pointer;transition:background .1s var(--dz-ease)}
+.dz-rec:hover{background:var(--dz-c-panel2)}
+.dz-rec:focus-visible{outline:2px solid var(--dz-c-accent);outline-offset:2px}
+.dz-rec img,.dz-rec-noimg{width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;background:var(--dz-c-tile);display:block}
+.dz-rec-t{margin-top:8px;font-size:13px;color:var(--dz-c-text);line-height:20px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-height:40px;overflow-wrap:anywhere}
+.dz-rec-m{margin-top:2px;font-size:11px;color:var(--dz-c-text3);font-variant-numeric:tabular-nums}
+
 /* 分类页只读态的显示名：纯文本，不是禁用的输入框 —— 禁用输入框看着仍然像个能改的东西 */
 .cat-ro{color:var(--dz-c-text)}
 .cat-tbl td.num{text-align:right;font-variant-numeric:tabular-nums;color:var(--dz-c-text2)}
