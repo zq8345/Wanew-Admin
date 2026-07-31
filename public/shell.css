@@ -110,8 +110,11 @@ a:hover{text-decoration:underline}
 .dz-hero-n{font-size:32px;font-weight:600;line-height:1;color:var(--dz-c-text);font-variant-numeric:tabular-nums}
 .dz-hero-t{font-size:15px;color:var(--dz-c-text)}
 .dz-hero-go{font-size:13px;color:var(--dz-c-accent)}
-.dz-hero-clear{cursor:default;grid-template-columns:1fr}
-.dz-hero-clear .dz-hero-t{color:var(--dz-c-text2)}
+/* 空状态：陈述 + 现状两行，容器**跟着内容收紧**，不撑满一屏。
+   ⚠️ 版面留白是"内容之外"，不是"卡片内部撑高" —— 一个被拉长的空卡片读起来像加载失败。 */
+.dz-hero-clear{cursor:default;display:block;padding:24px}
+.dz-hero-clear .dz-hero-t{color:var(--dz-c-text);font-size:15px}
+.dz-hero-sub{margin-top:8px;font-size:13px;color:var(--dz-c-text2);font-variant-numeric:tabular-nums}
 .dz-todo{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .dz-todo-i{display:flex;align-items:baseline;gap:8px;padding:8px 12px;border-radius:var(--dz-radius-s);
   background:var(--dz-c-panel);border:1px solid var(--dz-c-line);cursor:pointer;transition:background .1s var(--dz-ease)}

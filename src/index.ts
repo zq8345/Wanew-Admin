@@ -899,7 +899,13 @@ app.get("/api/admin/dashboard", async (c) => {
   // 最近活动时间线（GitHub commits API 仓库级最近 6 条，best-effort、只读）
   let activity: any[] = [];
   try {
-    const res = await fetch(`https://api.github.com/repos/${c.env.GITHUB_REPO}/commits?per_page=6`, {
+    // 🔴 per_page 从 6 提到 100 —— **不是"多取点更保险"，是 6 根本不够。**
+    //    「最近发布」要在这批里找第一条 `admin:`，而这个仓**官网自己也在推**，频率远高于 Joe 保存。
+    //    实测（2026-07-31，origin/main）：最近一条 `admin:` commit 排在第 **15** 位。
+    //    ⇒ 窗口 6 永远扫不到它，那一格生产上恒显示 `—`。**同一次请求换个 per_page，零额外成本。**
+    // ⚠️ 100 仍是有限窗口：如果官网连推超过 100 条而中间没有后台保存，它还是会落空 ——
+    //    所以下面**不把落空画成 `—`**，而是说清"近 100 次提交内没有"，让"查不到"和"没有"分得开。
+    const res = await fetch(`https://api.github.com/repos/${c.env.GITHUB_REPO}/commits?per_page=100`, {
       headers: { Authorization: `Bearer ${c.env.GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
     });
     if (res.ok) { const arr: any = await res.json(); if (Array.isArray(arr)) activity = arr.map((x: any) => ({ sha: String(x.sha).slice(0, 7), date: x.commit?.committer?.date || null, message: (x.commit?.message || "").split("\n")[0] })); }
@@ -938,10 +944,12 @@ app.get("/api/admin/dashboard", async (c) => {
   // ⚠️ 只能报"最近一次成功的"—— 失败不产生 commit，所以这里天然看不到失败。
   //    （那正是 2026-07-27/28 连着两天保存失败而审计日志干干净净的原因。）
   const lastPublish = activity.find((a: any) => /^admin:/.test(String(a.message || ""))) || null;
+  // 扫了多少条 —— 前端用它把"这窗口内没有"和"取不到"说成两句话，而不是都画成 `—`。
+  const activityScanned = activity.length;
   const lastHome = activity[0] || null;   // 兼容旧字段
   // ⚠️ byCat/byForm/activity/mediaCount 仍然返回：分类页与设置页在用，删了会连带弄坏别的屏。
   //    首屏不再显示它们 —— **"不在首屏"和"不存在"是两件事。**
-  return c.json({ products: products.length, categories: categories.length, models: models.length, formsCount, mediaCount, byCat, byForm, featured, imgBase: c.env.IMG_BASE, activity, lastHome, lastPublish, todo, repo: c.env.GITHUB_REPO });
+  return c.json({ products: products.length, categories: categories.length, models: models.length, formsCount, mediaCount, byCat, byForm, featured, imgBase: c.env.IMG_BASE, activity, lastHome, lastPublish, activityScanned, todo, repo: c.env.GITHUB_REPO });
 });
 
 // ================= W5 P5：设置（品牌/口径只读对齐，零写入零撞车）=================

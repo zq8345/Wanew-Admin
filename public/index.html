@@ -2092,14 +2092,25 @@ function paintDash(d) {
       <div class="dz-hero-t">${esc(hero.label)}</div>
       <div class="dz-hero-go">去处理 →</div>
     </div>` : `
-    <div class="dz-hero dz-hero-clear"><div class="dz-hero-t">没有待处理的事</div></div>`}
+    <!-- 空状态是一个**设计元素**，不是内容的缺席。
+         ⚠️ 待办为零是**好消息**（目录健康），而上一版把好消息画成了一片空白，
+         读起来像"这一屏坏了"。所以这里要有明确陈述 + 一句现状，让它读起来像"都处理完了"。
+         ⚠️ 不用填充物补空白 —— 删掉的饼图换个样子塞回来，等于没删。 -->
+    <div class="dz-hero dz-hero-clear">
+      <div class="dz-hero-t">当前没有待处理的事</div>
+      <div class="dz-hero-sub">${d.products} 个产品全部在线${(d.categories != null ? ` · ${d.categories} 个机型` : "")}${(d.formsCount != null ? ` · ${d.formsCount} 个品类` : "")}</div>
+    </div>`}
     ${rest.length ? `<div class="dz-todo">${rest.map((x) => `
       <div class="dz-todo-i" onclick="${x.act}" role="button" tabindex="0">
         <span class="dz-todo-n tnum">${x.n}</span><span class="dz-todo-t">${esc(x.label)}</span>
       </div>`).join("")}</div>` : ""}
     <div class="dz-last">${lp
       ? `最近发布 <span class="tnum">${esc(lp.sha)}</span> · ${esc(relTime(lp.date))}`
-      : `最近发布 —`}</div>`;
+      : (d.activityScanned
+          // ⚠️ "这窗口里没有"和"取不到"是两件事，别都画成 `—`：
+          //    前者说明只是很久没在后台改过东西，后者说明这一格坏了。
+          ? `近 ${d.activityScanned} 次提交内没有后台发布`
+          : `发布记录取不到（GitHub 提交接口无响应）`)}</div>`;
 }
 
 // ---------- 设置（W5 P5·品牌/口径只读对齐）----------
