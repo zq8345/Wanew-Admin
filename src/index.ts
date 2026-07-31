@@ -904,8 +904,44 @@ app.get("/api/admin/dashboard", async (c) => {
     });
     if (res.ok) { const arr: any = await res.json(); if (Array.isArray(arr)) activity = arr.map((x: any) => ({ sha: String(x.sha).slice(0, 7), date: x.commit?.committer?.date || null, message: (x.commit?.message || "").split("\n")[0] })); }
   } catch {}
+  // ⭐ 首屏要回答的是「今天有什么要我处理」，不是「库里有什么」。
+  //    机型/品类分布、媒体文件数、git 提交流水 —— 那些**不导向任何动作**，看完也不知道该干嘛。
+  // 🔴 全部从上面已经读到的 `products` 算，**零新增子请求** —— 首屏不该为了好看多花配额。
+  const enabled: string[] = locRaw ? (JSON.parse(locRaw).enabled || []) : [];
+  const defLoc: string = locRaw ? (JSON.parse(locRaw).default || "en") : "en";
+  const live = (p: any) => (p.status || "published") === "published";
+  // 🔴 **草稿/已下架不在 products-index 里** —— publishProduct 把非 live 的条目移出 manifest。
+  //    我第一版从 `products` 数它们，**在生产上会恒为 0**，而首屏最该有的那条就是"草稿待发布"。
+  //    （本地测出来是因为造数据时把它们塞进了 /products —— 而生产的 /products 只有 live 的。
+  //     ⚠️ 桩和真实现的**数据形状**不一样，量出来的就是另一个系统。）
+  //    ⇒ 改成"目录里的产品文件数 − manifest 条数"，**多 1 次子请求**，拿到"未发布"的总数。
+  //    ⚠️ 这个口径分不出草稿和已下架 —— 两者都要看 data/products/{id}.json 才知道，那是 N 次读。
+  //       所以首屏只报一个"未发布"，点进去再分。**首屏给的是"有多少事"，不是"事的分类"。**
+  let unpublished = 0;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${c.env.GITHUB_REPO}/contents/data/products`, {
+      headers: { Authorization: `Bearer ${c.env.GITHUB_TOKEN}`, "User-Agent": "wanew-admin", Accept: "application/vnd.github+json" },
+    });
+    if (res.ok) { const arr: any = await res.json(); if (Array.isArray(arr)) unpublished = Math.max(0, arr.filter((f: any) => /^\d+\.json$/.test(f.name)).length - products.length); }
+  } catch { /* 拿不到就报 0，首屏少一条，不影响其余 —— 但别把"查不到"画成"没有" */ }
+  const todo = {
+    unpublished,
+    // 缺图/缺摘要只数**在线**的：草稿缺东西是正常的，把它算进待办等于每天对自己喊狼来了
+    noThumb: products.filter((p) => live(p) && !p.thumb).length,
+    noExcerpt: products.filter((p) => live(p) && !p.excerpt).length,
+    // 缺翻译 = manifest 里该语种没有任何本地化字段 ⇒ 卡片/列表退化成英文
+    i18n: enabled.filter((l) => l !== defLoc).map((l) => ({
+      locale: l, missing: products.filter((p) => live(p) && !(p.i18n && p.i18n[l])).length,
+    })),
+  };
+  // 最近一次**官网发布**：admin 的写都以 `admin:` 开头。
+  // ⚠️ 只能报"最近一次成功的"—— 失败不产生 commit，所以这里天然看不到失败。
+  //    （那正是 2026-07-27/28 连着两天保存失败而审计日志干干净净的原因。）
+  const lastPublish = activity.find((a: any) => /^admin:/.test(String(a.message || ""))) || null;
   const lastHome = activity[0] || null;   // 兼容旧字段
-  return c.json({ products: products.length, categories: categories.length, models: models.length, formsCount, mediaCount, byCat, byForm, featured, imgBase: c.env.IMG_BASE, activity, lastHome, repo: c.env.GITHUB_REPO });
+  // ⚠️ byCat/byForm/activity/mediaCount 仍然返回：分类页与设置页在用，删了会连带弄坏别的屏。
+  //    首屏不再显示它们 —— **"不在首屏"和"不存在"是两件事。**
+  return c.json({ products: products.length, categories: categories.length, models: models.length, formsCount, mediaCount, byCat, byForm, featured, imgBase: c.env.IMG_BASE, activity, lastHome, lastPublish, todo, repo: c.env.GITHUB_REPO });
 });
 
 // ================= W5 P5：设置（品牌/口径只读对齐，零写入零撞车）=================

@@ -391,35 +391,38 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
 <div class="dz-wrap">
   <nav class="dz-side">
     <div class="dz-eyebrow">目录 Catalog</div>
-    <div class="dz-nav-item active" data-view="dash" onclick="showDash()"><span class="ic">◧</span> 仪表盘</div>
-    <div class="dz-nav-item" data-view="list" onclick="backToList()"><span class="ic">▤</span> 产品</div>
-    <div class="dz-nav-item" data-view="cats" onclick="showCats()"><span class="ic">⊞</span> 分类</div>
-    <div class="dz-nav-item" data-view="media" id="nav-images" onclick="showLib('image')"><span class="ic">▦</span> 图片</div>
-    <div class="dz-nav-item" data-view="media" id="nav-videos" onclick="showLib('video')"><span class="ic">▶</span> 视频</div>
+    <div class="dz-nav-item active" data-view="dash" onclick="showDash()">仪表盘</div>
+    <div class="dz-nav-item" data-view="list" onclick="backToList()">产品</div>
+    <div class="dz-nav-item" data-view="cats" onclick="showCats()">分类</div>
+    <div class="dz-nav-item" data-view="media" id="nav-images" onclick="showLib('image')">图片</div>
+    <div class="dz-nav-item" data-view="media" id="nav-videos" onclick="showLib('video')">视频</div>
     <div class="dz-eyebrow">内容 Content</div>
-    <div class="dz-nav-item" data-view="home" onclick="showHome()"><span class="ic">⌂</span> 首页</div>
-    <div class="dz-nav-item" data-view="contact" onclick="showContact()"><span class="ic">✆</span> 联系方式</div>
-    <div class="dz-nav-item soon" title="即将上线"><span class="ic">▭</span> 页面 <span class="soon-tag">SOON</span></div>
-    <div class="dz-nav-item" data-view="guides" onclick="showGuides()"><span class="ic">≣</span> 攻略</div>
+    <div class="dz-nav-item" data-view="home" onclick="showHome()">首页</div>
+    <div class="dz-nav-item" data-view="contact" onclick="showContact()">联系方式</div>
+    <div class="dz-nav-item soon" title="即将上线">页面 <span class="soon-tag">SOON</span></div>
+    <div class="dz-nav-item" data-view="guides" onclick="showGuides()">攻略</div>
     <div class="dz-eyebrow">增长 Growth</div>
-    <div class="dz-nav-item" data-view="gsc" onclick="showGsc()"><span class="ic">◍</span> 搜索表现</div>
-    <div class="dz-nav-item" data-view="seo" onclick="showSeo()"><span class="ic">◔</span> SEO</div>
-    <div class="dz-nav-item soon" title="未来加语种(fr/de)时再做"><span class="ic">⇄</span> 翻译 <span class="soon-tag">未来</span></div>
-    <a class="dz-nav-item" href="https://crm.wanew.com" target="_blank" title="询盘/线索归 CRM 管理（新标签打开）" style="text-decoration:none;color:inherit"><span class="ic">✉</span> 询盘 <span class="ext" style="color:var(--dz-c-text3);font-size:11px;margin-left:auto">↗ CRM</span></a>
+    <div class="dz-nav-item" data-view="gsc" onclick="showGsc()">搜索表现</div>
+    <div class="dz-nav-item" data-view="seo" onclick="showSeo()">SEO</div>
+    <div class="dz-nav-item soon" title="未来加语种(fr/de)时再做">翻译 <span class="soon-tag">未来</span></div>
+    <a class="dz-nav-item" href="https://crm.wanew.com" target="_blank" title="询盘/线索归 CRM 管理（新标签打开）" style="text-decoration:none;color:inherit">询盘 <span class="ext" style="color:var(--dz-c-text3);font-size:11px;margin-left:auto">↗ CRM</span></a>
     <div class="dz-side-foot">
       <!-- 主题切换：这一条是为了让 Joe **并排比**，不是一个长期功能。
            他定下来之后，胜出的那套变成默认，这个开关就该删掉 —— 留着等于让每个人自己发明界面。 -->
-      <div class="dz-nav-item" id="theme-toggle" onclick="toggleTheme()" title="在浅色（工作台）与暗色（夜间）之间切换"><span class="ic">◐</span> <span id="theme-label">浅色</span></div>
-      <div class="dz-nav-item" data-view="audit" onclick="showAudit()"><span class="ic">▤</span> 审计日志</div>
-      <div class="dz-nav-item" data-view="settings" onclick="showSettings()"><span class="ic">⚙</span> 设置</div>
-      <div class="dz-nav-item" data-view="team" onclick="showTeam()"><span class="ic">◑</span> 团队</div>
+      <div class="dz-nav-item" id="theme-toggle" onclick="toggleTheme()" title="在浅色（工作台）与暗色（夜间）之间切换"><span id="theme-label">浅色</span></div>
+      <div class="dz-nav-item" data-view="audit" onclick="showAudit()">审计日志</div>
+      <div class="dz-nav-item" data-view="settings" onclick="showSettings()">设置</div>
+      <div class="dz-nav-item" data-view="team" onclick="showTeam()">团队</div>
       <!-- 账号菜单：用原生 <details>/<summary> —— **展开收起零 JS**，键盘天然可达（summary 可聚焦、
            Enter/空格开合）。Esc 与点击外部关闭是叠在上面的**增强**：那段 JS 挂了，菜单只是不自动收，
            用户看得见、能再点一次关掉；而退出动作本身**始终是真 <a href>**，不依赖任何 JS。
            这就是上一轮那条约束的分界：**导航动作不许靠 JS（失败静默），交互展开可以（失败可见）**。 -->
       <details class="dz-acct" id="acct">
         <summary class="dz-user-foot" id="who-row" title="点击展开账号菜单">
-          <span class="av">◐</span> <span class="who" id="who"></span><span class="caret">⌄</span>
+          <!-- 头像位原来是 ◐ —— 一个几何字符冒充头像。换成邮箱首字母：那是**真信息**（我是谁），
+           而且正是头像存在的理由。⚠️ ↗（外链）与 ⌄（展开态）保留：它们是**状态/去向指示器**，
+           不是"标签冒充图标"，删了会丢掉真的意思。 -->
+      <span class="av" id="who-av"></span> <span class="who" id="who"></span><span class="caret">⌄</span>
         </summary>
         <!-- 会话归 Cloudflare Access 管，清本地任何状态都没用，必须打它的登出端点。
              用应用级（只退这个后台），不用团队级（那会把 Joe 从所有内部系统一起踢出去，代价过大）。 -->
@@ -795,6 +798,7 @@ document.addEventListener("click", (e) => {
     const w = await fetch("/api/_whoami").then((r) => r.json());
     // 只放身份（登录人），不再拼仓名——184px 侧栏里两段会把邮箱挤成 joe@wanew.com…；仓名在「设置」页有
     $("#who").textContent = w.operator || "dev";
+    const av = $("#who-av"); if (av) av.textContent = (w.operator || "d").trim().charAt(0).toUpperCase();
     const wr = $("#who-row"); if (wr) wr.title = (w.operator || "dev") + " · " + w.repo + "（点击展开账号菜单）";
     window._imgBase = w.imgBase || "";
     // 批㉚：图片 URL 统一解析（总工定罪:#650 等老品 images[].src 是官网相对路径,实体只在
@@ -841,11 +845,42 @@ async function loadList() {
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// 首屏待办 → 列表的落点。**不能点的数字不该出现在首屏**，所以每个待办都要有一个能真正落到那批数据的谓词。
+// ⚠️ 用谓词而不是"再加几个下拉"：这些切片是**临时的调查视角**，不是常驻筛选维度；
+//    做成下拉会让筛选栏无限长，而且它们互相之间没有正交关系。
+const TODO_VIEWS = {
+  // 未发布 = 草稿 ∪ 已下架。首屏只给一个数（服务端分不出，分得出要 N 次读），点进来再看具体哪种。
+  unpublished: { label: "未发布",  pred: (p) => (p.status || "published") !== "published" },
+  draft:     { label: "草稿",        pred: (p) => (p.status || "") === "draft" },
+  archived:  { label: "已下架",      pred: (p) => (p.status || "") === "archived" },
+  noThumb:   { label: "缺主图",      pred: (p) => (p.status || "published") === "published" && !p.thumb },
+  noExcerpt: { label: "缺摘要",      pred: (p) => (p.status || "published") === "published" && !p.excerpt },
+};
+let todoView = null;   // {key} 或 {locale}
+function openTodo(key, locale) {
+  todoView = locale ? { locale } : { key };
+  showView("list");
+  const s = $("#f-status"); if (s) s.value = "";
+  const q = $("#q"); if (q) q.value = "";
+  renderRows();
+}
+function clearTodo() { todoView = null; renderRows(); }
+function todoPred() {
+  if (!todoView) return null;
+  if (todoView.locale) return (p) => (p.status || "published") === "published" && !(p.i18n && p.i18n[todoView.locale]);
+  return (TODO_VIEWS[todoView.key] || {}).pred || null;
+}
+function todoLabel() {
+  if (!todoView) return "";
+  return todoView.locale ? `${todoView.locale} 缺翻译` : (TODO_VIEWS[todoView.key] || {}).label || "";
+}
 function filtered() {
   const q = $("#q").value.trim().toLowerCase(), fc = $("#f-cat").value, ff = $("#f-form").value, fst = ($("#f-status") || {}).value || "";
+  const tp = todoPred();
   return products.filter((p) =>
     (!q || String(p.id) === q || (p.title || "").toLowerCase().includes(q)) &&
-    (!fc || p.category === fc) && (!ff || p.form === ff) && (!fst || (p.status || "published") === fst));
+    (!fc || p.category === fc) && (!ff || p.form === ff) && (!fst || (p.status || "published") === fst) &&
+    (!tp || tp(p)));
 }
 // 6px 圆点 + 文字，不用实心胶囊（DESIGN.md §密集模式 §3）：每行都挂彩色胶囊 = 全屏都在强调 = 等于没有强调。
 const STATUS_BADGE = { published: '<span class="st st-pub">在线</span>', draft: '<span class="st st-draft">草稿</span>', archived: '<span class="st st-arch">已下架</span>' };
@@ -868,7 +903,11 @@ function renderRows() {
   paintStatusTabs();
   const list = filtered();
   const nPub = products.filter((p) => (p.status || "published") === "published").length;
-  $("#count").textContent = `${list.length} 条 · 共 ${products.length}（在线 ${nPub}）`;
+  // 从首屏点进来时，用一个 chip 说明「你现在看的是哪一批」。
+  // ⚠️ 一个 chip，不是一段解释文字 —— 需要写一段话解释的东西，本身就是设计错了。
+  $("#count").innerHTML = todoView
+    ? `<span class="dz-slice"><b>${esc(todoLabel())}</b> ${list.length} 条 <span class="x" onclick="clearTodo()" title="回到全部">×</span></span>`
+    : `${list.length} 条 · 共 ${products.length}（在线 ${nPub}）`;
   $("#rows").innerHTML = list.map((p) => {
     const live = (p.status || "published") === "published";
     const title = live
@@ -2023,28 +2062,44 @@ function donutCard(title, rows, centerLabel) {
   }).join("") || `<span class="muted">无数据</span>`;
   return `<div class="card"><h3>${esc(title)}</h3><div class="donut-wrap">${svg}<div class="dlg">${legend}</div></div></div>`;
 }
+// 首屏 = 「今天有什么要我处理」。**不导向动作的东西一律不放这里。**
+// 删掉的四样及理由：
+//   机型/品类分布甜甜圈 —— 52.9% 是 Mini，看完不知道该干嘛（分类页要看分布，去分类页）
+//   最近活动           —— 那是**英文 git 提交信息**，是我们的开发日志，不是 Joe 的生意
+//   媒体 393           —— 一个文件计数，点不动也不导向动作
+//   产品/机型/品类 三个总数 —— 库存量，不是待办；总数在列表页顶部本来就有
+// ⚠️ 数据仍在 /dashboard 的响应里，只是不摆首屏 —— **"不在首屏"和"不存在"是两件事。**
 function paintDash(d) {
   $("#dash-repo").textContent = d.repo ? `发布到 ${d.repo}` : "";
-  const stat = (ic, num, lbl) => `<div class="card"><div class="ic">${ic}</div><div><div class="num tnum">${num}</div><div class="lbl">${lbl}</div></div></div>`;
-  const modelRows = Object.entries(d.byCat || {}).map(([slug, count]) => ({ name: catName(slug), count }));
-  const typeRows = (d.byForm || []).map((x) => ({ name: x.form, count: x.count }));
-  const feat = (d.featured || []).map((p) => `<div class="ft"><img src="${esc(imgUrl(p.thumb))}" loading="lazy"><span class="cap" title="${esc(p.title)}">${esc(p.title)}</span></div>`).join("") || `<span class="muted">未设精选产品（首页自动按形态轮询挑）</span>`;
-  const tl = (d.activity || []).map((a) => `<div class="dtl-item"><div class="dtl-msg" title="${esc(a.message || "")}">${esc(a.message || "")}</div><div class="dtl-meta"><span class="tnum">${esc(a.sha)}</span>${a.date ? ` · ${esc(relTime(a.date))}` : ""}</div></div>`).join("") || `<span class="muted">暂无记录</span>`;
+  const t = d.todo || {};
+  // 待办项：每一条都带落点。**没有落点的不许进这个数组。**
+  const items = [
+    { n: t.unpublished, label: "未发布（草稿 / 已下架）", act: `openTodo('unpublished')` },
+    { n: t.noThumb, label: "在线产品缺主图", act: `openTodo('noThumb')` },
+    { n: t.noExcerpt, label: "在线产品缺摘要", act: `openTodo('noExcerpt')` },
+    ...(t.i18n || []).map((x) => ({ n: x.missing, label: `${x.locale} 缺翻译`, act: `openTodo(null,'${esc(x.locale)}')` })),
+  ].filter((x) => typeof x.n === "number");
+  const pending = items.filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  // ② 一屏一个主角：数量最大的那条占大块，其余压成一行。
+  //    ⚠️ 主角是**动态**的 —— 谁最多谁当主角，而不是固定某一类。首屏该跟着现实变。
+  const hero = pending[0] || null;
+  const rest = pending.slice(1);
+  const lp = d.lastPublish;
   $("#dash-body").innerHTML = `
-    <div class="dstat">
-      ${stat("▤", d.products, "产品")}
-      ${stat("◫", d.categories, "机型")}
-      ${stat("⬡", d.formsCount != null ? d.formsCount : "—", "品类 / 形态")}
-      ${stat("▦", d.mediaCount, "媒体")}
-    </div>
-    <div class="ddonut-row">
-      ${modelRows.length ? donutCard("机型分布 By model", modelRows, "产品") : '<div class="card"><h3>机型分布 By model</h3><span class="muted">无</span></div>'}
-      ${typeRows.length ? donutCard("品类 / 形态分布 By type", typeRows, "产品") : '<div class="card"><h3>品类 / 形态分布 By type</h3><span class="muted">无</span></div>'}
-    </div>
-    <div class="dgrid">
-      <div><div class="card"><h3>最近活动 Activity</h3><div class="dtl">${tl}</div></div></div>
-      <div><div class="card"><h3>精选产品 · 首页（${(d.featured || []).length}）</h3><div class="dfeat">${feat}</div><p style="margin-top:11px;font-size:12px"><a onclick="showHome()" style="cursor:pointer">→ 去首页管理</a></p></div></div>
-    </div>`;
+    ${hero ? `
+    <div class="dz-hero" onclick="${hero.act}" role="button" tabindex="0">
+      <div class="dz-hero-n tnum">${hero.n}</div>
+      <div class="dz-hero-t">${esc(hero.label)}</div>
+      <div class="dz-hero-go">去处理 →</div>
+    </div>` : `
+    <div class="dz-hero dz-hero-clear"><div class="dz-hero-t">没有待处理的事</div></div>`}
+    ${rest.length ? `<div class="dz-todo">${rest.map((x) => `
+      <div class="dz-todo-i" onclick="${x.act}" role="button" tabindex="0">
+        <span class="dz-todo-n tnum">${x.n}</span><span class="dz-todo-t">${esc(x.label)}</span>
+      </div>`).join("")}</div>` : ""}
+    <div class="dz-last">${lp
+      ? `最近发布 <span class="tnum">${esc(lp.sha)}</span> · ${esc(relTime(lp.date))}`
+      : `最近发布 —`}</div>`;
 }
 
 // ---------- 设置（W5 P5·品牌/口径只读对齐）----------

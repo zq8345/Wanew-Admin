@@ -98,6 +98,35 @@ a:hover{text-decoration:underline}
 .ta-r{text-align:right}                                                                            /* 数字列右对齐（配 .tnum 用） */
 .hint-q{cursor:help;border-bottom:1px dotted var(--dz-c-text3)}                                       /* 带 tooltip 的问号提示 */
 
+/* ── 首屏：待办 ────────────────────────────────────────────────────────────
+   ② 一屏一个主角：主角占大块，其余压成一行。
+   ③ 数字按量级分档：主角 32px、次要 20px —— 「今天有 4 件事」和「库里有 393 个文件」
+      不是一个量级的事，同号同重就是把它们说成一样重要。 */
+.dz-hero{background:var(--dz-c-panel);border:1px solid var(--dz-c-line);border-radius:var(--dz-radius);
+  padding:24px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;cursor:pointer;
+  transition:background .1s var(--dz-ease)}
+.dz-hero:hover{background:var(--dz-c-panel2)}
+.dz-hero:focus-visible{outline:2px solid var(--dz-c-accent);outline-offset:2px}
+.dz-hero-n{font-size:32px;font-weight:600;line-height:1;color:var(--dz-c-text);font-variant-numeric:tabular-nums}
+.dz-hero-t{font-size:15px;color:var(--dz-c-text)}
+.dz-hero-go{font-size:13px;color:var(--dz-c-accent)}
+.dz-hero-clear{cursor:default;grid-template-columns:1fr}
+.dz-hero-clear .dz-hero-t{color:var(--dz-c-text2)}
+.dz-todo{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.dz-todo-i{display:flex;align-items:baseline;gap:8px;padding:8px 12px;border-radius:var(--dz-radius-s);
+  background:var(--dz-c-panel);border:1px solid var(--dz-c-line);cursor:pointer;transition:background .1s var(--dz-ease)}
+.dz-todo-i:hover{background:var(--dz-c-panel2)}
+.dz-todo-i:focus-visible{outline:2px solid var(--dz-c-accent);outline-offset:2px}
+.dz-todo-n{font-size:20px;font-weight:600;color:var(--dz-c-text);font-variant-numeric:tabular-nums}
+.dz-todo-t{font-size:13px;color:var(--dz-c-text2)}
+.dz-last{margin-top:24px;font-size:11px;color:var(--dz-c-text3)}
+/* 从首屏点进来的临时切片：告诉用户「你现在看的是哪一批」，一个 chip，不是一段话 */
+.dz-slice{display:inline-flex;align-items:center;gap:8px;padding:2px 8px;border-radius:var(--dz-radius-s);
+  background:var(--dz-accent-bg);color:var(--dz-c-accent);font-size:13px}
+.dz-slice b{font-weight:600}
+.dz-slice .x{cursor:pointer;color:var(--dz-c-text3);font-size:13px}
+.dz-slice .x:hover{color:var(--dz-c-text)}
+
 /* ── 顶栏 ── */
 .dz-header{height:var(--dz-header-h);display:flex;align-items:center;gap:16px;padding:0 16px;
   background:var(--dz-glass);backdrop-filter:blur(14px);border-bottom:1px solid var(--dz-c-line);
