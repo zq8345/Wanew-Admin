@@ -1813,11 +1813,18 @@ async function saveSeo() {
   const edits = collectSeoEdits();
   if (!edits.length) return msg("没有改动");
   const p = seoPages.find((x) => x.slug === seoActive);
-  if (!confirm(`将保存「${p ? p.label : seoActive}」页的 ${edits.length} 处 meta 到官网仓（重烘焙该页四语、≈1分钟上线）。\n此操作直接修改生产官网仓。确定？`)) return;
+  if (!confirm(`将保存「${p ? p.label : seoActive}」页的 ${edits.length} 处 meta 到官网仓。\n此操作直接修改生产官网仓。确定？`)) return;
   const btn = $("#btn-seo-save"); btn.disabled = true; btn.textContent = "保存中…";
   try {
     const r = await api("/seo/" + encodeURIComponent(seoActive), { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ edits }) });
-    msg(`✅ 已保存 ${seoActive} SEO（commit ${(r.commit || "").slice(0, 7)}）· 写 ${(r.files || []).length} 文件 · ≈1分钟官网可见`);
+    // 🔴 提示**由真实结果派生**，不写死一句承诺：
+    //    数一数这次到底渲染了几个页面。faq / compatibility 的顶层页已并进 /guides/ 并 301，
+    //    保存时 **0 个页面被渲染**（只提交 json），而原来的文案说"≈1分钟官网可见" —— 那是假的。
+    // ⚠️ 派生而不是照情况写死两句话：将来渲染目标若改了，这句话会自己跟着对。
+    const wrote = (r.files || []).filter((f) => /\.html$/.test(f)).length;
+    msg(wrote
+      ? `✅ 已保存（${(r.commit || "").slice(0, 7)}）· 更新了 ${wrote} 个页面，约 1 分钟后官网可见`
+      : `✅ 数据已保存（${(r.commit || "").slice(0, 7)}）\n⚠️ 这一页的页面由官网构建产出（本页已并入 /guides/），改动要等下一次站点构建才可见——别等自动生效。`, 0);
     await loadSeo();
   } catch (e) { msg("保存失败：" + e.message, 1); }
   btn.disabled = false; btn.textContent = "🚀 保存此页 SEO";

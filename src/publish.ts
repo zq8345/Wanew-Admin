@@ -915,7 +915,13 @@ export async function publishPageMeta(env: Env, cfg: any, ctx: Ctx, slug: string
     const dir = dirOf(locale);
     const rel = dir ? `${dir}/${slug}/index.html` : `${slug}/index.html`;
     const isExtra = (locales.render_extra || []).includes(locale);
-    if (!ctx.pagesList.has(rel) && !isExtra) continue;
+    // 🔴 `render_extra`（zh）那条播种旁路会**绕过存在性守卫** —— 它的本意是"enabled 缺页不创建，
+    //    但 zh 可以从模板播种"。可是当**整个页面已经下线**时（faq/compatibility 已并进 /guides/ 并 301），
+    //    这条旁路会凭空建出 `zh/faq/index.html` —— **在一个 301 老址上复活一个页面**，
+    //    而且没有任何东西会报错。实测：faq/compatibility 的四个语种页当前一个都不存在。
+    // ⇒ 播种的前提是"这一页还活着"：默认 locale 有页，才谈得上给 zh 补一份。
+    const baseRel = `${slug}/index.html`;
+    if (!ctx.pagesList.has(rel) && !(isExtra && ctx.pagesList.has(baseRel))) continue;
     const h0 = renderPage(tpl, { locale, catalog: catBase, urlOf, path: `/${slug}/`, dirOf, enabled: locales.enabled, internal_noindex: INTERNAL, config: contactCfg } as any);
     const { html, errors } = chrome.applyChrome((h0 as string).replace(/\r/g, ""), rel);
     chromeErrors.push(...errors);
