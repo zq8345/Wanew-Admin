@@ -819,7 +819,7 @@ function setStatusTab(v) { const s = $("#f-status"); if (s) s.value = v; renderR
 function paintStatusTabs() {
   const cur = ($("#f-status") || {}).value || "";
   const cnt = (st) => st ? products.filter((p) => (p.status || "published") === st).length : products.length;
-  const tab = (v, label) => `<button class="stab${cur === v ? " on" : ""}" onclick="setStatusTab('${v}')">${label}<span class="stab-n">${cnt(v)}</span></button>`;
+  const tab = (v, label) => `<button class="stab${cur === v ? " on" : ""}" data-v="${esc(v)}" onclick="setStatusTab(this.dataset.v)">${label}<span class="stab-n">${cnt(v)}</span></button>`;
   const box = $("#status-tabs"); if (box) box.innerHTML = tab("", "全部") + tab("published", "在线") + tab("archived", "下架") + tab("draft", "草稿箱");
 }
 function renderRows() {
@@ -1074,7 +1074,7 @@ const LANG_LABEL = { "en": "English", "pt-BR": "Português", "es-MX": "Español"
 const langName = (loc) => LANG_LABEL[loc] || loc;
 // 渲染语言 tab 栏；scopeSel=字段容器选择器（切换只 toggle 该容器内 .lf[data-lang] 的可见性，不重渲染=零丢失编辑）
 function langTabBar(locales, scopeSel) {
-  return `<div class="langtabs">` + locales.map((l, i) => `<button class="langtab${i === 0 ? " active" : ""}" data-lang="${esc(l)}" onclick="setLang(this,'${scopeSel}')">${esc(langName(l))}</button>`).join("") + `</div>`;
+  return `<div class="langtabs">` + locales.map((l, i) => `<button class="langtab${i === 0 ? " active" : ""}" data-lang="${esc(l)}" data-scope="${esc(scopeSel)}" onclick="setLang(this,this.dataset.scope)">${esc(langName(l))}</button>`).join("") + `</div>`;
 }
 function setLang(btn, scopeSel) {
   btn.parentElement.querySelectorAll(".langtab").forEach((b) => b.classList.toggle("active", b === btn));
@@ -1519,7 +1519,7 @@ function paintGuidesLib() {
       <input type="search" id="g-q" placeholder="搜标题 / slug / 编号…" value="${esc(guidesQ)}" oninput="guidesSearch(this.value)">
       <div class="gchips">
         <button class="gchip${guidesTopic ? "" : " on"}" onclick="guidesFilter('')">全部 <span class="c">${arts.length}</span></button>
-        ${topics.map((t) => `<button class="gchip${guidesTopic === t ? " on" : ""}" onclick="guidesFilter('${esc(t)}')">${esc(axisName(t))} <span class="c">${counts[t]}</span></button>`).join("")}
+        ${topics.map((t) => `<button class="gchip${guidesTopic === t ? " on" : ""}" data-topic="${esc(t)}" onclick="guidesFilter(this.dataset.topic)">${esc(axisName(t))} <span class="c">${counts[t]}</span></button>`).join("")}
       </div>
     </div>
     ${(q || guidesTopic) ? `<p class="muted" style="font-size:11.5px;margin:0 0 8px">显示 ${shown.length} / ${arts.length} 篇</p>` : ""}
@@ -1564,7 +1564,7 @@ async function loadSeo() {
   paintSeoTabs(); paintSeo();
 }
 function paintSeoTabs() {
-  $("#seo-tabs").innerHTML = seoPages.map((p) => `<button class="dz-tab${p.slug === seoActive ? " active" : ""}" onclick="seoTab('${esc(p.slug)}')">${esc(p.label)}</button>`).join("");
+  $("#seo-tabs").innerHTML = seoPages.map((p) => `<button class="dz-tab${p.slug === seoActive ? " active" : ""}" data-slug="${esc(p.slug)}" onclick="seoTab(this.dataset.slug)">${esc(p.label)}</button>`).join("");
 }
 function seoTab(slug) { seoActive = slug; paintSeoTabs(); paintSeo(); const l = $("#seo-site-link"); if (l) l.href = "https://wanew.com/" + slug + "/"; }
 // Google 截断阈值（字符数近似；真实是像素宽度，但字符数足够当护栏用）
@@ -1636,7 +1636,7 @@ function paintSeoCompleteness() {
       if (filled) ok++;
       cells.push(`<span class="dot ${filled ? "ok" : "miss"}" title="${esc(p.label)} · ${esc(SEO_FIELD_LABEL[f] || f)} · ${esc(langName(loc))}：${filled ? "已填" : "空"}"></span>`);
     }
-    return `<a href="javascript:void(0)" class="${p.slug === seoActive ? "on" : ""}" onclick="seoTab('${esc(p.slug)}')" title="${p.hasFile ? "" : "官网仓里还没有这页的数据文件"}">
+    return `<a href="javascript:void(0)" class="${p.slug === seoActive ? "on" : ""}" data-slug="${esc(p.slug)}" onclick="seoTab(this.dataset.slug)" title="${p.hasFile ? "" : "官网仓里还没有这页的数据文件"}">
       <span class="nm">${esc(p.label)}${p.hasFile ? "" : " ⚠️"}</span>
       <span class="dots">${cells.join("")}<span class="lg">${ok}/${total}</span></span></a>`;
   }).join("");
@@ -1730,8 +1730,8 @@ function paintMedia() {
   // 根视图：文件夹以卡片出现在主内容区（点进入）——删除入口仅管理态露出(防误删)
   const cardsHtml = (atRoot && kindFolders.length) ? `<div class="fcards">` + kindFolders.map((fd) => {
     const n = kindItems.filter((m) => m.folder === fd).length;
-    return `<div class="fcard" onclick="folderSetFilter('${esc(fd)}')" title="进入「${esc(fd)}」">
-      ${manageMode ? `<button class="fcard-del" title="删除文件夹（内容退回未归类，不删文件）" onclick="event.stopPropagation();folderDelete('${esc(fd)}')">×</button>` : ""}
+    return `<div class="fcard" data-folder="${esc(fd)}" onclick="folderSetFilter(this.dataset.folder)" title="进入「${esc(fd)}」">
+      ${manageMode ? `<button class="fcard-del" title="删除文件夹（内容退回未归类，不删文件）" data-folder="${esc(fd)}" onclick="event.stopPropagation();folderDelete(this.dataset.folder)">×</button>` : ""}
       <div class="fcard-ic">📁</div><div class="fcard-name" title="${esc(fd)}">${esc(fd)}</div><div class="fcard-n">${n} ${unit}</div>
     </div>`;
   }).join("") + `</div>` : "";
@@ -1739,16 +1739,16 @@ function paintMedia() {
   const folderOpts = (cur) => `<option value=""${!cur ? " selected" : ""}>未归类</option>` + kindFolders.map((fd) => `<option value="${esc(fd)}"${cur === fd ? " selected" : ""}>${esc(fd)}</option>`).join("");
   const tilesHtml = list.map((m) => `
     <div class="mtile${mediaSel.has(m.key) ? " sel" : ""}">
-      <label class="mtile-sel"><input type="checkbox" ${mediaSel.has(m.key) ? "checked" : ""} onchange="mediaToggleSel('${esc(m.key)}',this)"></label>
+      <label class="mtile-sel"><input type="checkbox" ${mediaSel.has(m.key) ? "checked" : ""} data-key="${esc(m.key)}" onchange="mediaToggleSel(this.dataset.key,this)"></label>
       ${isV ? `<video src="${esc(m.url)}#t=0.1" preload="metadata" muted playsinline title="${esc(m.key)}"></video>` : `<img src="${esc(m.url)}" loading="lazy" title="${esc(m.key)}">`}
       <div class="mtile-key" title="${esc(m.name ? m.name + " · " + m.key : m.key)}">${esc(m.name || m.key.split("/").pop())}</div>
       <div class="mtile-tag">${isV ? `<span class="pill">▶ 视频</span>` : (m.tag === "clean" ? `<span class="pill">干净产品图</span>` : m.tag === "marketing" ? `<span class="pill pf">营销拼图</span>` : `<span class="muted">未标</span>`)}</div>
-      <select class="mtile-folder" onchange="mediaMoveFolder('${esc(m.key)}',this.value)" title="归入文件夹">${folderOpts(m.folder)}</select>
+      <select class="mtile-folder" data-key="${esc(m.key)}" onchange="mediaMoveFolder(this.dataset.key,this.value)" title="归入文件夹">${folderOpts(m.folder)}</select>
       <div class="mtile-act">
-        ${isV ? "" : `<button onclick="mediaTag('${esc(m.key)}','clean')">干净</button>
-        <button onclick="mediaTag('${esc(m.key)}','marketing')">营销</button>
-        <button onclick="mediaTag('${esc(m.key)}','')">清标</button>`}
-        ${manageMode ? `<button onclick="mediaRename('${esc(m.key)}')" title="改显示名（不改文件/key）">改名</button><button class="danger" onclick="mediaDelete('${esc(m.key)}')">删</button>` : ""}
+        ${isV ? "" : `<button data-key="${esc(m.key)}" onclick="mediaTag(this.dataset.key,'clean')">干净</button>
+        <button data-key="${esc(m.key)}" onclick="mediaTag(this.dataset.key,'marketing')">营销</button>
+        <button data-key="${esc(m.key)}" onclick="mediaTag(this.dataset.key,'')">清标</button>`}
+        ${manageMode ? `<button data-key="${esc(m.key)}" onclick="mediaRename(this.dataset.key)" title="改显示名（不改文件/key）">改名</button><button class="danger" data-key="${esc(m.key)}" onclick="mediaDelete(this.dataset.key)">删</button>` : ""}
       </div>
     </div>`).join("");
   // 文件夹引导（治"0 夹 N 未归类"）：根视图 + 未归类多 + 文件夹少 时，提示 + 建议文件夹一键建
@@ -1756,7 +1756,7 @@ function paintMedia() {
   const nUn = kindItems.filter((m) => !m.folder).length;
   const guideHtml = (atRoot && nUn >= 3 && kindFolders.length < 2) ? `<div class="fguide">
     <div class="fguide-t">📁 把${isV ? "视频" : "图片"}归类到文件夹更好找<span class="fguide-n">当前 ${nUn} 个未归类</span></div>
-    <div class="fguide-chips">${suggest.map((s) => `<button onclick="quickFolder('${esc(s)}')">＋ ${esc(s)}</button>`).join("")}<button class="fguide-custom" onclick="folderCreate()">＋ 自定义…</button></div>
+    <div class="fguide-chips">${suggest.map((s) => `<button data-folder="${esc(s)}" onclick="quickFolder(this.dataset.folder)">＋ ${esc(s)}</button>`).join("")}<button class="fguide-custom" onclick="folderCreate()">＋ 自定义…</button></div>
     <div class="fguide-hint">建好后：勾选素材 → 底部「移入所选文件夹」批量归类，或用每张卡的下拉逐个归入。</div>
   </div>` : "";
   $("#media-grid").innerHTML = (guideHtml + cardsHtml + tilesHtml) || `<div class="card muted">${atRoot ? (isV ? "视频库为空——点右上「上传」添加，或「新建文件夹」归类" : "图片库为空") : `此文件夹暂无${isV ? "视频" : "图片"}`}${mediaFilter ? "（此标签筛选下）" : ""}</div>`;
@@ -2215,7 +2215,7 @@ function paintAudit(r) {
       <td class="tnum" style="font-size:12px">${esc(e.operator)}</td>
       <td><span class="pill pf">${esc(e.opType)}</span></td>
       <td style="font-size:12.5px">${esc(e.operation)}</td>
-      <td>${e.url ? `<a class="ttl-link" href="${esc(e.url)}" target="_blank"><span class="tnum">${esc(e.sha)}</span> <span class="ext">↗</span></a>` : `<span class="tnum muted">${esc(e.sha)}</span>`} <button class="af-toggle" onclick="auditDetail('${esc(e.sha)}',this)">▸ 详情</button></td>
+      <td>${e.url ? `<a class="ttl-link" href="${esc(e.url)}" target="_blank"><span class="tnum">${esc(e.sha)}</span> <span class="ext">↗</span></a>` : `<span class="tnum muted">${esc(e.sha)}</span>`} <button class="af-toggle" data-sha="${esc(e.sha)}" onclick="auditDetail(this.dataset.sha,this)">▸ 详情</button></td>
     </tr>`).join("") || `<tr><td colspan="5" class="muted">无匹配的后台操作记录</td></tr>`;
   $("#audit-more").style.display = r.hasMore ? "" : "none";
 }
