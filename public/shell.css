@@ -9,6 +9,55 @@
    （官网 skin/css/w3.css 的 :root 逐字节切片，纳入 vendor 漂移守卫）。本文件在其之后加载，
    只放 admin 自己的东西，且**一律 --dz-* 前缀**：这样"admin 不重定义品牌令牌"变成一条
    可机器检查的规则（scripts/token-lint.mjs），而不是靠人记得。 */
+/* ══ 主题别名层 ═══════════════════════════════════════════════════════════
+   admin 的样式一律引用 `--dz-c-*`，它**默认恒等于**对应的 `--w3-*` 品牌令牌。
+   🔴 为什么绕这一层：token-lint 禁止 admin 定义 `--w3-*`（真源在官网 skin/css/w3.css），
+      而 w3-tokens.css 是逐字节镜像、改了 vendor 守卫会红 —— **两条路都堵死，只剩别名。**
+   ⭐ "默认恒等"不是权宜，它是判据：**不带 data-theme 时渲染必须与加这层之前一字不差。**
+      （已实测：暗色下 12 类元素的计算样式逐条相同。）
+   ⚠️ 新写样式请用 `--dz-c-*`，别直接写 `--w3-*` —— 否则那条规则不会跟着主题走，
+      于是浅色下冒出一块暗的，而且只在切主题时才看得见。 */
+:root{
+  --dz-c-bg:var(--w3-bg); --dz-c-bg2:var(--w3-bg2);
+  --dz-c-panel:var(--w3-panel); --dz-c-panel2:var(--w3-panel2);
+  --dz-c-line:var(--w3-line); --dz-c-line2:var(--w3-line2);
+  --dz-c-text:var(--w3-text); --dz-c-text2:var(--w3-text2); --dz-c-text3:var(--w3-text3);
+  --dz-c-tile:var(--w3-tile); --dz-c-accent:var(--w3-accent); --dz-c-ink:var(--w3-ink);
+}
+/* ── 浅色（工作台）主题 ─────────────────────────────────────────────────────
+   Joe 的原话是"一进去就感觉沉闷" —— 那不是"乱"，是**整个界面活在亮度最底下的 13% 里**。
+   秩序再好，一块永远不亮的屏幕就是压抑的。所以这里换的是明度体系，密度/字阶/截断全部沿用。
+   三件：① 真亮面（近白底 + 纯白卡片，明度跨度拉到 90%+，不停在灰）
+        ② 焦点提亮（产品图放大当每行的视觉锚 —— 目录里图就是内容）
+        ③ 灰带色相（纯中性灰是死气最快的路径；冷调，且各层级倾向略不同） */
+:root[data-theme="light"]{
+  --dz-c-bg:#EEF1F6;        /* 页面底：带一点蓝紫倾向的冷灰 */
+  --dz-c-bg2:#F7F9FC;       /* 次级面（输入框/浅槽） */
+  --dz-c-panel:#FFFFFF;     /* 卡片/面板：纯白 —— 明度跨度 93%→100% */
+  --dz-c-panel2:#EDF1F7;    /* hover/选中：比底稍冷、稍深 */
+  --dz-c-line:#DDE3EC;      /* 发丝线：比面板深一档，倾向更冷 */
+  --dz-c-line2:#C9D2DF;
+  --dz-c-text:#141922;      /* 主要文字：近黑但偏冷，对白 ≈ 16.5:1 */
+  --dz-c-text2:#4E5967;     /* 次要 ≈ 7.9:1 */
+  --dz-c-text3:#7C8797;     /* 三级：只用于标签，不承载信息 */
+  --dz-c-tile:#F2F5F9;
+  --dz-c-accent:#2563C7;    /* 强调蓝在浅底上要压暗，否则对白只有 3:1 */
+  --dz-c-ink:#FFFFFF;
+  /* 密集模式的四级明度在浅色下反向：L0 最亮 → L3 最深 */
+  --dz-l0:#EEF1F6; --dz-l1:#FFFFFF; --dz-l2:#FFFFFF; --dz-l3:#E7ECF4; --dz-hair:#DDE3EC;
+  --dz-t1:#141922; --dz-t2:#4E5967; --dz-t3:#7C8797;
+  --dz-ok-2:#1B7A45; --dz-draft-2:#8A6116; --dz-err-2:#A8383A;   /* 语义色压暗，保住对白底的对比 */
+  --dz-on-accent:#FFFFFF; --dz-accent-hi:#1B4E9E;
+  --dz-accent-bg:rgba(37,99,199,.10); --dz-accent-bg-soft:rgba(37,99,199,.05);
+  --dz-glass:rgba(238,241,246,.86);
+  --dz-ok:#1B7A45; --dz-err:#A8383A; --dz-warn:#8A6116;
+  --dz-ok-bg:rgba(27,122,69,.10);  --dz-ok-line:rgba(27,122,69,.32);
+  --dz-err-bg:rgba(168,56,58,.09); --dz-err-line:rgba(168,56,58,.34);
+  --dz-warn-bg:rgba(138,97,22,.10); --dz-warn-line:rgba(138,97,22,.34);
+}
+/* ② 焦点提亮：产品图是这一页唯一有视觉的东西，40px 等于把它丢掉了。
+   ⚠️ 浅色下才这么放 —— 暗色下白底产品图放大会变成一块发光补丁（那正是"每张图都在喊"）。 */
+:root[data-theme="light"] .thumb{width:56px;height:56px;background:#FFFFFF;box-shadow:0 0 0 1px #E5EAF2}
 :root{
   /* 密度层（D-token：CRM 实测紧凑值对齐 8px 网格，总工拍板照收） */
   --dz-control-h:32px; --dz-row-py:8px; --dz-cell-px:10px; --dz-panel-pad:16px;
@@ -36,67 +85,67 @@
 /* 13px = 密集模式的正文档（规格 §5：只四档 20/15/13/11）。原来是 14px，于是每个没有显式字号的
    容器都贡献一档"14"，一屏轻松七种字号 —— 而**六档字号 = 没有层级**。行高 20px 走音阶。 */
 body{margin:0;font:13px/20px Inter,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
-  background:var(--w3-bg);color:var(--w3-text);-webkit-font-smoothing:antialiased}
+  background:var(--dz-c-bg);color:var(--dz-c-text);-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font:inherit;color:inherit}
-a{color:var(--w3-accent);text-decoration:none}
+a{color:var(--dz-c-accent);text-decoration:none}
 a:hover{text-decoration:underline}
 .tnum{font-variant-numeric:tabular-nums}
-.muted{color:var(--w3-text3)}
+.muted{color:var(--dz-c-text3)}
 /* W4：收重复出现的一次性样式。**只收重复的** —— 一次性布局若逐个建类，会得到一堆只用一次的类，
    那比 inline 更糟（同样的一次性样式多一层间接）。§3 的规则是"每类组件只有一种实现"，不是"零 inline"。 */
-.h3sub{font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--w3-text3)}  /* 卡片标题里的副标签：解掉 h3 的大写/字距 */
-.note{font-size:13px;color:var(--w3-text3);margin:0 0 12px}                                        /* 工具栏下方的说明段 */
+.h3sub{font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--dz-c-text3)}  /* 卡片标题里的副标签：解掉 h3 的大写/字距 */
+.note{font-size:13px;color:var(--dz-c-text3);margin:0 0 12px}                                        /* 工具栏下方的说明段 */
 .ta-r{text-align:right}                                                                            /* 数字列右对齐（配 .tnum 用） */
-.hint-q{cursor:help;border-bottom:1px dotted var(--w3-text3)}                                       /* 带 tooltip 的问号提示 */
+.hint-q{cursor:help;border-bottom:1px dotted var(--dz-c-text3)}                                       /* 带 tooltip 的问号提示 */
 
 /* ── 顶栏 ── */
 .dz-header{height:var(--dz-header-h);display:flex;align-items:center;gap:16px;padding:0 16px;
-  background:var(--dz-glass);backdrop-filter:blur(14px);border-bottom:1px solid var(--w3-line);
+  background:var(--dz-glass);backdrop-filter:blur(14px);border-bottom:1px solid var(--dz-c-line);
   position:sticky;top:0;z-index:50}
-.dz-logo{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;letter-spacing:.02em;font-size:15px;color:var(--w3-text)}
-.dz-logo .mark{width:22px;height:22px;border-radius:5px;background:linear-gradient(135deg,var(--w3-accent),#4d84e6);
+.dz-logo{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;letter-spacing:.02em;font-size:15px;color:var(--dz-c-text)}
+.dz-logo .mark{width:22px;height:22px;border-radius:5px;background:linear-gradient(135deg,var(--dz-c-accent),#4d84e6);
   display:grid;place-items:center;color:#0a0c0f;font-size:13px;font-weight:800}
-.dz-logo .sub{color:var(--w3-text3);font-weight:500;font-size:11px}
+.dz-logo .sub{color:var(--dz-c-text3);font-weight:500;font-size:11px}
 .dz-search{flex:1;max-width:420px;position:relative}
-.dz-search input{width:100%;height:var(--dz-control-h);background:var(--w3-bg2);border:1px solid var(--w3-line);
-  border-radius:var(--dz-radius-s);padding:0 12px 0 32px;color:var(--w3-text);font-size:13px}
-.dz-search input::placeholder{color:var(--w3-text3)}
-.dz-search input:focus{outline:none;border-color:var(--w3-accent)}
-.dz-search .ic{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--w3-text3);font-size:13px;pointer-events:none}
+.dz-search input{width:100%;height:var(--dz-control-h);background:var(--dz-c-bg2);border:1px solid var(--dz-c-line);
+  border-radius:var(--dz-radius-s);padding:0 12px 0 32px;color:var(--dz-c-text);font-size:13px}
+.dz-search input::placeholder{color:var(--dz-c-text3)}
+.dz-search input:focus{outline:none;border-color:var(--dz-c-accent)}
+.dz-search .ic{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--dz-c-text3);font-size:13px;pointer-events:none}
 .dz-header .spacer{flex:1}
-.dz-user{display:flex;align-items:center;gap:8px;color:var(--w3-text2);font-size:13px;
+.dz-user{display:flex;align-items:center;gap:8px;color:var(--dz-c-text2);font-size:13px;
   padding:4px 8px;border-radius:var(--dz-radius-s);border:1px solid transparent;white-space:nowrap}
-.dz-user .av{width:22px;height:22px;border-radius:50%;background:var(--w3-panel2);border:1px solid var(--w3-line2);
-  display:grid;place-items:center;font-size:11px;color:var(--w3-text)}
+.dz-user .av{width:22px;height:22px;border-radius:50%;background:var(--dz-c-panel2);border:1px solid var(--dz-c-line2);
+  display:grid;place-items:center;font-size:11px;color:var(--dz-c-text)}
 
 /* ── 布局 ── */
 .dz-wrap{display:flex;gap:var(--dz-gap);padding:var(--dz-gap);height:calc(100vh - var(--dz-header-h))}
 
 /* ── 左栏 ── */
-.dz-side{width:var(--dz-nav-w);flex-shrink:0;background:var(--w3-panel);border:1px solid var(--w3-line);
+.dz-side{width:var(--dz-nav-w);flex-shrink:0;background:var(--dz-c-panel);border:1px solid var(--dz-c-line);
   border-radius:var(--dz-radius);padding:12px;display:flex;flex-direction:column;overflow:auto}
-.dz-eyebrow{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--w3-text3);
+.dz-eyebrow{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--dz-c-text3);
   padding:0 8px;margin:12px 0 4px}
 .dz-eyebrow:first-child{margin-top:2px}
 .dz-nav-item{display:flex;align-items:center;gap:8px;padding:var(--dz-nav-item-py) 12px;border-radius:var(--dz-radius-s);
-  color:var(--w3-text3);cursor:pointer;font-size:13px;position:relative;
+  color:var(--dz-c-text3);cursor:pointer;font-size:13px;position:relative;
   transition:background .15s var(--dz-ease),color .15s var(--dz-ease)}
 .dz-nav-item .ic{width:16px;text-align:center;opacity:.9;font-size:13px;flex-shrink:0}
-.dz-nav-item:hover{background:var(--w3-panel2);color:var(--w3-text2)}
-.dz-nav-item.active{background:var(--w3-panel2);color:var(--w3-text);font-weight:600}
-.dz-nav-item.active::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:2px;background:var(--w3-accent)}
-.dz-nav-item .cnt{margin-left:auto;font-size:11px;color:var(--w3-text3);font-variant-numeric:tabular-nums}
-.dz-nav-item.active .cnt{color:var(--w3-accent)}
+.dz-nav-item:hover{background:var(--dz-c-panel2);color:var(--dz-c-text2)}
+.dz-nav-item.active{background:var(--dz-c-panel2);color:var(--dz-c-text);font-weight:600}
+.dz-nav-item.active::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:2px;background:var(--dz-c-accent)}
+.dz-nav-item .cnt{margin-left:auto;font-size:11px;color:var(--dz-c-text3);font-variant-numeric:tabular-nums}
+.dz-nav-item.active .cnt{color:var(--dz-c-accent)}
 /* Phase 1 未建的分区：明示 soon，不装成可用（灰按钮必写原因） */
 .dz-nav-item.soon{opacity:.5;cursor:not-allowed}
-.dz-nav-item.soon:hover{background:transparent;color:var(--w3-text3)}
-.dz-nav-item .soon-tag{margin-left:auto;font-size:11px;letter-spacing:.06em;color:var(--w3-text3);
-  border:1px solid var(--w3-line);border-radius:4px;padding:0 4px}
-.dz-side-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--w3-line);display:flex;flex-direction:column;gap:2px}
+.dz-nav-item.soon:hover{background:transparent;color:var(--dz-c-text3)}
+.dz-nav-item .soon-tag{margin-left:auto;font-size:11px;letter-spacing:.06em;color:var(--dz-c-text3);
+  border:1px solid var(--dz-c-line);border-radius:4px;padding:0 4px}
+.dz-side-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--dz-c-line);display:flex;flex-direction:column;gap:2px}
 .dz-logo img{height:20px;display:block}
-.dz-user-foot{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--w3-text2);border-radius:var(--dz-radius-s);cursor:pointer}
-.dz-user-foot:hover{background:var(--w3-panel2)}
-.dz-user-foot .av{width:20px;height:20px;border-radius:50%;background:var(--w3-panel2);border:1px solid var(--w3-line2);display:grid;place-items:center;font-size:11px;color:var(--w3-text);flex-shrink:0}
+.dz-user-foot{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:13px;color:var(--dz-c-text2);border-radius:var(--dz-radius-s);cursor:pointer}
+.dz-user-foot:hover{background:var(--dz-c-panel2)}
+.dz-user-foot .av{width:20px;height:20px;border-radius:50%;background:var(--dz-c-panel2);border:1px solid var(--dz-c-line2);display:grid;place-items:center;font-size:11px;color:var(--dz-c-text);flex-shrink:0}
 /* 当前登录人必须看得全——"我现在是谁的身份在操作"是基本信息，截断成 joe@wanew.com… 等于没写。
    184px 侧栏放不下一行邮箱，就让它换行，不截断。 */
 .dz-user-foot .who{white-space:normal;word-break:break-all;line-height:1.35;min-width:0}
@@ -106,41 +155,41 @@ a:hover{text-decoration:underline}
 .dz-acct{position:relative}
 .dz-acct > summary{cursor:pointer;list-style:none;user-select:none}
 .dz-acct > summary::-webkit-details-marker{display:none}
-.dz-acct > summary:hover{background:var(--w3-panel2);border-radius:var(--dz-radius-s)}
-.dz-acct > summary:focus-visible{outline:2px solid var(--w3-accent);outline-offset:-2px;border-radius:var(--dz-radius-s)}
-.dz-acct .caret{margin-left:auto;color:var(--w3-text3);font-size:11px;flex:none;transition:transform .12s var(--dz-ease)}
+.dz-acct > summary:hover{background:var(--dz-c-panel2);border-radius:var(--dz-radius-s)}
+.dz-acct > summary:focus-visible{outline:2px solid var(--dz-c-accent);outline-offset:-2px;border-radius:var(--dz-radius-s)}
+.dz-acct .caret{margin-left:auto;color:var(--dz-c-text3);font-size:11px;flex:none;transition:transform .12s var(--dz-ease)}
 .dz-acct[open] .caret{transform:rotate(180deg)}
 .dz-logout{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0 0 24px;font-size:13px;
-  color:var(--w3-text3)!important;border-radius:var(--dz-radius-s);text-decoration:none;
-  border:1px solid var(--w3-line);background:var(--w3-bg2)}
+  color:var(--dz-c-text3)!important;border-radius:var(--dz-radius-s);text-decoration:none;
+  border:1px solid var(--dz-c-line);background:var(--dz-c-bg2)}
 .dz-logout:hover{background:var(--dz-err-bg);border-color:var(--dz-err-line);color:var(--dz-err)!important;text-decoration:none}
-.dz-logout:focus-visible{outline:2px solid var(--w3-accent);outline-offset:1px}
-.dz-deploy{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:11px;color:var(--w3-text3)}
+.dz-logout:focus-visible{outline:2px solid var(--dz-c-accent);outline-offset:1px}
+.dz-deploy{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:11px;color:var(--dz-c-text3)}
 .dz-deploy .dot{width:7px;height:7px;border-radius:50%;background:var(--dz-ok);box-shadow:0 0 6px var(--dz-ok);flex-shrink:0}
 
 /* ── 主面板 ── */
-.dz-main{flex:1;overflow:auto;background:var(--w3-panel);border:1px solid var(--w3-line);
+.dz-main{flex:1;overflow:auto;background:var(--dz-c-panel);border:1px solid var(--dz-c-line);
   border-radius:var(--dz-radius);padding:var(--dz-panel-pad)}
 .dz-pagehead{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
 .dz-pagehead h1{font-size:18px;margin:0;font-weight:700;letter-spacing:-.01em}
-.dz-pagehead .meta{color:var(--w3-text3);font-size:11px}
+.dz-pagehead .meta{color:var(--dz-c-text3);font-size:11px}
 
 /* ── 工具栏 / 表单控件 ── */
 .dz-toolbar{display:flex;align-items:center;gap:var(--dz-gap-sm);margin-bottom:12px;flex-wrap:wrap}
 .dz-toolbar .spacer{flex:1}
-.dz-field{height:var(--dz-control-h);background:var(--w3-bg2);border:1px solid var(--w3-line);
-  border-radius:var(--dz-radius-s);padding:0 8px;color:var(--w3-text);font-size:13px}
-.dz-field:focus{outline:none;border-color:var(--w3-accent)}
+.dz-field{height:var(--dz-control-h);background:var(--dz-c-bg2);border:1px solid var(--dz-c-line);
+  border-radius:var(--dz-radius-s);padding:0 8px;color:var(--dz-c-text);font-size:13px}
+.dz-field:focus{outline:none;border-color:var(--dz-c-accent)}
 select.dz-field{cursor:pointer}
 textarea.dz-field{height:auto;padding:8px 8px;resize:vertical;line-height:1.5}
 
 /* ── 按钮（D-btn：accent 主 / 幽灵次 / 克制 danger，总工拍板）── */
-.dz-btn{height:var(--dz-control-h);padding:0 12px;border-radius:var(--dz-radius-s);border:1px solid var(--w3-line2);
-  background:transparent;color:var(--w3-text);font-size:13px;cursor:pointer;display:inline-flex;align-items:center;
+.dz-btn{height:var(--dz-control-h);padding:0 12px;border-radius:var(--dz-radius-s);border:1px solid var(--dz-c-line2);
+  background:transparent;color:var(--dz-c-text);font-size:13px;cursor:pointer;display:inline-flex;align-items:center;
   gap:8px;white-space:nowrap;transition:.15s var(--dz-ease)}
-.dz-btn:hover{background:var(--w3-panel2);border-color:rgba(255,255,255,.28)}
+.dz-btn:hover{background:var(--dz-c-panel2);border-color:rgba(255,255,255,.28)}
 .dz-btn:disabled{opacity:.45;cursor:not-allowed}
-.dz-btn--primary{background:var(--w3-accent);border-color:var(--w3-accent);color:var(--dz-on-accent);font-weight:600}
+.dz-btn--primary{background:var(--dz-c-accent);border-color:var(--dz-c-accent);color:var(--dz-on-accent);font-weight:600}
 .dz-btn--primary:hover{background:var(--dz-accent-hi);border-color:var(--dz-accent-hi)}
 .dz-btn--danger{border-color:var(--dz-err-line);color:var(--dz-err);background:transparent}
 .dz-btn--danger:hover{background:var(--dz-err-bg);border-color:var(--dz-err)}
@@ -149,36 +198,36 @@ textarea.dz-field{height:auto;padding:8px 8px;resize:vertical;line-height:1.5}
 /* ── dense 表 ── */
 .dz-table{width:100%;border-collapse:collapse}
 .dz-table th,.dz-table td{text-align:left;padding:var(--dz-row-py) var(--dz-cell-px);
-  border-bottom:1px solid var(--w3-line);vertical-align:middle}
-.dz-table th{color:var(--w3-text3);font-weight:600;font-size:12px;letter-spacing:.02em;
-  position:sticky;top:0;background:var(--w3-panel);z-index:1;white-space:nowrap}
+  border-bottom:1px solid var(--dz-c-line);vertical-align:middle}
+.dz-table th{color:var(--dz-c-text3);font-weight:600;font-size:12px;letter-spacing:.02em;
+  position:sticky;top:0;background:var(--dz-c-panel);z-index:1;white-space:nowrap}
 .dz-table tbody tr{transition:background .12s var(--dz-ease)}
-.dz-table tbody tr:hover{background:var(--w3-panel2)}
-.dz-thumb{width:38px;height:38px;border-radius:8px;background:var(--w3-tile);object-fit:contain;padding:4px;display:block}
+.dz-table tbody tr:hover{background:var(--dz-c-panel2)}
+.dz-thumb{width:38px;height:38px;border-radius:8px;background:var(--dz-c-tile);object-fit:contain;padding:4px;display:block}
 .dz-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;white-space:nowrap;
-  border:1px solid var(--w3-line);background:var(--w3-bg2);color:var(--w3-text2)}
+  border:1px solid var(--dz-c-line);background:var(--dz-c-bg2);color:var(--dz-c-text2)}
 .dz-badge--accent{border-color:rgba(125,177,255,.28);background:rgba(125,177,255,.1);color:var(--dz-accent-hi)}
-.dz-check{width:15px;height:15px;accent-color:var(--w3-accent);cursor:pointer}
+.dz-check{width:15px;height:15px;accent-color:var(--dz-c-accent);cursor:pointer}
 
 /* ── 批量条 ── */
 .dz-bulk{display:none;align-items:center;gap:12px;padding:8px 12px;margin-bottom:10px;
   background:rgba(125,177,255,.08);border:1px solid rgba(125,177,255,.28);
   border-radius:var(--dz-radius-s);font-size:13px}
 .dz-bulk.on{display:flex;flex-wrap:wrap}
-.dz-bulk b{color:var(--w3-accent)}
+.dz-bulk b{color:var(--dz-c-accent)}
 
 /* ── toast ── */
-.dz-toast{position:fixed;bottom:18px;right:18px;background:var(--w3-panel);border:1px solid var(--w3-line);
+.dz-toast{position:fixed;bottom:18px;right:18px;background:var(--dz-c-panel);border:1px solid var(--dz-c-line);
   border-left:3px solid var(--dz-ok);border-radius:var(--dz-radius-s);padding:12px 16px;font-size:13px;
   display:none;max-width:420px;z-index:200;box-shadow:0 24px 60px -24px rgba(0,0,0,.55)}
 .dz-toast.err{border-left-color:var(--dz-err)}
-.dz-spin{display:inline-block;width:12px;height:12px;border:2px solid var(--w3-text3);border-top-color:transparent;
+.dz-spin{display:inline-block;width:12px;height:12px;border:2px solid var(--dz-c-text3);border-top-color:transparent;
   border-radius:50%;animation:dz-sp 1s linear infinite;vertical-align:-2px}
 @keyframes dz-sp{to{transform:rotate(360deg)}}
 
 /* focus-visible（承 v1 §4，禁 outline:none 不给替代）*/
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,
-.dz-nav-item:focus-visible{outline:2px solid var(--w3-accent);outline-offset:3px}
+.dz-nav-item:focus-visible{outline:2px solid var(--dz-c-accent);outline-offset:3px}
 
 /* ── 移动端：左栏收窄（抽屉留后续）── */
 @media (max-width:900px){
