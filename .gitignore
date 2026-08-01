@@ -1,6 +1,10 @@
-.dev.vars
+﻿.dev.vars
 node_modules/
 .wrangler/
+
+# scripts/dev.mjs 从 wrangler.jsonc 派生的本地配置（去掉 routes + 开本机旁路）。
+# 🔴 每次 `npm run dev` 重新生成，绝不入库：入库了它就成了第二个真源，本地与生产会静默分叉。
+.wrangler.dev.jsonc
 
 # r2-thumbs.mjs 的本地临时产物（原图/缩略图缓存），不入库
 .thumbtmp/
