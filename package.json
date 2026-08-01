@@ -9,6 +9,8 @@
     "guard:vendor": "node scripts/vendor.mjs check",
     "vendor:sync": "node scripts/vendor.mjs sync",
     "deploy": "wrangler deploy",
+    "ui-lab": "node tools/ui-lab.mjs",
+    "_comment_ui_lab": "量版式用：假后端 + 真前端 + 生产 68 条真数据，零凭据。⚠️ 只能量版式，验后端行为要用 npm run dev（真 worker）。量的时候贴 tools/measure.js —— 判据定义写在那里面，两个窗口才会量出同一个数。",
     "guard:tokens": "node scripts/token-lint.mjs",
     "preflight": "node scripts/preflight.mjs"
   },

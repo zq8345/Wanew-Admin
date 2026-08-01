@@ -49,11 +49,23 @@ printf '%s' "$TOKEN" | npx wrangler secret put GITHUB_TOKEN
 
 ```
 npm ci                   # 首次装依赖
-npm run dev              # wrangler dev --port 8790
+npm run dev              # 真 worker（8790）—— 验后端行为用这个
+npm run ui-lab           # 假后端 + 生产 68 条真数据（8792）—— 量版式用这个
 ```
 
-- `.dev.vars` 需含 `DEV_BYPASS_AUTH=1`（跳过 Cf-Access 头校验）+ `GITHUB_TOKEN`。
-- 任何本地验证前先证进程身份：单 PID 占 8790 + `GET /api/_whoami`（wrangler 僵尸会顶着端口装活）。
+**两个本地实例干的不是一件事，别混：**
+
+| | `npm run dev` | `npm run ui-lab` |
+|---|---|---|
+| 后端 | 真 worker、真代码路径 | 桩 |
+| 数据 | 要 `GITHUB_TOKEN`，**没有就是空列表** | 官网仓 `origin/main` 的 68 条，零凭据 |
+| 能回答 | 端点/鉴权/提交链路对不对 | 版式、密度、几何 |
+
+- 🔴 `npm run dev` **不能直接跑 `wrangler dev`**：它会用 `wrangler.jsonc` 的 `routes` 合成请求 host，本机也被当成 `admin.wanew.com`，鉴权旁路判定为"生产上出现后门"→ 500。`scripts/dev.mjs` 派生一份去掉 `routes` 的本地配置（每次重生成、已 gitignore），原委写在该文件顶部。
+- `.dev.vars` 只需放 `GITHUB_TOKEN`（旁路变量由派生配置提供，**不进 `.dev.vars`、更不进 `wrangler.jsonc`**）。
+  ⚠️ **本地实例前面没有 Access 门。** 要看数据请用**不勾任何权限的 PAT**——官网仓是公开的，读不需要权限；不给写权限 = 本地误点也提交不到生产。
+- 量界面**一律贴 `tools/measure.js`**，别各量各的：判据定义（"可见"=整行在视口内、"行距"=含发丝线的节距）是写成可执行代码放在那个文件里的。曾经我报 12 行、总工量出 11 行，两边都没量错——差的是没人写下定义。
+- 任何本地验证前先证进程身份：单 PID 占端口 + `GET /api/_whoami`（wrangler 僵尸会顶着端口装活）。
 
 ## 安全模型（M4，fail-closed）
 
