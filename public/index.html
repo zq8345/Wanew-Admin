@@ -40,6 +40,11 @@ table{width:100%;border-collapse:collapse}
 th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--dz-hair);font-size:13px;line-height:20px;vertical-align:middle}
 /* 表头：11px 全大写三级色、无底色、只留下沿发丝线（§7） */
 th{color:var(--dz-t3);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;background:transparent;white-space:nowrap}
+/* 表头行按 11px 的实际字号收紧：`th,td` 那条给了 20px 行高 + 8px 上下内边距，那是**给数据行的**
+   （数据行要装下 44px 缩略图）。表头只有一行 11px 的短标签，却按 13px 数据行的尺寸留白 ⇒ 39px。
+   16px 行高 + 4px 内边距（都在音阶上）⇒ 25px，省下的 14px 直接变成表格里的内容。
+   ⚠️ 只收表头，不动 `td` —— 数据行的 8px 是行高算式 44+8+8+1 的一部分，动它会改行距判据。 */
+#v-list thead th{padding-top:4px;padding-bottom:4px;line-height:16px}
 tr:hover td{background:var(--dz-l3)}                      /* hover 升到 L3，§8 */
 #rows td{background:transparent;transition:background .1s var(--dz-ease)}
 .thumb{width:40px;height:40px;object-fit:cover;background:var(--dz-l2);border-radius:4px;display:block}
@@ -437,7 +442,15 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
       <button class="danger" onclick="bulkDelete()">彻底删除</button>
       <button onclick="clearSel()">取消选择</button>
     </div>
-    <p class="note">批量操作走一次原子 commit（一次 Pages 重建、审计一条）。下架=软下架可恢复；彻底删除不可恢复。</p>
+    <!-- 🔴 这里原来有一段常驻说明：「批量操作走一次原子 commit…下架=软下架可恢复；彻底删除不可恢复。」
+         逐句去查它说的话现在在哪：
+           「一次原子 commit、≈1分钟上线」→ bulkStatus / bulkAttr 的确认框里，一字不差，已经有了；
+           「软下架、数据保留可恢复」    → bulkStatus 的确认框里，已经有了；
+           「彻底删除不可恢复」          → **哪儿都没有**，只有这段话说过。
+         ⇒ 它 28px 常驻，讲的是一个**没选中任何东西时根本不存在的模式**，
+            其中三分之二是确认框里已有内容的复述，剩下三分之一是唯一有价值的那句 ——
+            而那句正躺在离按钮 200px 远、按下删除时根本不会看的地方。
+         ⇒ 段落删掉；那句唯一有价值的挪进 bulkDelete 的确认框，也就是危险真正发生的那一刻。 -->
     <table>
       <thead><tr>
         <th style="width:30px"><input type="checkbox" id="selAll" onchange="toggleAll(this.checked)"></th>
@@ -962,7 +975,10 @@ function syncBulk() { $("#selN").textContent = sel.size; $("#bulkbar").classList
 async function bulkDelete() {
   const ids = [...sel];
   if (!ids.length) return;
-  if (!confirm(`将从官网删除 ${ids.length} 个产品（三语详情页+列表联动）。此操作直接修改官网仓库。\n确定？`)) return;
+  // ⚠️「不可恢复」这句以前只写在列表上方那段常驻说明里 —— 也就是**没人在按删除时会看的地方**。
+  //    危险的说明必须长在危险发生的那一刻上，否则它只是一段免责声明。
+  //    并且这里要给出**替代动作**：多数人想要的其实是「下架」，只是不知道下架保留数据。
+  if (!confirm(`彻底删除 ${ids.length} 个产品：数据文件 + 三语详情页一并删除，⚠️ 不可恢复。\n\n想留后路请改用「下架」——软下架保留数据、随时可恢复。\n\n此操作直接修改官网仓库。确定？`)) return;
   const typed = prompt(`二次确认：输入要删除的数量（${ids.length}）以继续`);
   if (typed !== String(ids.length)) { msg("已取消（数量不符）"); return; }
   for (const id of ids) {
