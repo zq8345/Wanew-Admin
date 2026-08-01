@@ -162,31 +162,9 @@ tr:hover td{background:var(--dz-l3)}                      /* hover 升到 L3，�
 .dstat .ic{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:10px;font-size:18px;background:rgba(125,177,255,.12);color:var(--dz-c-accent)}
 .dstat .num{font-size:25px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.05}
 .dstat .lbl{color:var(--dz-c-text3);font-size:12px;margin-top:2px}
-.dgrid{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start}
-@media(max-width:900px){.dgrid{grid-template-columns:1fr}}
 /* 环形图（donut）卡 */
 .ddonut-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
 @media(max-width:760px){.ddonut-row{grid-template-columns:1fr}}
-.donut-wrap{display:flex;gap:16px;align-items:center}
-@media(max-width:520px){.donut-wrap{flex-direction:column;align-items:stretch}}
-.donut-wrap svg{flex:none;display:block}
-.dlg{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
-.dlg-row{display:grid;grid-template-columns:11px 1fr auto auto;gap:8px;align-items:center;font-size:12.5px}
-.dlg-dot{width:10px;height:10px;border-radius:3px;flex:none}
-.dlg-name{color:var(--dz-c-text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dlg-val{color:var(--dz-c-text);font-variant-numeric:tabular-nums;text-align:right}
-.dlg-pct{color:var(--dz-c-text3);font-variant-numeric:tabular-nums;text-align:right;min-width:46px}
-.dtl{position:relative;padding-left:16px}
-.dtl::before{content:"";position:absolute;left:3px;top:5px;bottom:5px;width:1px;background:var(--dz-c-line)}
-.dtl-item{position:relative;padding:0 0 12px}
-.dtl-item:last-child{padding-bottom:0}
-.dtl-item::before{content:"";position:absolute;left:-16px;top:3px;width:7px;height:7px;border-radius:50%;background:var(--dz-c-accent);box-shadow:0 0 0 3px var(--dz-c-bg2)}
-.dtl-msg{font-size:12.5px;color:var(--dz-c-text);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dtl-meta{font-size:11px;color:var(--dz-c-text3);margin-top:2px;font-variant-numeric:tabular-nums}
-.dfeat{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:12px}
-.dfeat .ft{font-size:11px;color:var(--dz-c-text3);min-width:0}
-.dfeat .ft img{width:100%;aspect-ratio:1/1;object-fit:contain;background:var(--dz-c-tile);border-radius:8px;padding:4px;display:block;margin-bottom:4px}
-.dfeat .ft .cap{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--dz-c-tile);border:1px solid var(--dz-c-line);font-size:12px;font-variant-numeric:tabular-nums;line-height:1.6}
 .dz-pagenav{margin:0 0 12px}
 .dz-tabs{display:flex;gap:4px;border-bottom:1px solid var(--dz-c-line);margin-bottom:16px}
@@ -397,8 +375,8 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
 <div class="dz-wrap">
   <nav class="dz-side">
     <div class="dz-eyebrow">目录 Catalog</div>
-    <div class="dz-nav-item active" data-view="dash" onclick="showDash()">仪表盘</div>
-    <div class="dz-nav-item" data-view="list" onclick="backToList()">产品</div>
+    <!-- 徽标：点它 = 进列表并套上同一个谓词。数字与筛选结果**同源**（见 paintNavBadge）。 -->
+    <div class="dz-nav-item" data-view="list" onclick="backToList()">产品<span class="cnt" id="nav-todo-badge" style="display:none" title="有语种缺翻译的产品，点击只看这些" onclick="event.stopPropagation();openTodo('i18nAny')"></span></div>
     <div class="dz-nav-item" data-view="cats" onclick="showCats()">分类</div>
     <div class="dz-nav-item" data-view="media" id="nav-images" onclick="showLib('image')">图片</div>
     <div class="dz-nav-item" data-view="media" id="nav-videos" onclick="showLib('video')">视频</div>
@@ -699,12 +677,6 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
     </div>
   </div>
 
-  <!-- ============ 仪表盘（W5 P5·只读概览·默认落地页）============ -->
-  <div id="v-dash" style="display:none">
-    <div class="dz-pagehead"><h1>仪表盘</h1><span class="meta" id="dash-repo"></span></div>
-    <div id="dash-body"><div class="card muted">加载中… <span class="spin"></span></div></div>
-  </div>
-
   <div id="v-settings" style="display:none">
     <div class="dz-pagehead"><h1>设置</h1><span class="meta">运行口径（只读）</span></div>
     <div id="settings-body"><div class="card muted">加载中… <span class="spin"></span></div></div>
@@ -839,7 +811,9 @@ document.addEventListener("click", (e) => {
   FORMS.forEach((f) => { fs.append(new Option(f.name, f.key)); ef.append(new Option(f.name, f.key)); if (bf) bf.append(new Option(f.name, f.key)); });
   if (bf) bf.append(new Option("（清空形态）", "__none"));
   ["#q", "#f-cat", "#f-form"].forEach((s) => $(s).addEventListener("input", renderRows));
-  showDash();   // 默认落地=仪表盘（比落在"产品"更像后台首页）
+  // 🔴 默认落地 = 产品列表。登录后第一屏就该是能干活的那一屏，0 次额外点击。
+  backToList();
+  paintNavBadge();   // 待办徽标挂在左栏「产品」上（数字与列表筛选同源，见 paintNavBadge）
 })();
 
 async function loadCats() {
@@ -857,6 +831,8 @@ async function loadList() {
     const published = (pub.products || []).map((p) => ({ ...p, status: "published" }));
     const drafts = (dr.drafts || []).map((p) => ({ ...p, status: p.status || "draft" }));
     products = published.concat(drafts);
+    deriveI18nLocales();
+    paintNavBadge();   // 数据一变徽标就跟着变 —— 它不是启动时算一次的快照
   } catch (e) { $("#rows").innerHTML = `<tr><td colspan="8" class="muted">加载失败：${esc(e.message)} <button onclick="loadList()">重试</button></td></tr>`; return; }
   renderRows();
 }
@@ -868,11 +844,31 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const TODO_VIEWS = {
   // 未发布 = 草稿 ∪ 已下架。首屏只给一个数（服务端分不出，分得出要 N 次读），点进来再看具体哪种。
   unpublished: { label: "未发布",  pred: (p) => (p.status || "published") !== "published" },
+  // 🔴 徽标用的就是这一条谓词本身 —— 所以「徽标数字 == 筛选出来的条数」是**构造上成立**的，
+  //    不是两处各算一遍碰巧相等。（两处各算一遍，正是我们这两天反复在拆的那种病。）
+  i18nAny:   { label: "缺翻译",    pred: (p) => (p.status || "published") === "published" && I18N_LOCALES.some((l) => !(p.i18n && p.i18n[l])) },
   draft:     { label: "草稿",        pred: (p) => (p.status || "") === "draft" },
   archived:  { label: "已下架",      pred: (p) => (p.status || "") === "archived" },
   noThumb:   { label: "缺主图",      pred: (p) => (p.status || "published") === "published" && !p.thumb },
   noExcerpt: { label: "缺摘要",      pred: (p) => (p.status || "published") === "published" && !p.excerpt },
 };
+// 非默认语种（缺翻译判据用它）。**从数据自证**：manifest 里出现过的 i18n 语种键的并集。
+// ⚠️ 不写死清单，也不为它多发一次请求 —— 官网加一门语种，这里自己就跟上了。
+// ⚠️ 已知局限：**一门"一条翻译都没有"的语种不会出现在并集里**，于是它的缺口不会被计入。
+//    那种情况不是"漏了几条"，是"这门语种整个没做"，属于设置页该说的事，不该由一个徽标兜。
+let I18N_LOCALES = ["pt-BR", "es-MX"];
+function deriveI18nLocales() {
+  const s = new Set();
+  for (const p of products || []) for (const k of Object.keys(p.i18n || {})) s.add(k);
+  if (s.size) I18N_LOCALES = [...s];
+}
+// 左栏「产品」上的待办徽标。**从已经加载的 products 现算** —— 与 filtered() 同一份数据、同一条谓词。
+// ⚠️ 不再走 /dashboard：那会让"徽标"和"列表"各算一遍，而两处各算一遍必然有一天对不上。
+function paintNavBadge() {
+  const el = $("#nav-todo-badge"); if (!el) return;
+  const n = (products || []).filter(TODO_VIEWS.i18nAny.pred).length;
+  el.textContent = n; el.style.display = n ? "" : "none";   // 为 0 时不挂 —— 空徽标是噪音
+}
 let todoView = null;   // {key} 或 {locale}
 function openTodo(key, locale) {
   todoView = locale ? { locale } : { key };
@@ -1000,7 +996,7 @@ async function bulkRun(payload, label) {
 
 // ---------- 编辑 ----------
 const DKEY = (id) => "wanew-admin-draft-" + (id ?? "new");
-function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-contact").style.display = v === "contact" ? "" : "none"; $("#v-guides").style.display = v === "guides" ? "" : "none"; $("#v-seo").style.display = v === "seo" ? "" : "none"; $("#v-gsc").style.display = v === "gsc" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-dash").style.display = v === "dash" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#v-team").style.display = v === "team" ? "" : "none"; $("#v-audit").style.display = v === "audit" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "contact" ? "› 联系方式" : (v === "guides" ? "› 攻略" : (v === "seo" ? "› SEO" : (v === "gsc" ? "› 搜索表现" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : (v === "team" ? "› 团队" : (v === "audit" ? "› 审计日志" : "")))))))))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
+function showView(v) { $("#v-list").style.display = v === "list" ? "" : "none"; $("#v-edit").style.display = v === "edit" ? "" : "none"; $("#v-cats").style.display = v === "cats" ? "" : "none"; $("#v-home").style.display = v === "home" ? "" : "none"; $("#v-contact").style.display = v === "contact" ? "" : "none"; $("#v-guides").style.display = v === "guides" ? "" : "none"; $("#v-seo").style.display = v === "seo" ? "" : "none"; $("#v-gsc").style.display = v === "gsc" ? "" : "none"; $("#v-media").style.display = v === "media" ? "" : "none"; $("#v-settings").style.display = v === "settings" ? "" : "none"; $("#v-team").style.display = v === "team" ? "" : "none"; $("#v-audit").style.display = v === "audit" ? "" : "none"; $("#crumb").textContent = v === "edit" ? "› 编辑" : (v === "cats" ? "› 分类管理" : (v === "home" ? "› 首页" : (v === "contact" ? "› 联系方式" : (v === "guides" ? "› 攻略" : (v === "seo" ? "› SEO" : (v === "gsc" ? "› 搜索表现" : (v === "media" ? "› 媒体库" : (v === "settings" ? "› 设置" : (v === "team" ? "› 团队" : (v === "audit" ? "› 审计日志" : "")))))))))); const av = v === "edit" ? "list" : v; document.querySelectorAll(".dz-nav-item[data-view]").forEach((el) => el.classList.toggle("active", el.dataset.view === av)); }
 function backToList() { showView("list"); loadList(); }
 
 // ---------- 分类 / 机型管理 ----------
@@ -2086,114 +2082,20 @@ async function mediaUploadVideos(files) {
   await loadMedia();
 }
 
-// ---------- 仪表盘（W5 P5·只读概览）----------
-async function showDash() { showView("dash"); await loadDashboard(); }
-async function loadDashboard() {
-  const box = $("#dash-body");
-  box.innerHTML = `<div class="card muted">加载中… <span class="spin"></span></div>`;
-  try { const d = await api("/dashboard"); paintDash(d); }
-  catch (e) { box.innerHTML = `<div class="card muted">加载失败：${esc(e.message)} <button onclick="loadDashboard()">重试</button></div>`; }
-}
+// ---------- 仪表盘：已删除 ----------
+// 🔴 它不是"没做好"，是**没有一样东西是产品页没有的，而每一样都比产品页的差**：
+//    ＋新建产品 → 产品页工具栏本来就有同一个按钮
+//    继续上次 6 个 → 产品页有全部 68 个，可搜可筛可排
+//    待办两个数字 → 那是徽标，不是一屏
+//    ⇒ 净效果只是在"打开后台"和"改产品"之间加一次点击。
+// ⚠️ 三轮返工都在问"这一屏该放什么"，而正确的问题是"这一屏凭什么存在"。
+// 取回：git show 93d1ca37:public/index.html（含 paintDash / donutCard / pctList / DONUT_COLORS）
+//    ⚠️ 恢复之前先回答那个问题 —— 光把代码取回来，会把同一次多余点击也取回来。
 function relTime(iso) {
   try { const t = new Date(iso).getTime(); const s = (Date.now() - t) / 1000;
     if (s < 60) return "刚刚"; if (s < 3600) return Math.floor(s / 60) + " 分钟前";
     if (s < 86400) return Math.floor(s / 3600) + " 小时前"; if (s < 2592000) return Math.floor(s / 86400) + " 天前";
     return new Date(iso).toLocaleDateString(); } catch { return ""; }
-}
-// 受控蓝色阶（同色相不同明度，非彩虹）；按数量降序分配，相邻明暗交替便于区分
-const DONUT_COLORS = ["#7db1ff", "#3a6bb5", "var(--dz-accent-hi)", "#4a82d6", "#cfe0ff", "#5f9bf0", "#2b5493", "#1e3f70"];
-// 百分比：最大余数法（Hamilton）配到 0.1%，保证各段之和恰好 100.0%（不因四舍五入超/欠 100）
-function pctList(data, total) {
-  if (!total) return data.map(() => 0);
-  const raw = data.map((d) => d.count / total * 1000);   // 以「0.1%」为单位
-  const out = raw.map((x) => Math.floor(x));
-  let rem = 1000 - out.reduce((a, b) => a + b, 0);
-  const order = raw.map((x, i) => ({ i, frac: x - Math.floor(x) })).sort((a, b) => b.frac - a.frac);
-  for (let k = 0; k < rem; k++) out[order[k % order.length].i]++;
-  return out.map((t) => t / 10);
-}
-// 纯 SVG donut：stroke-dasharray 画段 + 段间 gap 露出 track（零图表库）。rows=[{name,count}]，活取降序。
-function donutCard(title, rows, centerLabel) {
-  const data = rows.filter((r) => r.count > 0).sort((a, b) => b.count - a.count);
-  const total = data.reduce((s, r) => s + r.count, 0);
-  const pcts = pctList(data, total);
-  const size = 132, sw = 18, cx = size / 2, r = (size - sw) / 2, C = 2 * Math.PI * r, gap = 2;
-  let off = 0;
-  const segs = data.map((dd, i) => {
-    const len = total ? dd.count / total * C : 0;
-    const vis = Math.max(len - gap, len > 0 ? 1.2 : 0);   // 最小弧长兜底：最小段(如 1/64)也可见
-    const s = `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${DONUT_COLORS[i % DONUT_COLORS.length]}" stroke-width="${sw}" stroke-dasharray="${vis.toFixed(2)} ${(C - vis).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"/>`;
-    off += len; return s;
-  }).join("");
-  const svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${esc(title)}">
-    <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="var(--dz-c-panel2)" stroke-width="${sw}"/>
-    <g transform="rotate(-90 ${cx} ${cx})">${segs}</g>
-    <text x="${cx}" y="${cx - 1}" text-anchor="middle" font-size="27" font-weight="700" fill="var(--dz-c-text)" style="font-variant-numeric:tabular-nums">${total}</text>
-    <text x="${cx}" y="${cx + 16}" text-anchor="middle" font-size="11" fill="var(--dz-c-text3)">${esc(centerLabel)}</text>
-  </svg>`;
-  const legend = data.map((dd, i) => {
-    return `<div class="dlg-row"><span class="dlg-dot" style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></span><span class="dlg-name" title="${esc(dd.name)}">${esc(dd.name)}</span><span class="dlg-val">${dd.count}</span><span class="dlg-pct">${pcts[i]}%</span></div>`;
-  }).join("") || `<span class="muted">无数据</span>`;
-  return `<div class="card"><h3>${esc(title)}</h3><div class="donut-wrap">${svg}<div class="dlg">${legend}</div></div></div>`;
-}
-// 首屏 = 「今天有什么要我处理」。**不导向动作的东西一律不放这里。**
-// 删掉的四样及理由：
-//   机型/品类分布甜甜圈 —— 52.9% 是 Mini，看完不知道该干嘛（分类页要看分布，去分类页）
-//   最近活动           —— 那是**英文 git 提交信息**，是我们的开发日志，不是 Joe 的生意
-//   媒体 393           —— 一个文件计数，点不动也不导向动作
-//   产品/机型/品类 三个总数 —— 库存量，不是待办；总数在列表页顶部本来就有
-// ⚠️ 数据仍在 /dashboard 的响应里，只是不摆首屏 —— **"不在首屏"和"不存在"是两件事。**
-function paintDash(d) {
-  $("#dash-repo").textContent = d.repo ? `发布到 ${d.repo}` : "";
-  const t = d.todo || {};
-  // 待办项：每一条都带落点。**没有落点的不许进这个数组。**
-  const items = [
-    { n: t.unpublished, label: "未发布（草稿 / 已下架）", act: `openTodo('unpublished')` },
-    { n: t.noThumb, label: "在线产品缺主图", act: `openTodo('noThumb')` },
-    { n: t.noExcerpt, label: "在线产品缺摘要", act: `openTodo('noExcerpt')` },
-    ...(t.i18n || []).map((x) => ({ n: x.missing, label: `${x.locale} 缺翻译`, act: `openTodo(null,'${esc(x.locale)}')` })),
-  ].filter((x) => typeof x.n === "number");
-  const pending = items.filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
-  // ② 视觉最重的位置归**主操作**（新建产品），且只有一个。待办不再当主角 ——
-  //    一个"没事可做"的告警块占据首屏最重位置，正是上一版读起来像坏了的原因。
-  const lp = d.lastPublish;
-  // 🔴 首页是**工作台入口，不是告警面板** —— 没事的时候它也该有用。
-  //    Joe 每天在这儿做的是：加产品、改产品、回到刚才改的那个。上一版一件都没帮上：
-  //    删掉噪音之后只剩两行字，把一个**内容错的**首页变成了一个**空的**首页。
-  // ⇒ 判据不是"东西越少越好"，是**点了能不能干活**：
-  //    饼图/文件数/git 日志 → 看了不能做什么 ⇒ 删（这部分没错）
-  //    最近编辑过的产品     → 点了直接进编辑 ⇒ 该有（这部分之前漏了）
-  const rec = d.recent || [];
-  $("#dash-body").innerHTML = `
-    <div class="dz-mainact"><button class="primary dz-newbtn" onclick="openEdit(null)">＋ 新建产品</button></div>
-    ${rec.length ? `
-    <div class="dz-sec">继续上次</div>
-    <div class="dz-recent">${rec.map((p) => `
-      <div class="dz-rec" onclick="openEdit(${p.id})" role="button" tabindex="0" title="${esc(p.title || "")}">
-        ${p.thumb ? `<img src="${esc(imgUrl(p.thumb))}" loading="lazy" alt="">` : `<div class="dz-rec-noimg"></div>`}
-        <div class="dz-rec-t">${esc(p.title || ("#" + p.id))}</div>
-        <div class="dz-rec-m">${p.at ? esc(relTime(p.at)) : ""}</div>
-      </div>`).join("")}</div>` : ""}
-    <!-- 待办：**为 0 时整块消失，不留空卡片**。
-         上一版把"没事可做"做成了一张占位卡 —— 而这一屏现在有主操作和最近编辑，
-         已经不需要靠一张卡来证明自己没坏。⚠️ 也不再有 32px 大数字：
-         视觉最重的位置归主操作，待办降回一行胶囊。 -->
-    ${pending.length ? `
-    <div class="dz-sec">待办</div>
-    <div class="dz-todo">${pending.map((x) => `
-      <div class="dz-todo-i" onclick="${x.act}" role="button" tabindex="0">
-        <span class="dz-todo-n tnum">${x.n}</span><span class="dz-todo-t">${esc(x.label)}</span>
-      </div>`).join("")}</div>` : ""}
-    <!-- ⑤ 现状条：一行弱化文本，不是卡片。它是背景信息，不是待办也不是入口。 -->
-    <div class="dz-last">${d.products} 个产品在线 · ${lp
-      // sha 做成到 GitHub 那次提交的链接 —— 一个能点开去看"那次到底改了什么"的东西，
-      // 比一串不能点的字符有用；也让首屏里"不能点的东西"再少一个。
-      ? `最近发布 <a class="tnum" href="https://github.com/${esc(d.repo || "")}/commit/${esc(lp.sha)}" target="_blank" rel="noopener" title="在 GitHub 上看这次提交改了什么">${esc(lp.sha)}</a> · ${esc(relTime(lp.date))}`
-      : (d.activityScanned
-          // ⚠️ "这窗口里没有"和"取不到"是两件事，别都画成 `—`：
-          //    前者说明只是很久没在后台改过东西，后者说明这一格坏了。
-          ? `近 ${d.activityScanned} 次提交内没有后台发布`
-          : `发布记录取不到（GitHub 提交接口无响应）`)}</div>`;
 }
 
 // ---------- 设置（W5 P5·品牌/口径只读对齐）----------
