@@ -90,6 +90,23 @@ tr:hover td{background:var(--dz-l3)}                      /* hover 升到 L3，�
 .edit-bar .idtag{font-size:12px;font-variant-numeric:tabular-nums}
 .editbar-link{padding:0 12px;height:var(--dz-control-h);display:inline-flex;align-items:center;border:1px solid var(--dz-c-line2);border-radius:var(--dz-radius-s);color:var(--dz-c-text)!important;text-decoration:none;font-size:13px}
 .editbar-link:hover{background:var(--dz-c-panel2);text-decoration:none}
+/* 🔴 全站 5 个 auto-fill 格子（.mgrid / .vp-grid / .cmpl / .fgrid / .pk-grid）**一个都不改成 auto-fit**。
+   这是量出来的，不是偏好。1440 视口、内容区 1220px，同一批类名，只换 fill/fit：
+
+              12 项      3 项       1 项
+     auto-fill  164px     164px      164px      ← 项宽恒定，右边留空，行左对齐
+     auto-fit   164px   **399px**  **1220px**   ← 项被拉开，一张缩略图铺满整个内容区
+
+   ⇒ auto-fit 的"消掉空轨道"是拿**项被拉伸**换来的。媒体库筛到只剩一张图时，
+      那张 110px 高的缩略图会变成 1220px 宽的一条 —— 这才是会被看见的缺陷。空轨道不画任何东西。
+
+   🔴 顺带纠正一条我自己上一轮报绿的判据：「无空轨道」。
+      ① 它测的不是缺陷 —— 空轨道正是保证项宽恒定的那个机制；
+      ② 它**分不清这两种模式**：auto-fit 的计算值是 `398px 398px 398px 0px 0px 0px 0px`，
+         轨道数同样是 7 > 子元素 3，所以"轨道数>子元素数"两边都会报；
+      ③ 我上一轮报的"空轨道 0 ✅"是**空集合的绿灯** —— 产品列表页是表格，那里一个 grid 都没有。
+      ⇒ 真正该量的是「项数从填满变到只剩一个，单项宽度变不变」——
+         可观测的签名是**计算出的轨道里有没有 0px**（那是 auto-fit 塌缩留下的痕迹）。 */
 /* 媒体库网格（W5 P4）*/
 .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
 .mtile{position:relative;border:1px solid var(--dz-c-line);border-radius:var(--dz-radius-s);background:var(--dz-c-panel2);padding:8px;font-size:11px}
@@ -161,6 +178,10 @@ tr:hover td{background:var(--dz-l3)}                      /* hover 升到 L3，�
 .fchip .fdel{color:var(--dz-c-text3);font-size:14px;line-height:1;padding:0 2px;border-radius:4px}
 .fchip .fdel:hover{color:var(--dz-err);background:rgba(255,157,157,.12)}
 /* 仪表盘（W5 P5·世界级 dense 首页）*/
+/* ⚠️ 全站唯一的 auto-fit，而且它**是对的**，别顺手改成 auto-fill 求一致：
+   这里恒定 4 张（点击/曝光/CTR/排名），项数不会变，而它们**就该铺满整行**。
+   ⇒ 分界不是"哪个更好"，是：项数会变、项有自然尺寸 → auto-fill（见上方 .mgrid 那段）；
+      项数固定、就该占满 → auto-fit。auto-fill 在这里会让 4 张卡缩到 164px，右边空掉一大片。 */
 .dstat{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px;margin-bottom:16px}
 .dstat .card{margin:0;display:flex;align-items:center;gap:12px;padding:16px 16px;transition:border-color .15s var(--dz-ease),background .15s var(--dz-ease)}
 .dstat .card:hover{border-color:var(--dz-c-line2);background:var(--dz-c-panel2)}
@@ -597,7 +618,9 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
       <button id="btn-home-preview" onclick="previewHome()" title="渲染首页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
       <button class="primary" id="btn-home-save" onclick="saveHome()">🚀 保存首页</button>
     </div>
-    <p class="note">编辑首页 Hero 区文案（en / pt-BR / es-MX 三语）。保存=重烘焙首页并提交官网仓，≈1分钟上线。⚠️ 只改被编辑的语言、保留其余（i18n merge 防翻译擦除）；保存前可「预览」看真实渲染。</p>
+    <!-- 逐句查过原来那段：「编辑首页 Hero 文案（三语）」上方 idtag 就写着；「保存=重烘焙…≈1分钟上线」
+         保存后的提示原样在说；「保存前可预览」旁边就是那个按钮、还带 title。只有下面这句没有别处在说。 -->
+    <p class="note">⚠️ 只保存被编辑的那个语言，其余语言原样保留 —— 不会被擦掉。</p>
     <div id="home-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
     <div id="home-featured-box"></div>
   </div>
@@ -612,7 +635,10 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
       <button id="btn-contact-preview" onclick="previewContact()" title="渲染联系页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
       <button class="primary" id="btn-contact-save" onclick="saveContact()">🚀 保存联系方式</button>
     </div>
-    <p class="note">编辑官网联系页的联系方式（电话 / WhatsApp / 微信 / 邮箱 / 地址 / 工时 / 地图）。这些是<b>语言无关值、四语共用</b>；标签文案（"电话""扫码加微信"等四语）由官网维护、此处不改。保存=重烘焙 /contact/ 页（三语+zh）提交官网仓，≈1分钟上线；保存前可「预览」看真实渲染。</p>
+    <!-- 「语言无关值、四语共用」上方 idtag 就写着「联系方式 · 语言无关值」；字段名单看表单本身；
+         「保存=…≈1分钟上线」保存后的提示在说。剩下这一句是唯一没有别处在说的 ——
+         而它回答的是一个会真的让人卡住的问题：**为什么标签改不了**。 -->
+    <p class="note">⚠️ 标签文案（"电话""扫码加微信"等四语）由官网维护，此处不改。</p>
     <div id="contact-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
@@ -625,7 +651,8 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
       <a class="editbar-link" id="guides-service-link" href="https://wanew.com/service/" target="_blank">🌐 官网攻略页</a>
       <button id="btn-guides-preview" onclick="previewGuides()" title="渲染攻略页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
     </div>
-    <p class="note" id="guides-help">编辑 /service/ 攻略落地页的<b>页头文案 + 10 张攻略卡片的标题/摘要</b>（四语）。⚠️ 本编辑器<b>只能改这些文案</b>——攻略文章正文、卡片增删属二期（需数据模型）。保存=重烘焙 /service/（四语）提交官网仓，≈1分钟上线；保存前可「预览」。</p>
+    <!-- ⚠️ id 保留：1606 行按 id 切显隐（攻略退役态）。删段落可以，删 id 会把那段逻辑变成静默空转。 -->
+    <p class="note" id="guides-help">⚠️ 只能改页头文案与 10 张卡片的标题/摘要；文章正文、卡片增删属二期。</p>
     <div id="guides-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
 
@@ -639,7 +666,10 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
       <button id="btn-seo-preview" onclick="previewSeo()" title="渲染此页真实预览、新标签打开（不提交、不上线）">🔍 预览</button>
       <button class="primary" id="btn-seo-save" onclick="saveSeo()">🚀 保存此页 SEO</button>
     </div>
-    <p class="note">编辑信息页的 <b>meta 标题 / 描述</b>（四语）。⚠️ 仅这些安全页（<b>service 归「攻略」编辑器、About 系等官网重排定型后解锁</b>）；<b>canonical / OG / hreflang 由系统派生、不可手改</b>（改了破坏多语规范）。保存=重烘焙该页四语提交官网仓，≈1分钟上线。</p>
+    <!-- 「编辑 meta 标题/描述（四语）」idtag 在说；「保存=…≈1分钟」保存提示在说；
+         「仅这些安全页」下面那排 tab 本身就是名单，它**列出了**开放的页，比一句话更准。
+         只留下这一句 —— 它回答"为什么没有 canonical/OG/hreflang 这些字段"，界面里没有任何东西在说。 -->
+    <p class="note">⚠️ canonical / OG / hreflang 由系统派生、不可手改（改了会破坏多语规范）。</p>
     <div class="dz-tabs" id="seo-tabs"></div>
     <div id="seo-fields"><div class="card muted">加载中… <span class="spin"></span></div></div>
   </div>
@@ -676,7 +706,14 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
       <button class="primary" onclick="mediaBulkMove()">📁 移入所选文件夹</button>
       <button onclick="mediaClearSel()">清除选择</button>
     </div>
-    <p class="note">R2 图床（对外 img.wanew.com）。文件夹是内部归类（纯元数据，不移动 R2 对象、可随时改）。勾选多张可一次性批量归类。标签(干净/营销)与文件夹独立、可叠加筛选。⚠️ 删除图片=直接删 R2、不可撤销；删文件夹只清归类、图片保留退回未归类。</p>
+    <!-- 🔴 这一整段删了，因为逐句查下来**每一句都已经在别处说着，而且说得更准**：
+           「纯元数据、不移动 R2 对象、可随时改」→ mediaBulkMove 的确认框里，一字不差；
+           「删除图片=直接删 R2、不可撤销」    → 删图确认框里，且**更强**（还说了引用它的详情页会裂图）；
+           「删文件夹只清归类、图片保留」      → 删文件夹确认框里，且**带具体张数**；
+           「勾选多张可批量归类」              → 勾一张，批量条自己就出来了，上面写着「移入所选文件夹」。
+         ⚠️ 我另外**判掉**了一句：「标签与文件夹独立、可叠加筛选」——两个筛选器并排放着，
+            试一下就知道，为它留 20px 常驻不值。这一句是判断，不是查证，若不同意就把它加回来。 -->
+    <!-- 「R2 图床（对外 img.wanew.com）」也删了：每张图的 URL 里就写着这个域名。 -->
     <div id="media-grid" class="mgrid"><div class="card muted">加载中… <span class="spin"></span></div></div>
     <div id="folder-modal" class="vp-overlay" style="display:none">
       <div class="vp-box" style="width:min(360px,90vw)">
