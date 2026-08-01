@@ -124,6 +124,66 @@ if (!mirrorVars) {
   console.log(`✅ 字节纪律 PASS：内容变量上 0 处 .length（体积/长度一律走 byteLen）。`);
 }
 
+// ── 主题只准改颜色 ──────────────────────────────────────────────────────────
+// 2026-07-31：`:root[data-theme="light"] .thumb{width:44px;height:44px;…}` ——
+// 浅色下把缩略图放大到 44px。**于是切一下主题，一屏能看到几个产品就变了**（深色 13 行、浅色 12 行）。
+//
+// 🔴 病不是"两个主题微调得不一样"，是**一个密度决定被写进了配色令牌**。
+//    这类东西不会被别的闸看见：tsc 管不着 CSS，vendor 守卫只比对镜像文件，
+//    而版式判据是在**某一个主题下**量的 —— 另一个主题不合格，量的人根本不会知道。
+//
+// ⇒ 不变量：主题作用域里只准出现**颜色/外观**（color/background/border-color/box-shadow/display…），
+//    尺寸与排版（width/height/padding/margin/gap/font-size/line-height/border-width/定位）一律不准。
+//    自定义属性同理：`--x: 12px` 藏在主题块里是同一个 bug 换个马甲。
+{
+  // ⚠️ 先剥注释再扫。**这一条讲的就是"width:44px"，正文里必然带着被禁的字样** ——
+  //    不剥的话，讲这个 bug 的文字会被当成这个 bug（本仓已经栽过四次）。
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/<!--[\s\S]*?-->/g, "");
+  const BANNED = /^(?:min-|max-)?(?:width|height|inline-size|block-size)$|^(?:padding|margin)(?:-(?:top|right|bottom|left))?$|^(?:row-|column-)?gap$|^font-size$|^line-height$|^letter-spacing$|^border(?:-(?:top|right|bottom|left))?-width$|^(?:top|right|bottom|left|inset)$|^flex-basis$/;
+  const LEN = /(?:^|[\s(:,])-?\d*\.?\d+(?:px|rem|em|ch|vh|vw|vmin|vmax)\b/;
+
+  // 主题作用域的规则：`:root[data-theme=…] …{ … }`。按大括号配对取块，不按行 ——
+  // 多行规则按行读会只看到带选择器那一行，剩下的声明全漏掉（清死 CSS 那次就是这么删坏的）。
+  const scan = (src, rel) => {
+    const hits = [];
+    const re = /:root\[data-theme=[^\]]*\][^{}]*\{/g;
+    let m;
+    while ((m = re.exec(src))) {
+      const open = m.index + m[0].length - 1;
+      let depth = 0, close = -1;
+      for (let k = open; k < src.length; k++) { if (src[k] === "{") depth++; else if (src[k] === "}") { depth--; if (!depth) { close = k; break; } } }
+      if (close < 0) { hits.push({ rel, sel: m[0].slice(0, 60), prop: "(括号不配对)", val: "" }); break; }
+      const head = m[0].slice(0, -1).trim();
+      for (const decl of src.slice(open + 1, close).split(";")) {
+        const c = decl.indexOf(":");
+        if (c < 0) continue;
+        const prop = decl.slice(0, c).trim(), val = decl.slice(c + 1).trim();
+        if (!prop) continue;
+        if (prop.startsWith("--")) { if (LEN.test(val)) hits.push({ rel, sel: head, prop, val, why: "自定义属性带长度单位" }); }
+        else if (BANNED.test(prop)) hits.push({ rel, sel: head, prop, val, why: "尺寸/排版属性" });
+      }
+      re.lastIndex = close;
+    }
+    return hits;
+  };
+
+  // 🔴 先证这道闸**能变红**。恒绿的闸和没有闸是一回事，而它看起来更让人放心。
+  const probe = scan(':root[data-theme="light"] .x{width:44px;background:#fff}\n:root[data-theme="dark"]{--y:12px;--z:#000}', "(自测样本)");
+  if (probe.length !== 2) {
+    console.error(`🔴 主题闸自测失败：给它一个明知有问题的样本，它只报出 ${probe.length}/2 处。闸本身坏了，不能信它的绿灯。`);
+    process.exit(1);
+  }
+
+  const hits = FILES.flatMap((rel) => scan(strip(readFileSync(path.join(ROOT, rel), "utf8")), rel));
+  if (hits.length) {
+    console.error(`🔴 ${hits.length} 处把尺寸/排版写进了主题作用域 —— 切主题会改变版式，而版式判据只在一个主题下量过。`);
+    hits.forEach((h) => console.error(`     ${h.rel}  ${h.sel}  →  ${h.prop}: ${h.val}   （${h.why}）`));
+    console.error(`   → 尺寸挪到不带 data-theme 的基础规则里，两个主题同值；主题只留颜色/外观。`);
+    process.exit(1);
+  }
+  console.log(`✅ 主题纪律 PASS：主题作用域 0 处尺寸/排版（闸自测能报红：2/2）。`);
+}
+
 if (bad) {
   console.error(`\n🔴 ${bad} 处在 admin 自有样式里定义了 --w3-* 品牌令牌。`);
   process.exit(1);

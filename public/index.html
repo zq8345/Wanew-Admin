@@ -36,7 +36,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--dz-c-acc
   --dz-ok-2:#3F9E63; --dz-draft-2:#B4863B; --dz-err-2:#C15B58;
 }
 table{width:100%;border-collapse:collapse}
-/* 纵 8 / 横 12（音阶）。行高由内容+padding 决定，缩略图那档定死 40px ⇒ 行 ≈56px（规格 §4） */
+/* 纵 8 / 横 12（音阶）。
+   节距 = max(缩略图 40, 标题两行 .ttl-clamp 40) + 8 + 8 + 分隔线 1 = **57px**。
+   ⚠️ 规格 §4 写的 56 是**格子内容高**（40+8+8），没算分隔线；判据「≤57」量的是节距。
+      同一件事两种量法 —— 引用哪个数之前先确认量的是哪一层。 */
 th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--dz-hair);font-size:13px;line-height:20px;vertical-align:middle}
 /* 表头：11px 全大写三级色、无底色、只留下沿发丝线（§7） */
 th{color:var(--dz-t3);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;background:transparent;white-space:nowrap}
