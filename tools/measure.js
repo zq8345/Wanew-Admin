@@ -49,16 +49,30 @@
     });
     return out;
   };
-  /* 空轨道：auto-fill 的格子在项少时会留出空列。⚠️ 只查当前可见视图，隐藏视图的 rect 全是 0。 */
-  const emptyTracksOf = () => {
-    const out = [];
-    document.querySelectorAll("#v-list *").forEach((e) => {
+  /* 🔴 这一条以前写的是「轨道数 > 子元素数 ⇒ 空轨道」。它错了两次：
+       ① **测的不是缺陷。** 空轨道不画任何东西，而且它正是保证"项宽不随项数变"的那个机制。
+          实测（1220px 内容区，同一批类名，只换 fill/fit）：
+            12 项  3 项    1 项
+            fill   164px  164px  164px      ← 恒定，右边留空
+            fit    164px  399px  1220px     ← 一张缩略图被拉成整条
+          "消掉空轨道"是拿**项被拉伸**换来的 —— 被看见的是后者。
+       ② **它分不清这两种模式。** auto-fit 的计算值是 `398px 398px 398px 0px 0px 0px 0px`，
+          轨道数同样 7 > 子元素 3 ⇒ 两边都会报，换成 auto-fit 也变不绿。
+     ⇒ 改成量真正会被看见的那件事：**塌缩**。可观测签名 = 计算出的轨道里出现 0px。
+     ⚠️ 顺带：这条以前只扫 `#v-list`，而那一页是表格、一个 grid 都没有 ——
+        我上一轮报的"空轨道 0 ✅"是**空集合的绿灯**。现在扫整个可见文档，并把扫到的格子数一起报出来，
+        看到"查了 0 个格子"就知道那个 0 不是结论。 */
+  const collapsedOf = () => {
+    const out = []; let scanned = 0;
+    document.querySelectorAll("body *").forEach((e) => {
       const cs = getComputedStyle(e);
       if (cs.display.indexOf("grid") < 0 || !e.getBoundingClientRect().height) return;
-      const tracks = cs.gridTemplateColumns.split(/\s+/).filter(Boolean).length;
-      if (tracks > e.children.length) out.push((e.className || e.tagName) + ` 轨道${tracks}>子${e.children.length}`);
+      scanned++;
+      const cols = cs.gridTemplateColumns.split(/\s+/).filter(Boolean);
+      const zero = cols.filter((c) => parseFloat(c) === 0).length;
+      if (zero) out.push(`${e.className || e.tagName} ${cols.length - zero} 项撑开 / ${zero} 轨塌缩 → 项宽 ${cols[0]}`);
     });
-    return out;
+    return { out, scanned };
   };
 
   /* 🔴 两个主题都量。版式判据总是在**某一个主题下**量的 —— 另一个主题不合格，量的人不会知道。
@@ -81,7 +95,9 @@
       第N行余量: +(vh - top - n * pitch).toFixed(1),
       判据余量: +(vh - DEF.minRows * pitch - top).toFixed(1),
       横向溢出: overflowOf().length,
-      空轨道: emptyTracksOf().length,
+      塌缩的格子: collapsedOf().out.length,
+      /* ⚠️ 把"查了几个格子"一起报出来：看到 `塌缩 0 / 查了 0 个` 就知道那个 0 不是结论。 */
+      查过的格子: collapsedOf().scanned,
     };
   }
   if (was) setTheme(was); else document.documentElement.removeAttribute("data-theme");
@@ -95,7 +111,12 @@
     "②完整可见 ≥ 12": counts.every((c) => c >= DEF.minRows),
     "③节距 ≤ 57": DEF.themes.every((t) => per[t].节距 <= DEF.maxPitch),
     "④无横向溢出": DEF.themes.every((t) => !per[t].横向溢出),
-    "⑤无空轨道": DEF.themes.every((t) => !per[t].空轨道),
+    /* ⑤ 原来叫「无空轨道」，那条既测不到缺陷也分不清 auto-fill / auto-fit，详见上面 collapsedOf。
+          现在问的是"有没有格子塌缩到把项拉开"。
+          ⚠️ 查过 0 个格子时报「不适用」而不是 true —— 空集合不是通过；
+             也不报 false，因为那是在宣称有缺陷。**"没查到"和"查过没问题"必须长得不一样。** */
+    "⑤无格子塌缩": DEF.themes.every((t) => !per[t].查过的格子) ? "不适用（本页 0 个格子）"
+      : DEF.themes.every((t) => !per[t].塌缩的格子),
   };
   console.table(per);
   console.table(R);
