@@ -77,6 +77,44 @@ export const FORM_LABEL_KEY = {
 export const htmlReady = (s) => String(s)
   .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;")
   .replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+/* 🔴 第三个上下文:`<script type="application/ld+json">`。而它要的方向【与前两个相反】——
+   不是"要转义",是"**绝不能有实体**"。
+
+   `<script>` 是 raw text,浏览器与爬虫都【不解码】其中的实体 ⇒ 结构化数据里那个值
+   字面就是 `Mounts &amp; Power Solutions`,Google 读到的就是这串。
+   ⚠️ 而这种块 **JSON.parse 完全合法** —— 上一把尺子问的是"能不能解析",
+      缺陷却在"解析出来的值对不对"。**解析通过 ≠ 语义正确。**
+   实测(在产页面):1433 块中 227 块含实体,涉及 176 个文件。
+
+   根因在数据层:`chrome.json` 的值本来就以【HTML 转义形态】存着(11 个条目含实体),
+   对 HTML 上下文是对的,喂进 JSON-LD 就错了。**同一个字符串喂给两种上下文,只能有一种是对的。**
+
+   🔴 修法不是再写一条改写规则,是让 JSON-LD 走【真 JSON 解析】:
+      parse → 逐个字符串值解实体 → stringify。
+      ⚠️ 不能对块做字面替换:`&quot;` 直接解成 `"` 会当场撑破 JSON 字符串。
+         走 parse/stringify 才能保证解出来的引号被重新正确转义。
+      ⚠️ 解析不了的块【原样放过】,不猜 —— 猜错会把一个坏块变成一个看起来正常的坏块。
+      ⚠️ 不含实体的块一个字节都不碰,避免把全站 1433 块重排一遍。 */
+const LD_ENTITY = /&(?:amp|lt|gt|quot|apos|nbsp|#\d+|#x[0-9a-fA-F]+);/i;
+const LD_NAMED = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+const ldDecode = (s) => s.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/g, (m, k) => {
+  if (k[0] === "#") return String.fromCodePoint(k[1] === "x" || k[1] === "X" ? parseInt(k.slice(2), 16) : parseInt(k.slice(1), 10));
+  const v = LD_NAMED[k.toLowerCase()];
+  return v === undefined ? m : v;            // 不认识的实体原样留着,不瞎猜
+});
+export function jsonLdClean(html) {
+  return String(html).replace(/(<script type="application\/ld\+json">)([\s\S]*?)(<\/script>)/g, (m, open, body, close) => {
+    if (!body.trim() || !LD_ENTITY.test(body)) return m;   // 空块与干净块:一个字节不动
+    let data;
+    try { data = JSON.parse(body); } catch { return m; }   // 解析不了 → 原样,交给别的闸去报
+    const walk = (v) => typeof v === "string" ? ldDecode(v)
+      : Array.isArray(v) ? v.map(walk)
+      : (v && typeof v === "object") ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]))
+      : v;
+    return `${open}\n${JSON.stringify(walk(data), null, 2)}\n${close}`;
+  });
+}
+
 /* 🔴 `"` 是 2026-07-30 补的，而它是这一族里代价最大的那个字符：
    产品 662 的 pt 文案含 `0.3"`，插进 <meta content="…"> 后把属性【提前闭合】，
    后面的正文全部漏进标签、meta 被截断 —— 页面照样 200，没有任何闸会红。
@@ -203,6 +241,10 @@ const FORM_KEY = Object.fromEntries(forms.flatMap((f) => [[f.name, f.key], [f.ke
     html = deleteScriptWith(html, "function getCookie");
     html = deleteStyleWith(html, ".lang-switch{position");
     for (const c of ORPHAN_COMMENTS) html = html.split(c).join("");
+    /* JSON-LD 去实体放在【最后】:上面每一步都可能把 catalog 里的转义值注进 head,
+       放在中间会被后面的步骤重新污染。放在这里,applyChrome 的每个调用方
+       (chrome-sync 与 admin-worker)都自动受益 —— 不需要谁记得再调一次。 */
+    html = jsonLdClean(html);
     return { html, errors, locale };
   }
 
