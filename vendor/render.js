@@ -740,7 +740,11 @@ export function setListTitle(html, name, locale, catalog) {
 // Gen 2 page aggregates the Performance family — it has 0 products of its own and must not be a
 // dead click), or {form} for the /type/ pages. One predicate covers all four so no caller needs a
 // special case, and adding a fifth kind of list page later costs nothing.
-export function regenListPage(html, entries, catFilter, { locale = "en", catalog, urlOf, formKey = {}, sizes } = {}) {
+/* ⚠️ selfUrl 是【可选】参数:官网侧显式传本页 URL(见 regen.mjs 的说明 —— 这一页可能是从新址
+   文件读、往旧址写,那一刻 html 里的 canonical 不是本页的最终身份)。admin 的三处调用不传,
+   回落成"读 html 里的 canonical",行为与本次改动前一致 ⇒ 镜像不破。
+   🔴 但"镜像不破"只证明文件对得上,证明不了行为对 —— 回落那条链的产出必须单独验(已验,见交付报告)。 */
+export function regenListPage(html, entries, catFilter, { locale = "en", catalog, urlOf, formKey = {}, sizes, selfUrl } = {}) {
   const inScope = (e) => {
     if (!catFilter) return true;
     if (Array.isArray(catFilter)) return catFilter.includes(e.category);
@@ -770,6 +774,49 @@ export function regenListPage(html, entries, catFilter, { locale = "en", catalog
   // count 33 cables per model instead of reporting all 64 products over a 33-card grid.
   const countModel = (f) => (f === "all" ? scope.length : scope.filter((e) => e.category === f).length);
   const countForm = (f) => (f === "all" ? scope.length : scope.filter((e) => formKey[e.form] === f).length);
+  /* ⭐ 面包屑 —— 派生,不再用烘在页面里的那一份(总工 2026-08-01)。
+     实测六条:只有 /pt/products/ 是对的,其余五条三个毛病叠着 ——
+       ① 第 2 级 item 指【首页】(和产品页刚修掉的一模一样) ② es 页整页挂英文名 ③ 标签没本地化。
+     🔴 但"对的写法已经在代码里、只是别的路径没走它"这个推断【不成立】:
+        列表页面包屑根本【没有生产者】—— 它烘死在产出 HTML 里,/pt/products/ 只是当年那份恰好烘对。
+        ⇒ 所以不是"让其余路径汇过去",是【第一次给它一个生产者】。
+
+     ⚠️ 两个取值都不新造:
+        本页 URL = 页面自己的 <link rel="canonical">。页面已经声明过自己是谁 ⇒ 不必给
+                   regenListPage 加参数、也不动 vendor 签名(admin 那三处调用照旧)。
+        首页 URL = 照 renderPage 的 HOME_URL 同一条规则:默认语种不带尾斜杠。
+     ⚠️ 第 2 级的【名字】:catalog 里有 header.<slug> 就用它(products→Produtos/Productos、
+        mounts→Suportes/Soportes);没有就保留页面原有那个名字 ——
+        机型名(Mini / Standard / Enterprise)是 Starlink 的型号,全站刻意不译,
+        pt/es 页自己的 h1 也写着 "Acessórios para Starlink Enterprise"。**把 Enterprise 译掉才是错的。**
+     ⚠️ 找那一块要【按解析结果判 @type】,不靠正则猜 JSON 的边界:
+        我第一版用 …"BreadcrumbList"[\s\S]*?\} ,惰性的 \} 停在第一个【内层】右括号上,
+        截出的片段 parse 失败、老名字丢了,第 2 级掉成小写 slug。**又是"猜一套等价规则"。** */
+  const canonBc = selfUrl || (/<link rel="canonical" href="([^"]+)"/.exec(html) || [])[1];
+  let bcRaw = null, bcOld = null;
+  for (const b of String(html).matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) {
+    let j; try { j = JSON.parse(b[1].trim()); } catch { continue; }
+    if (j && j["@type"] === "BreadcrumbList") { bcRaw = b[0]; bcOld = j; break; }
+  }
+  if (canonBc && bcRaw) {
+    const pickBc = (key, fb) => {
+      const v = catalog && catalog[key];
+      return (v && (v[locale] ?? v.en)) || fb;
+    };
+    const homeRel = urlOf ? urlOf("/", locale) : "/";
+    const slug = String(canonBc).replace(/\/+$/, "").split("/").pop() || "";
+    const list = (bcOld && bcOld.itemListElement) || [];
+    const oldLast = list.length ? list[list.length - 1].name : slug;
+    const derivedBc = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: pickBc("header.home", "Home"), item: `https://wanew.com${homeRel === "/" ? "" : homeRel}` },
+        { "@type": "ListItem", position: 2, name: pickBc(`header.${slug}`, oldLast), item: canonBc },
+      ],
+    });
+    html = html.split(bcRaw).join(`<script type="application/ld+json">${derivedBc}</script>`);
+  }
   html = updateChips(html, "modelChips", countModel);
   html = updateChips(html, "formChips", countForm);
   return html;
