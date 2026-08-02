@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "_comment_dev": "🔴 不能直接 `wrangler dev`：它会用 wrangler.jsonc 里的 routes 合成请求 host，于是本机也被当成 admin.wanew.com，鉴权旁路判定为『生产上出现后门』→500。scripts/dev.mjs 派生一份去掉 routes 的本地配置。原委见该文件顶部。",
-    "typecheck": "tsc --noEmit && node scripts/vendor.mjs check && node scripts/token-lint.mjs",
+    "typecheck": "tsc --noEmit && node scripts/vendor.mjs check && node scripts/token-lint.mjs && node scripts/token-impact.mjs",
     "_comment_deploy": "deploy=总工。闸=typecheck(tsc + vendor 漂移守卫)先绿。account_id已钉死wrangler.jsonc、域已挂zone，账号级令牌即可，详见README.md。",
     "guard:vendor": "node scripts/vendor.mjs check",
     "vendor:sync": "node scripts/vendor.mjs sync",
@@ -12,6 +12,8 @@
     "ui-lab": "node tools/ui-lab.mjs",
     "_comment_ui_lab": "量版式用：假后端 + 真前端 + 生产 68 条真数据，零凭据。⚠️ 只能量版式，验后端行为要用 npm run dev（真 worker）。量的时候贴 tools/measure.js —— 判据定义写在那里面，两个窗口才会量出同一个数。",
     "guard:tokens": "node scripts/token-lint.mjs",
+    "guard:token-impact": "node scripts/token-impact.mjs",
+    "_comment_token_impact": "🔴 vendor 守卫查『与官网逐字节一致』、token-lint 查『admin 没自己定义 --w3-*』——官网把某个令牌换个值，两条都绿，而 admin 界面沉默地跟着变。这道闸只做一件事：值变了就红，并当场说出谁在用（跟一跳 --dz-* 别名，否则整站强调色会被报成『1 处』）。射程是 re-vendor 那一刻，所以它必须先装。",
     "preflight": "node scripts/preflight.mjs"
   },
   "devDependencies": {
