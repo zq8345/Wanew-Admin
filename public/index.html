@@ -2487,9 +2487,9 @@ function collectForm() {
     } },
     compatible_with: compatData(),
     images: galleryData(), videos: videoData(),
-    // ⚠️ jsonld_product / jsonld_breadcrumb **不再回传**：官网 d97202f00 起改成渲染时派生，
-    //    这两个字段没有消费者了。服务端也已停收（publish.ts）—— 两道都要，
-    //    只停一边的话，一个开着的旧标签页就能把陈旧值写回来。
+    // ⚠️ jsonld_product / jsonld_breadcrumb 不在这里，也不在服务端落盘的对象里 ——
+    //    官网 d97202f00 起改成渲染时派生，字段已从数据里退役。**两边都不发不收**：
+    //    只堵一边的话，一个开着的旧标签页就能把陈旧值送回来。原委见 publish.ts 同名处。
     robots: cur?.robots ?? null,
   };
 }
