@@ -293,17 +293,19 @@ export function validateProduct(body: any, id: number, categories: any, existing
       ...(v.title ? { title: String(v.title) } : {}),
       alt: v.alt || "",
     })) } : {}),
-    /* 🔴 **停写**：官网 d97202f00 起，Product / BreadcrumbList 由 render.js 现场派生，
-       这两个字段**已经没有消费者**。而 admin 若继续接受 body 里的值，就会不断生产新的陈旧拷贝 ——
-       实测存量：68 个在线产品里，jsonld image 指向自己图册的只有 4 个（人手写的那批），
-       **机器写过的 64 份一份对的都没有**。停下来，它才不会再长。
+    /* 🔴 这里**不再有** `jsonld_product` / `jsonld_breadcrumb` —— 连 key 都不写。
+       官网 d97202f00 起 Product / BreadcrumbList 由 render.js 现场派生，这两个字段没有消费者了。
+       存储派生这条路这个仓走过：68 个在线产品里，存的 jsonld image 指向自己图册的只有 4 个
+       （人手写的那批），**机器写过的 64 份一份对的都没有**。
 
-       ⚠️ 只停写，**不删字段**：原值原样带过去。
-       删是第 3 步（数据里删 + 加闸禁复活），总工另派 —— 顺序反了会出现"删了又被写回来"。
-       ⚠️ 也不再读 `body.*`：客户端已经不发了，而"客户端不发 + 服务端不收"是两道，
-          少任何一道，一个旧标签页或一次重放就能把陈旧值写回来。 */
-    jsonld_product: existing?.jsonld_product ?? null,
-    jsonld_breadcrumb: existing?.jsonld_breadcrumb ?? null,
+       ⚠️ 分两步走过来的，顺序是承重的：先停写（保留原值）、后删字段。
+          反过来做的话，数据里删掉之后 `existing?.jsonld_product` 是 `undefined`，
+          而当时那行末尾的 `?? null` 会把 `jsonld_product: null` **写回去** ——
+          删了又被写回来，闸当场红。官网窗删字段前自证消费者时正是在这两行前停住的。
+
+       🔴 **别把它们加回来**，哪怕只是"顺手保留兼容"：写进去的那一刻就又有了一份没人读的拷贝，
+          而这一族的病从来不是"值错了"，是"存了一份会各自漂的副本"。
+          要给结构化数据加字段，去官网 render.js 的派生处加，那里能拿到渲染当时的真值。 */
   };
   return { prod };
 }
