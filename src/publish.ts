@@ -293,8 +293,17 @@ export function validateProduct(body: any, id: number, categories: any, existing
       ...(v.title ? { title: String(v.title) } : {}),
       alt: v.alt || "",
     })) } : {}),
-    jsonld_product: body.jsonld_product ?? (existing?.jsonld_product ?? null),
-    jsonld_breadcrumb: body.jsonld_breadcrumb ?? (existing?.jsonld_breadcrumb ?? null),
+    /* 🔴 **停写**：官网 d97202f00 起，Product / BreadcrumbList 由 render.js 现场派生，
+       这两个字段**已经没有消费者**。而 admin 若继续接受 body 里的值，就会不断生产新的陈旧拷贝 ——
+       实测存量：68 个在线产品里，jsonld image 指向自己图册的只有 4 个（人手写的那批），
+       **机器写过的 64 份一份对的都没有**。停下来，它才不会再长。
+
+       ⚠️ 只停写，**不删字段**：原值原样带过去。
+       删是第 3 步（数据里删 + 加闸禁复活），总工另派 —— 顺序反了会出现"删了又被写回来"。
+       ⚠️ 也不再读 `body.*`：客户端已经不发了，而"客户端不发 + 服务端不收"是两道，
+          少任何一道，一个旧标签页或一次重放就能把陈旧值写回来。 */
+    jsonld_product: existing?.jsonld_product ?? null,
+    jsonld_breadcrumb: existing?.jsonld_breadcrumb ?? null,
   };
   return { prod };
 }

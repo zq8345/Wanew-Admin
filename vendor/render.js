@@ -122,20 +122,6 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
       `\n      </div>\n    </div>\n  </section>\n`
     : "";
   const robots = prod.robots ? `\n<meta name="robots" content="${prod.robots}">` : "";
-  // JSON-LD Product embeds the English meta_description verbatim; for a non-en locale swap it so
-  // the structured data matches the visible <meta>. The name field stays en (SKU/model).
-  let jsonldProduct = prod.jsonld_product || "";
-  if (locale !== "en" && jsonldProduct) {
-    const enDesc = prod.i18n.en.meta_description;
-    /* 🔴 换进去的是 JSON 字符串体，不是裸文本。裸文本里的 `"` 会把 JSON 字符串提前闭合 ——
-       实证：662/671 的 ld+json 因此 JSON.parse 失败（结构化数据整块作废，页面照样 200）。
-       ⚠️ 用 JSON.stringify(x).slice(1,-1) 而不是自己写转义表：反斜杠、控制符、  都要管，
-          手写的那张表一定会漏一个。⚠️ 也不整体 parse→stringify：那会重排格式，
-          把【所有】非 en 产品页的 JSON-LD 块都改一遍，淹掉"只有坏页该变"这条判据。 */
-    if (enDesc && e.meta_description && e.meta_description !== enDesc) {
-      jsonldProduct = jsonldProduct.split(enDesc).join(JSON.stringify(e.meta_description).slice(1, -1));
-    }
-  }
   // The template only knows how to be English. Everything phase2-convert used to do for pt on its
   // way past has to be done here now, or regenerating from the template silently un-does it —
   // canonical is the dangerous one: a pt page canonical'd to the EN page tells Google not to index
@@ -155,6 +141,55 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
         .map((loc) => `\n<link rel="alternate" hreflang="${loc}" href="https://wanew.com${urlOf(path, loc)}" />`)
         .join("") + `\n<link rel="alternate" hreflang="x-default" href="${enUrl}" />`
     : "";
+  /* ⭐ Product / BreadcrumbList JSON-LD —— **派生,不存储**(总工 2026-08-01 拍板)。
+     判据来自实测,不是偏好:在线产品 68,其 jsonld image 指向【自己图册里那张】的只有 4 个
+     (4208-4211,今晚人手写的),**机器写过的 64 份存储拷贝一份对的都没有**。
+     样本 650 存 bb55cff3ea,图册里是 f6f88df527… —— 图册被重排/裁剪过,而拷贝留在原地。
+     ⇒ "保存时重算再存"这条路这个仓里走过了,成绩 0/64。所以不是重算,是【根本不存】。
+
+     它不是先例,是把例外收回来:本文件已有三处同款派生 —— metaTitleOf(注释原话
+     "deliberately NOT read from data — DERIVED")、CANONICAL/HREFLANG 从路由算、
+     以及下面 renderPage 里整块 FAQPage 也是现场派生的。
+
+     ⚠️ 取值全部复用本文件已有的表达式,不另猜一套等价规则:
+        品类名 = 上面 CATEGORY 用的那一支    图片 = resolveImg(与页面 <img> 同一支)
+        产品 URL = canonical(已算好)         品类/首页 URL = urlOf(与 hreflang 同一支)
+     ⚠️ name 保持 en:它是 SKU/型号,不随语言变(沿用被删那段注释里的原判断)。
+     ⚠️ description 用【当前 locale】的 meta_description —— 这正是被删掉那段手术在做的事,
+        现在它是构造对象时的一个赋值,不是事后在文本里找替换。
+     ⚠️ brand 全站 68 个产品逐字相同({"@type":"Brand","name":"Wanew"}),且 locales.json 的
+        fallback 把 "Wanew" 显式声明为 brand(不译)。它不是每个产品的数据,所以放在这里一处。
+        (若日后要可配置,该进 data/site.json —— 那是新增数据字段,得先报。) */
+  const BRAND = { "@type": "Brand", name: "Wanew" };
+  const catName = (modelDisplay && modelDisplay[prod.category]) || catmap[prod.category] || prod.category;
+  const catPath = `/${prod.category}/`;
+  const homeLabel = (catalog && catalog["header.home"] && (catalog["header.home"][locale] ?? catalog["header.home"].en)) || "Home";
+  const homeRel = urlOf ? urlOf("/", locale) : "/";
+  const galleryImg = (prod.images || []).map((x) => resolveImg(x, imgBase)).filter(Boolean)[0] || "";
+  const jsonldProduct = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: (prod.i18n && prod.i18n.en && prod.i18n.en.title) || e.title,
+    description: e.meta_description || "",
+    ...(galleryImg ? { image: galleryImg } : {}),
+    category: catName,
+    brand: BRAND,
+  });
+  /* 层级 = Home → 品类 → 产品自身。
+     ⚠️ 既有 64 份把第 2 级叫「Mini」却把 item 指向【首页】—— 那描述的是一个不存在的站。
+        派生不是内容决定,是让标记描述真实的站,所以这里指 /${category}/,并补上第 3 级。
+     ⚠️ 三个 URL 都随 locale 走:一个葡语页的面包屑说"首页"是英文根,说的是另一个页面。 */
+  const jsonldBreadcrumb = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      // 首页 URL 照 renderPage 的 HOME_URL 同一条规则:默认语种【不带尾斜杠】,有目录前缀的才带。
+      // 不自己另定一套 —— 站里已经有这条约定了。
+      { "@type": "ListItem", position: 1, name: homeLabel, item: `https://wanew.com${homeRel === "/" ? "" : homeRel}` },
+      { "@type": "ListItem", position: 2, name: catName, item: `https://wanew.com${urlOf ? urlOf(catPath, locale) : catPath}` },
+      { "@type": "ListItem", position: 3, name: (prod.i18n && prod.i18n.en && prod.i18n.en.title) || e.title, item: canonical },
+    ],
+  });
   const reps = {
     META_TITLE: metaTitleOf(e, prod, locale, modelDisplay, catalog), META_DESC: e.meta_description,
     ROBOTS_META: robots, CANONICAL: canonical, HREFLANG: hreflang,
@@ -164,7 +199,7 @@ export function render(prod, { template, imgBase, related, locale = "en", modelD
     CARD_TITLE: e.card_title || e.title,  // h1 用短名,留空回落长标题
     COMPAT_BADGES: compatBadges(prod, locale, modelDisplay, catmap, catalog),
     SUMMARY_BLOCK: summary, DESCRIPTION: e.description_html, VIDEOS_BLOCK: videosBlock,
-    RELATED: cards, JSONLD_BREADCRUMB: prod.jsonld_breadcrumb || "", JSONLD_PRODUCT: jsonldProduct,
+    RELATED: cards, JSONLD_BREADCRUMB: jsonldBreadcrumb, JSONLD_PRODUCT: jsonldProduct,
   };
   let r = template;
   for (const [k, v] of Object.entries(reps)) r = r.split(`{{${k}}}`).join(ESCAPED_KEYS.includes(k) ? esc(v) : v);

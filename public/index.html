@@ -2487,7 +2487,10 @@ function collectForm() {
     } },
     compatible_with: compatData(),
     images: galleryData(), videos: videoData(),
-    robots: cur?.robots ?? null, jsonld_product: cur?.jsonld_product ?? null, jsonld_breadcrumb: cur?.jsonld_breadcrumb ?? null,
+    // ⚠️ jsonld_product / jsonld_breadcrumb **不再回传**：官网 d97202f00 起改成渲染时派生，
+    //    这两个字段没有消费者了。服务端也已停收（publish.ts）—— 两道都要，
+    //    只停一边的话，一个开着的旧标签页就能把陈旧值写回来。
+    robots: cur?.robots ?? null,
   };
 }
 
