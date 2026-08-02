@@ -537,10 +537,23 @@ button.on{background:var(--dz-accent-bg);border-color:var(--dz-c-accent);color:v
         <div class="vp-grid" id="vp-grid"></div>
       </div>
     </div>
-    <details class="seo card" id="seo">
-      <summary>SEO（meta，可选——留空自动派生）</summary>
-      <div class="field"><label>meta_title（留空=标题派生）</label><input id="e-mtitle"></div>
-      <div class="field"><label>meta_description</label><textarea id="e-mdesc"></textarea></div>
+    <!-- 🔴 这一块原来折叠着，标题写「SEO（meta，可选——留空自动派生）」。
+         那句话对 meta_title 是真的（render.js 里 metaTitleOf 真会派生），
+         **对 meta_description 是假的** —— 没有任何东西派生它，留空就直接发一个空标签出去。
+         4208-4211 带着 `<meta name="description" content="">` 上生产，根子在这里：
+         **字段被折叠起来看不见，而看得见的那句话还告诉你可以不填。**
+         ⇒ 两个字段的说法拆开；这一块默认展开（它不是可选项）。 -->
+    <details class="seo card" id="seo" open>
+      <summary>SEO meta</summary>
+      <div class="field"><label>meta_title（可留空 —— 系统会用标题派生）</label><input id="e-mtitle"></div>
+      <div class="field">
+        <label>meta_description <b style="color:var(--dz-c-accent)">*上线必填</b>
+          <span class="muted" id="mdesc-count" style="font-weight:400"></span>
+          <button type="button" id="btn-mdesc-gen" style="height:24px;padding:0 8px;font-size:11px;margin-left:8px" onclick="genMetaDesc()"
+            title="从「描述 description_html」抽正文预填。⚠️ 只填进输入框，不会自动保存 —— 你看过、改过再发布">从正文生成</button>
+        </label>
+        <textarea id="e-mdesc" oninput="paintMdescCount()"></textarea>
+      </div>
     </details>
     <!-- 预览兜底：dryRun 无 previewHtml 时列将写文件（正常路径=新标签渲染） -->
     <div class="card" id="preview-out" style="display:none">
@@ -2448,6 +2461,7 @@ function fillForm(p) {
   $("#e-title").value = en.title || ""; $("#e-summary").value = en.summary_html || "";
   $("#e-desc").value = en.description_html || ""; $("#e-mtitle").value = en.meta_title === en.title ? "" : (en.meta_title || "");
   $("#e-mdesc").value = en.meta_description || "";
+  paintMdescCount();   // 打开就看得见"空"，不用等保存被拒才知道
   $("#e-cat").value = p.category || ""; $("#e-form").value = p.form || "";
   $("#e-cardtitle").value = en.card_title || "";
   paintCompat(p.compatible_with || []);
@@ -2632,8 +2646,53 @@ function validateLocal(b) {
   if (!b.category) return "机型必选";
   return null;
 }
+// ⚠️ meta_description 的必填**不放进 validateLocal** —— 那个函数被「预览」共用，
+//    而预览是给还没写完的东西看的，卡预览等于逼人先编一段描述才能看一眼页面。
+//    真正的闸在服务端（publish.ts，上线态必填）；这里只是提前把话说了，省一趟往返。
+// 🔴 只在【这次保存会让它处于上线态】时拦：
+//    新建产品走 POST 时后端显式置 draft ⇒ 那一下不会上线，不该拦；
+//    编辑一个已上线产品时 PUT 沿用旧状态 ⇒ 会上线，该拦。
+function mdescBlocker(b) {
+  const willBePublished = cur?.id && (cur.status ?? "published") === "published";
+  if (!willBePublished) return null;
+  if (String(b.i18n.en.meta_description || "").trim()) return null;
+  const d = $("#seo"); if (d) d.open = true;          // 折叠着就看不见要填什么
+  const t = $("#e-mdesc"); if (t) t.focus();
+  return "meta_description 不能为空：这个产品是上线状态，空描述会让详情页带一个空的 <meta name=\"description\">（比没有更糟）。点「从正文生成」可一键预填。";
+}
+// 从 description_html 抽正文预填。⚠️ **只填进输入框，绝不自动落盘** ——
+//    自动填等于把一个空字段换成一个没人读过的字段，对 SEO 不见得更好，对信任一定更差。
+function genMetaDesc() {
+  const src = $("#e-desc").value || "";
+  // 标签去掉、实体还原、空白折叠。⚠️ 用 DOM 解一遍而不是手写实体表：`&amp;` `&#39;` `&nbsp;` 都要管，手写的表一定漏一个。
+  // ⚠️ 块级元素之间要补一个空格再取 textContent：`</p><ul><li>bullet` 直接拼会得到
+  //    "…<not a tag>.bullet" —— 两个句子黏在一起，读起来像错别字。实测出来的，不是预防性代码。
+  const div = document.createElement("div");
+  div.innerHTML = src.replace(/<\/(p|div|li|h[1-6]|tr|td|section|article|blockquote)>/gi, " </$1>").replace(/<br\s*\/?>/gi, " <br>");
+  const text = (div.textContent || "").replace(/\s+/g, " ").trim();
+  if (!text) return msg("「描述 description_html」是空的，没东西可抽", 1);
+  // 300 字上限：现网 68 个产品的 meta_description 实测在 183–326 之间，没有更严的约定。
+  // 切在句末，切不出来就切在词边界 —— 不硬砍在半个词上。
+  let out = text;
+  if (out.length > 300) {
+    const cut = out.slice(0, 300);
+    const stop = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+    out = stop > 120 ? cut.slice(0, stop + 1) : cut.slice(0, cut.lastIndexOf(" ") > 0 ? cut.lastIndexOf(" ") : 300);
+  }
+  const cur0 = $("#e-mdesc").value.trim();
+  if (cur0 && !confirm(`已经有 ${cur0.length} 字的描述，用正文抽出来的覆盖掉？\n\n（不会保存，只是填进输入框）`)) return;
+  $("#e-mdesc").value = out;
+  paintMdescCount();
+  msg(`已预填 ${out.length} 字 —— **还没保存**，看一遍改一改再发布`);
+}
+function paintMdescCount() {
+  const el = $("#mdesc-count"); if (!el) return;
+  const n = ($("#e-mdesc").value || "").trim().length;
+  el.textContent = n ? `· ${n} 字` : "· 空";
+  el.style.color = n ? "" : "var(--dz-err)";
+}
 async function saveAndPublish() {
-  const b = collectForm(); const err = validateLocal(b);
+  const b = collectForm(); const err = validateLocal(b) || mdescBlocker(b);
   if (err) return msg(err, 1);
   const btn = $("#btn-publish"); btn.disabled = true; btn.textContent = "发布中…";
   try {

@@ -248,6 +248,27 @@ export function validateProduct(body: any, id: number, categories: any, existing
     if (!v || (typeof v.key !== "string" && typeof v.src !== "string")) return { error: "each video needs key or src" };
     if (v.poster && typeof v.poster.key !== "string" && typeof v.poster.src !== "string") return { error: "video poster needs key or src" };
   }
+  // 状态机：draft/published/archived。body.status 合法则用；否则沿用旧值；再否则 published
+  // （新建走 POST 端点会显式置 draft；缺省 published=零迁移，现有无 status 产品视为已发布）。
+  // ⭐ 提到这里，是因为下面 meta_description 的校验要看状态 —— 同一个表达式绝不写两遍。
+  const status = (["draft", "published", "archived"].includes(body.status) ? body.status : (existing?.status ?? "published"));
+
+  /* 🔴 meta_description：**上线态必填**。
+     4208-4211 四个产品带着 `<meta name="description" content="">` 上了生产 ——
+     **空标签比缺标签更糟**：它是在明确声明"我没有描述"。
+     而这里原来是 `en.meta_description || ""` 纯透传，零校验。
+
+     ⚠️ 只卡 published。draft / archived 一律放行 ——
+     卡 archived 会造成"一个描述为空的产品无法下架"，**把安全装置变成陷阱**。
+     ⚠️ 校验前先查过存量：68 个在线产品 en/pt-BR/es-MX 的 meta_description **无一为空**，
+        且当前 0 个 draft/archived ⇒ 这条不会把任何现存产品锁在门外
+        （publish.ts:225 那次"68 个产品全部保存被拒"就是没先查存量）。
+     ⚠️ 本函数只写 i18n.en（下面 251 行起，其余语种原样保留），所以非 en 的空描述
+        不可能由这条路径产生 —— 不在这里加跨语种校验，那会是一条永远不会触发的规则。 */
+  if (status === "published" && !String(en.meta_description || "").trim()) {
+    return { error: "meta_description required：上线产品必须有描述，否则详情页会带一个空的 <meta name=\"description\">（比没有更糟）。编辑器里点「从正文生成」可一键预填，改完再发布；或先存为草稿。" };
+  }
+
   const i18n: any = { ...(existing?.i18n || {}) };   // ⭐ 旧翻译打底（es/pt 等原样保留）
   i18n.en = {
     title: en.title, summary_html: demoteBodyH1(en.summary_html || ""), description_html: demoteBodyH1(en.description_html),
@@ -259,9 +280,6 @@ export function validateProduct(body: any, id: number, categories: any, existing
     ...(typeof en.card_title === "string" && en.card_title.trim() ? { card_title: en.card_title.trim() } : {}),
     meta_description: en.meta_description || "",
   };
-  // 状态机：draft/published/archived。body.status 合法则用；否则沿用旧值；再否则 published
-  // （新建走 POST 端点会显式置 draft；缺省 published=零迁移，现有无 status 产品视为已发布）。
-  const status = (["draft", "published", "archived"].includes(body.status) ? body.status : (existing?.status ?? "published"));
   const prod = {
     id, category: body.category, form, status, robots: body.robots ?? (existing?.robots ?? null),
     // 非空才落盘=零迁移（现有 68 个产品无此字段 → 官网回落现状、渲染逐字节不变）
