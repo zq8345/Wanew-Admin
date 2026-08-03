@@ -2,6 +2,8 @@
 // 批2 在此之上加：产品 CRUD（运行时 regen+原子 commit，继承 functions/api/admin/[[path]].js 骨架）、
 // 类目/机型管理端点、R2 直传。批3 加电商风 UI。
 import { Hono } from "hono";
+// 阶段①探针：只观察不拦人，原委见 src/access-jwt.ts 顶部与下方中间件里的说明。
+import { probeAccessJwt, isDocOrApi, shapeIsNew } from "./access-jwt";
 
 export interface Env {
   ASSETS: Fetcher;
@@ -92,6 +94,23 @@ app.use("*", async (c, next) => {
       return c.text("配置错误：DEV_BYPASS_AUTH 出现在非本机环境。已拒绝服务——请移除该变量后重新部署。", 500);
     }
     return next();
+  }
+
+  /* ── 阶段①：Access JWT 验签探针 —— **只观察，不拦人** ────────────────────
+     目标不是现在就更安全，是**把两件还不知道的事变成实测**：
+       ⓐ 团队域到底是哪个租户（wanewgroup / wanew 公钥指纹不同，是两个租户不是别名）
+       ⓑ 🔴 JWT 到底以什么形态到达（头 / cookie / 都没有）
+     ⓑ 是这一步存在的主要理由：现有代码读的是**头**，若生产上 JWT 只以 cookie 到达，
+     直接上强制会让**所有人**当场 403，包括 Joe —— 而那正是他提这件事要避免的事。
+     ⚠️ 无论探针结果如何，下面照旧走"头 + 白名单"。**这一步不许改变任何人的可达性。**
+     ⚠️ 它不抛：整段包在 try 里，探针自己坏掉也不能变成一次拒绝。 */
+  try {
+    const probe = await probeAccessJwt(c.req.raw);
+    if (isDocOrApi(c.req.raw) || shapeIsNew(probe)) {
+      console.log(JSON.stringify({ evt: "access_jwt_probe", path: new URL(c.req.url).pathname, ...probe }));
+    }
+  } catch (e: any) {
+    console.error(JSON.stringify({ evt: "access_jwt_probe_crashed", err: String(e).slice(0, 200) }));
   }
 
   // ② Access 头必须在（边缘门还在不在）
