@@ -40,9 +40,14 @@
     // Access 管「谁能走到门口」，这里管「谁能进后台」。
     // ⇒ 症状「Access 明明放行了却仍被拒」不是 bug，是这份名单没跟着加。排查先看是哪一道拒的：
     //    Cloudflare 自己的拒绝页 ≠ 本 worker 的「此账号不在本后台的允许名单内。」(src/index.ts:114)
-    // ⚠️ Access 策略里另有 zq8345@gmail.com / joe@tejoy.com / susie@tejoy.com，**故意没加进来**：
-    //    放宽访问只放明确要的那一个。两张名单【本就允许不同】，顺手拉平等于悄悄扩权。
-    "ALLOWED_EMAILS": "joe@wanew.com,susie@wanew.com"
+    // ⚠️ 上面那句原写着"另外三个故意没加进来" —— **Joe 2026-08-02 明确要求加，那句已作废，别照它读。**
+    //    我当初不自动拉平的理由仍然成立（这个 worker 的 GITHUB_TOKEN 能写官网仓，拉平=一次多发三把钥匙），
+    //    但**这是所有者的决定，不是我的**：他管着 Access 那张名单，那五个就是他认可的人。
+    // 🔴 这张名单本身是**过渡态，即将整个删除**：正在做 Access JWT 验签（AUD
+    //    9198c82b…d19759）。验签落地后「这个头是真的」由密码学证明，Access 策略成为唯一名单，
+    //    Joe 加人删人不再需要任何人改代码——那正是他提这件事的原因（"万一你们公司把我封号了"）。
+    //    ⇒ 谁看到这行：**别往里加人，先问验签那批到哪一步了。**
+    "ALLOWED_EMAILS": "joe@wanew.com,susie@wanew.com,zq8345@gmail.com,joe@tejoy.com,susie@tejoy.com"
     // 机密（wrangler secret put，printf 管道防 CRLF——10003 教训）：
     //   GITHUB_TOKEN   fine-grained PAT，Repository access 仅 zq8345/Wanew，Contents Read+write（Joe 生成中）
   },
