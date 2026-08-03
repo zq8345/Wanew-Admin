@@ -35,7 +35,14 @@
     // ⚠️ 放在 vars 而不是 secret，是为了**和代码同一次部署**：
     //    否则会有一段"代码已 fail-closed、变量还没配"的窗口，那段时间没有人进得来。
     // ⚠️ 加人只改这里 + 重新部署；改它不需要动代码。
-    "ALLOWED_EMAILS": "joe@wanew.com"
+    // 2026-08-02 加 susie@wanew.com（Joe 报同事登不上）。她早就在 Cloudflare Access 的
+    // wanew-admin 策略里、过得了边缘那道门，卡的是这一行 —— **两道门是有意的，不是重复**：
+    // Access 管「谁能走到门口」，这里管「谁能进后台」。
+    // ⇒ 症状「Access 明明放行了却仍被拒」不是 bug，是这份名单没跟着加。排查先看是哪一道拒的：
+    //    Cloudflare 自己的拒绝页 ≠ 本 worker 的「此账号不在本后台的允许名单内。」(src/index.ts:114)
+    // ⚠️ Access 策略里另有 zq8345@gmail.com / joe@tejoy.com / susie@tejoy.com，**故意没加进来**：
+    //    放宽访问只放明确要的那一个。两张名单【本就允许不同】，顺手拉平等于悄悄扩权。
+    "ALLOWED_EMAILS": "joe@wanew.com,susie@wanew.com"
     // 机密（wrangler secret put，printf 管道防 CRLF——10003 教训）：
     //   GITHUB_TOKEN   fine-grained PAT，Repository access 仅 zq8345/Wanew，Contents Read+write（Joe 生成中）
   },
